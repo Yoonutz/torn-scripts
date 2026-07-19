@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Post-Apocalyptic Dystopia</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif}
+
+.scene{position:relative;width:100%;height:100vh;overflow:hidden}
+
+.bg{
+position:absolute;
+inset:-5%;
+background:url("background.png") center center/cover no-repeat;
+transform:scale(1.08);
+}
+
+.fog,.fog2{
+position:absolute;
+inset:-20%;
+background:
+radial-gradient(circle at 20% 50%, rgba(255,255,255,.08), transparent 30%),
+radial-gradient(circle at 70% 40%, rgba(255,255,255,.06), transparent 35%),
+radial-gradient(circle at 40% 80%, rgba(255,255,255,.05), transparent 25%);
+filter:blur(50px);
+}
+
+.fog{animation:fogMove 40s linear infinite}
+.fog2{animation:fogMove2 60s linear infinite;opacity:.7}
+
+#rain,#ash{
+position:absolute;
+inset:0;
+pointer-events:none;
+}
+
+.vignette{
+position:absolute;
+inset:0;
+background:radial-gradient(circle,transparent 40%,rgba(0,0,0,.3) 70%,rgba(0,0,0,.85) 100%);
+}
+
+.grain{
+position:absolute;
+inset:0;
+opacity:.08;
+background-image:repeating-radial-gradient(circle at 50% 50%,rgba(255,255,255,.25) 0,rgba(255,255,255,.25) 1px,transparent 2px,transparent 4px);
+animation:grain .25s infinite;
+}
+
+.flash{
+position:absolute;
+inset:0;
+background:white;
+opacity:0;
+animation:lightning 12s infinite;
+}
+
+.color-grade{
+position:absolute;
+inset:0;
+background:linear-gradient(rgba(0,20,40,.25),rgba(0,0,0,.35));
+mix-blend-mode:multiply;
+}
+
+.city-glow{
+position:absolute;
+inset:0;
+background:
+radial-gradient(circle at 70% 65%,rgba(255,120,40,.08),transparent 25%),
+radial-gradient(circle at 30% 60%,rgba(255,80,20,.05),transparent 20%);
+filter:blur(40px);
+}
+
+.scanlines{
+position:absolute;
+inset:0;
+opacity:.05;
+background:repeating-linear-gradient(to bottom,transparent 0px,transparent 2px,rgba(255,255,255,.15) 3px);
+}
+
+.flicker{
+position:absolute;
+inset:0;
+background:white;
+opacity:0;
+animation:flicker 8s infinite;
+}
+
+.content{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+text-align:center;
+color:white;
+z-index:10;
+text-shadow:0 0 20px rgba(255,255,255,.2);
+}
+
+.content h1{
+font-size:clamp(3rem,8vw,8rem);
+letter-spacing:10px;
+}
+
+.content p{
+margin-top:20px;
+color:#aaa;
+letter-spacing:4px;
+text-transform:uppercase;
+}
+
+@keyframes fogMove{from{transform:translateX(-10%)}to{transform:translateX(10%)}}
+@keyframes fogMove2{from{transform:translateX(10%)}to{transform:translateX(-10%)}}
+@keyframes grain{from{transform:translate(0,0)}to{transform:translate(-5px,5px)}}
+
+@keyframes lightning{
+0%,92%,100%{opacity:0}
+93%{opacity:.25}
+93.5%{opacity:0}
+94%{opacity:.15}
+95%{opacity:0}
+}
+
+@keyframes flicker{
+0%,100%{opacity:0}
+10%{opacity:.01}
+10.5%{opacity:0}
+50%{opacity:.015}
+50.2%{opacity:0}
+}
+</style>
+</head>
+<body>
+<div class="scene">
+<div class="bg"></div>
+<div class="fog"></div>
+<div class="fog2"></div>
+<canvas id="rain"></canvas>
+<canvas id="ash"></canvas>
+<div class="city-glow"></div>
+<div class="flash"></div>
+<div class="color-grade"></div>
+<div class="vignette"></div>
+<div class="grain"></div>
+<div class="scanlines"></div>
+<div class="flicker"></div>
+
+<div class="content">
+<h1>AFTERMATH</h1>
+<p>The world ended. The silence remained.</p>
+</div>
+</div>
+
+<script>
+const rain=document.getElementById("rain");
+const rctx=rain.getContext("2d");
+
+function resize(){
+rain.width=innerWidth;
+rain.height=innerHeight;
+ash.width=innerWidth;
+ash.height=innerHeight;
+}
+window.addEventListener("resize",resize);
+
+const drops=[];
+for(let i=0;i<400;i++){
+drops.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,l:10+Math.random()*25,s:8+Math.random()*12});
+}
+
+function drawRain(){
+rctx.clearRect(0,0,rain.width,rain.height);
+rctx.strokeStyle="rgba(180,200,255,.18)";
+for(const d of drops){
+rctx.beginPath();
+rctx.moveTo(d.x,d.y);
+rctx.lineTo(d.x-4,d.y+d.l);
+rctx.stroke();
+d.y+=d.s;
+d.x-=1;
+if(d.y>innerHeight){d.y=-20;d.x=Math.random()*innerWidth;}
+}
+requestAnimationFrame(drawRain);
+}
+
+const ash=document.getElementById("ash");
+const actx=ash.getContext("2d");
+const particles=[];
+
+for(let i=0;i<150;i++){
+particles.push({
+x:Math.random()*innerWidth,
+y:Math.random()*innerHeight,
+r:Math.random()*2+0.5,
+vx:(Math.random()-0.5)*0.3,
+vy:Math.random()*0.4+0.1
+});
+}
+
+function drawAsh(){
+actx.clearRect(0,0,ash.width,ash.height);
+for(const p of particles){
+actx.beginPath();
+actx.arc(p.x,p.y,p.r,0,Math.PI*2);
+actx.fillStyle="rgba(220,220,220,.25)";
+actx.fill();
+p.x+=p.vx;
+p.y+=p.vy;
+if(p.y>innerHeight){p.y=-10;p.x=Math.random()*innerWidth;}
+}
+requestAnimationFrame(drawAsh);
+}
+
+resize();
+drawRain();
+drawAsh();
+
+const bg=document.querySelector(".bg");
+let mx=0,my=0;
+
+document.addEventListener("mousemove",e=>{
+mx=(e.clientX/innerWidth-.5)*20;
+my=(e.clientY/innerHeight-.5)*20;
+});
+
+function camera(){
+const t=Date.now()*0.0002;
+const driftX=Math.sin(t)*8;
+const driftY=Math.cos(t*0.8)*6;
+const zoom=1.12+Math.sin(t*0.5)*0.01;
+
+bg.style.transform=`scale(${zoom}) translate(${mx*0.3+driftX}px,${my*0.3+driftY}px)`;
+requestAnimationFrame(camera);
+}
+camera();
+</script>
+</body>
+</html>

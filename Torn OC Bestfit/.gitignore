@@ -1,0 +1,15 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# script intermediates
+.tmp/
+
+# node
+node_modules/
+npm-debug.log*
+
+# os/editor
+Thumbs.db
+.DS_Store

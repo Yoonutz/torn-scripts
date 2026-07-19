@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14110f;
+    --bg-2: #1c1815;
+    --panel: #211c18;
+    --ink: #f2e9dd;
+    --ink-dim: #b6a896;
+    --ink-faint: #7c7064;
+    --me: #e9d8b8;
+    --me-ink: #2a1f15;
+    --them: #2a2420;
+    --accent: #e8915c;
+    --accent-2: #f0b27a;
+    --glow: rgba(232,145,92,0.25);
+    --line: rgba(242,233,221,0.08);
+    --torn: #4a90d9;
+    --torn-glow: rgba(74,144,217,0.25);
+    --err: #e06060;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: "Newsreader", Georgia, serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .app {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(232,145,92,0.10), transparent 60%),
+      linear-gradient(180deg, var(--bg-2), var(--bg));
+    overflow: hidden;
+  }
+
+  .app::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  header {
+    position: relative; z-index: 3;
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(env(safe-area-inset-top) + 14px) 18px 14px;
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(12px);
+    background: rgba(20,17,15,0.55);
+  }
+  .avatar {
+    width: 42px; height: 42px; border-radius: 50%; flex: none;
+    display: grid; place-items: center;
+    background: radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent) 70%);
+    box-shadow: 0 0 0 2px rgba(240,178,122,0.18), 0 6px 18px var(--glow);
+    position: relative; cursor: default;
+  }
+  .avatar.has-torn img {
+    width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+  }
+  .avatar::before {
+    content: ""; position: absolute; inset: -6px; border-radius: 50%;
+    background: var(--glow); filter: blur(10px); z-index: -1;
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%,100%{ transform: scale(1); opacity:.6 } 50%{ transform: scale(1.15); opacity:1 } }
+  .avatar svg { width: 24px; height: 24px; }
+  .who { display: flex; flex-direction: column; line-height: 1.15; flex: 1; min-width: 0; }
+  .who .name { font-family: "Fraunces", serif; font-weight: 600; font-size: 19px; letter-spacing: .2px; }
+  .who .status { font-size: 12.5px; color: var(--ink-dim); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #6fcf97; box-shadow: 0 0 8px #6fcf97; }
+  .header-btns { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+  .header-btn {
+    background: none; border: 1px solid var(--line);
+    color: var(--ink-dim); font-family: inherit; font-size: 12.5px;
+    padding: 7px 12px; border-radius: 999px; cursor: pointer; transition: .2s;
+    white-space: nowrap;
+  }
+  .header-btn:active { transform: scale(.94); background: var(--panel); }
+  .header-btn.connect { border-color: rgba(74,144,217,0.35); color: var(--torn); }
+  .header-btn.disconnect { border-color: rgba(224,96,96,0.3); color: var(--err); font-size: 11.5px; }
+  .header-btn.on { border-color: rgba(74,144,217,0.5); color: var(--torn); background: var(--torn-glow); }
+
+  /* Profile hover card */
+  .profile-trigger { cursor: pointer; position: relative; }
+  .profile-card {
+    display: none; position: absolute; top: calc(100% + 8px); right: 0;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; min-width: 240px; z-index: 100;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+    font-size: 13px; line-height: 1.6; color: var(--ink-dim);
+  }
+  .profile-card.show { display: block; animation: pop .2s ease both; }
+  .profile-card .pc-row { display: flex; justify-content: space-between; gap: 12px; }
+  .profile-card .pc-label { color: var(--ink-faint); }
+  .profile-card .pc-value { color: var(--ink); text-align: right; }
+  .profile-card .pc-avatar { float: right; width: 48px; height: 48px; border-radius: 50%; margin-left: 10px; margin-bottom: 6px; border: 2px solid var(--line); }
+
+  /* Auth overlay */
+  .auth-overlay {
+    display: none; position: absolute; inset: 0; z-index: 50;
+    background: rgba(20,17,15,0.85); backdrop-filter: blur(6px);
+    place-items: center; padding: 24px;
+  }
+  .auth-overlay.show { display: grid; }
+  .auth-box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+    padding: 28px 24px; width: 100%; max-width: 360px;
+  }
+  .auth-box h2 {
+    font-family: "Fraunces", serif; font-size: 20px; font-weight: 600;
+    margin-bottom: 6px; color: var(--ink);
+  }
+  .auth-box p { font-size: 13.5px; color: var(--ink-dim); margin-bottom: 18px; line-height: 1.5; }
+  .auth-box input {
+    width: 100%; padding: 11px 14px; border: 1px solid var(--line);
+    background: var(--bg-2); color: var(--ink); font-family: inherit;
+    font-size: 14px; border-radius: 10px; outline: none; margin-bottom: 12px;
+    transition: border-color .2s;
+  }
+  .auth-box input:focus { border-color: rgba(74,144,217,0.5); }
+  .auth-box .auth-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .auth-box button {
+    padding: 9px 18px; border-radius: 10px; font-family: inherit;
+    font-size: 14px; cursor: pointer; border: none; transition: .15s;
+  }
+  .auth-box .btn-cancel { background: var(--bg-2); color: var(--ink-dim); border: 1px solid var(--line); }
+  .auth-box .btn-connect { background: var(--torn); color: #fff; }
+  .auth-box .btn-connect:active { transform: scale(.96); }
+  .auth-box .auth-err { color: var(--err); font-size: 13px; margin-bottom: 10px; min-height: 1.4em; }
+
+  /* Torn badge */
+  .torn-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; color: var(--torn); background: rgba(74,144,217,0.1);
+    padding: 2px 7px; border-radius: 6px; margin-left: 6px; vertical-align: middle;
+  }
+
+  .scroll {
+    position: relative; z-index: 2; flex: 1; overflow-y: auto;
+    padding: 22px 16px 8px; display: flex; flex-direction: column; gap: 14px;
+    -webkit-overflow-scrolling: touch; scroll-behavior: smooth;
+  }
+  .scroll::-webkit-scrollbar { width: 0; }
+
+  .msg {
+    max-width: 82%; padding: 11px 15px; font-size: 16.5px; line-height: 1.5;
+    border-radius: 20px; word-wrap: break-word; white-space: pre-wrap;
+    animation: pop .32s cubic-bezier(.2,.9,.3,1.2) both;
+  }
+  @keyframes pop { from{ opacity:0; transform: translateY(10px) scale(.96) } to{ opacity:1; transform:none } }
+
+  .them { align-self: flex-start; background: var(--them); color: var(--ink); border-bottom-left-radius: 6px; border: 1px solid var(--line); }
+  .me { align-self: flex-end; background: linear-gradient(135deg, var(--me), #d8c39a); color: var(--me-ink); border-bottom-right-radius: 6px; font-weight: 500; }
+
+  /* Rendered-markdown replies (tables, lists, code). */
+  .msg.md { white-space: normal; }
+  .msg.md > :first-child { margin-top: 0; } .msg.md > :last-child { margin-bottom: 0; }
+  .msg.md p { margin: 0 0 8px; }
+  .msg.md ul, .msg.md ol { margin: 4px 0 8px; padding-left: 20px; }
+  .msg.md li { margin: 2px 0; }
+  .msg.md table { border-collapse: collapse; width: 100%; margin: 6px 0; font-size: 14.5px; }
+  .msg.md th, .msg.md td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
+  .msg.md th { background: rgba(255,255,255,.05); font-weight: 600; }
+  .msg.md code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; font-family: ui-monospace, monospace; font-size: 14px; }
+  .msg.md pre { background: rgba(0,0,0,.28); padding: 10px 12px; border-radius: 10px; overflow-x: auto; margin: 6px 0; }
+  .msg.md pre code { background: none; padding: 0; }
+  .msg.md a { color: var(--accent); }
+  .msg.md h1, .msg.md h2, .msg.md h3 { font-size: 16px; margin: 6px 0 4px; font-weight: 600; }
+  .msg.md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--ink-dim); }
+
+  .greeting { align-self: center; text-align: center; color: var(--ink-faint); font-style: italic; font-size: 14.5px; max-width: 78%; margin: 6px 0 2px; }
+
+  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 14px 17px; background: var(--them); border:1px solid var(--line); border-radius: 20px; border-bottom-left-radius: 6px; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-dim); animation: blink 1.3s infinite both; }
+  .typing span:nth-child(2){ animation-delay: .18s } .typing span:nth-child(3){ animation-delay: .36s }
+  @keyframes blink { 0%,60%,100%{ opacity:.25; transform: translateY(0) } 30%{ opacity:1; transform: translateY(-4px) } }
+
+  .composer {
+    position: relative; z-index: 3; display: flex; align-items: flex-end; gap: 10px;
+    padding: 12px 14px calc(env(safe-area-inset-bottom) + 14px);
+    border-top: 1px solid var(--line); background: rgba(20,17,15,0.6); backdrop-filter: blur(12px);
+  }
+  textarea {
+    flex: 1; resize: none; border: 1px solid var(--line); background: var(--panel);
+    color: var(--ink); font-family: inherit; font-size: 16.5px; line-height: 1.4;
+    padding: 12px 16px; border-radius: 22px; max-height: 120px; outline: none; transition: border-color .2s;
+  }
+  textarea:focus { border-color: rgba(232,145,92,0.45); }
+  textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+  .send {
+    flex: none; width: 46px; height: 46px; border-radius: 50%; border: none;
+    background: radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent) 75%);
+    color: #2a1f15; display: grid; place-items: center; cursor: pointer;
+    box-shadow: 0 6px 18px var(--glow); transition: transform .15s, opacity .2s;
+  }
+  .send:active { transform: scale(.9); }
+  .send:disabled { opacity: .4; box-shadow: none; cursor: default; }
+  .send svg { width: 21px; height: 21px; }
+</style>
+<!-- Markdown rendering + sanitizing. Pinned versions; replies are rendered via
+     DOMPurify.sanitize(marked.parse(...)) so LLM/Torn output can't inject HTML. -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="avatar" id="avatar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#2a1f15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="avatarSvg">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2 2M17.1 17.1l2 2M19.1 4.9l-2 2M6.9 17.1l-2 2"/>
+      </svg>
+    </div>
+    <div class="who" id="whoArea">
+      <span class="name">Sol</span>
+      <span class="status"><span class="dot"></span>here with you</span>
+    </div>
+    <div class="header-btns">
+      <button class="header-btn connect" id="btnConnect" style="display:none">Connect Torn</button>
+      <button class="header-btn disconnect" id="btnDisconnect" style="display:none">Disconnect</button>
+      <button class="header-btn" id="btnThink">thinking: off</button>
+      <button class="header-btn" id="reset">reset</button>
+    </div>
+  </header>
+
+  <div class="scroll" id="scroll">
+    <div class="greeting">a quiet corner. say anything.</div>
+  </div>
+
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="type a message&hellip;"></textarea>
+    <button class="send" id="send" aria-label="send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Auth overlay -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-box">
+      <h2>Connect Torn API</h2>
+      <p>Enter your Torn API key so Sol can look up your stats, faction, and more. Your key stays in your browser &mdash; it is never stored on the server.</p>
+      <input type="password" id="apiKeyInput" placeholder="paste your Torn API key here" autocomplete="off">
+      <div class="auth-err" id="authErr"></div>
+      <div class="auth-actions">
+        <button class="btn-cancel" id="btnCancelAuth">Cancel</button>
+        <button class="btn-connect" id="btnDoConnect">Connect</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var scroll = document.getElementById('scroll');
+  var input = document.getElementById('input');
+  var send = document.getElementById('send');
+  var reset = document.getElementById('reset');
+  var avatar = document.getElementById('avatar');
+  var avatarSvg = document.getElementById('avatarSvg');
+  var whoArea = document.getElementById('whoArea');
+  var btnConnect = document.getElementById('btnConnect');
+  var btnDisconnect = document.getElementById('btnDisconnect');
+  var btnThink = document.getElementById('btnThink');
+  var authOverlay = document.getElementById('authOverlay');
+  var apiKeyInput = document.getElementById('apiKeyInput');
+  var authErr = document.getElementById('authErr');
+  var btnCancelAuth = document.getElementById('btnCancelAuth');
+  var btnDoConnect = document.getElementById('btnDoConnect');
+
+  var chatLog = [];
+  var busy = false;
+  var tornKey = localStorage.getItem('torn_api_key') || '';
+  var userProfile = null;
+  var thinking = localStorage.getItem('sol_thinking') === '1';
+
+  /* ─── Thinking toggle ─── */
+
+  function updateThinkBtn() {
+    btnThink.textContent = 'thinking: ' + (thinking ? 'on' : 'off');
+    btnThink.classList.toggle('on', thinking);
+  }
+  btnThink.addEventListener('click', function () {
+    thinking = !thinking;
+    localStorage.setItem('sol_thinking', thinking ? '1' : '0');
+    updateThinkBtn();
+  });
+  updateThinkBtn();
+
+  /* ─── Init ─── */
+
+  (function init() {
+    if (tornKey) {
+      authErr.textContent = '';
+      callAuthTorn(tornKey, function (profile) {
+        userProfile = profile;
+        localStorage.setItem('torn_profile', JSON.stringify(profile));
+        updateHeader(true);
+      }, function (err) {
+        localStorage.removeItem('torn_api_key');
+        tornKey = '';
+        updateHeader(false);
+      });
+    } else {
+      updateHeader(false);
+    }
+  })();
+
+  function updateHeader(authed) {
+    // Always clean up old state first
+    var oldCard = document.querySelector('.profile-card');
+    if (oldCard) oldCard.remove();
+    var oldTrigger = document.getElementById('profileTrigger');
+    if (oldTrigger) {
+      oldTrigger.classList.remove('profile-trigger');
+      oldTrigger.removeAttribute('id');
+    }
+
+    if (authed && userProfile && userProfile.profile) {
+      var p = userProfile.profile;
+      var f = userProfile.faction;
+      var m = userProfile.money;
+      var bars = userProfile.bars;
+
+      // Update greeting
+      whoArea.innerHTML =
+        '<span class="name profile-trigger" id="profileTrigger">' + p.name +
+        '<span class="torn-badge">Lv.' + p.level + '</span></span>' +
+        '<span class="status"><span class="dot"></span>' + (p.status && p.status.description || 'here with you') +
+        (f ? ' \u2022 [' + f.tag + ']' : '') + '</span>';
+
+      // Profile card
+      var trigger = document.getElementById('profileTrigger');
+      var card = document.createElement('div');
+      card.className = 'profile-card';
+
+      var rows =
+        '<div class="pc-row"><span class="pc-label">ID</span><span class="pc-value">' + p.id + '</span></div>' +
+        '<div class="pc-row"><span class="pc-label">Level</span><span class="pc-value">' + p.level + '</span></div>' +
+        '<div class="pc-row"><span class="pc-label">Gender</span><span class="pc-value">' + p.gender + '</span></div>';
+
+      if (bars) {
+        rows += '<div class="pc-row"><span class="pc-label">Energy</span><span class="pc-value">' + bars.energy.current + '/' + bars.energy.maximum + '</span></div>' +
+          '<div class="pc-row"><span class="pc-label">Health</span><span class="pc-value">' + bars.health.current + '/' + bars.health.maximum + '</span></div>';
+      }
+
+      if (f) {
+        rows += '<div class="pc-row"><span class="pc-label">Faction</span><span class="pc-value">' + f.name + ' [' + f.tag + ']</span></div>' +
+          '<div class="pc-row"><span class="pc-label">Rank</span><span class="pc-value">' + (f.rank ? f.rank.name + ' Lv.' + f.rank.level : '?') + '</span></div>' +
+          '<div class="pc-row"><span class="pc-label">Respect</span><span class="pc-value">' + (f.respect ? f.respect.toLocaleString() : '?') + '</span></div>';
+      }
+
+      if (m) {
+        rows += '<div class="pc-row"><span class="pc-label">Points</span><span class="pc-value">' + (m.points || 0) + '</span></div>' +
+          '<div class="pc-row"><span class="pc-label">Vault</span><span class="pc-value">' + (m.vault ? m.vault.toLocaleString() : '0') + '</span></div>';
+      }
+
+      card.innerHTML = rows;
+      trigger.parentNode.appendChild(card);
+      trigger.addEventListener('click', function (e) {
+        e.stopPropagation();
+        card.classList.toggle('show');
+      });
+      document.addEventListener('click', function () { card.classList.remove('show'); });
+
+      btnConnect.style.display = 'none';
+      btnDisconnect.style.display = '';
+    } else {
+      whoArea.innerHTML = '<span class="name">Sol</span><span class="status"><span class="dot"></span>here with you</span>';
+      btnConnect.style.display = '';
+      btnDisconnect.style.display = 'none';
+    }
+  }
+
+  /* ─── Auth Flow ─── */
+
+  btnConnect.addEventListener('click', function () {
+    authOverlay.classList.add('show');
+    authErr.textContent = '';
+    apiKeyInput.value = '';
+    apiKeyInput.focus();
+  });
+
+  btnCancelAuth.addEventListener('click', function () {
+    authOverlay.classList.remove('show');
+  });
+
+  btnDoConnect.addEventListener('click', doConnect);
+  apiKeyInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doConnect();
+  });
+
+  function doConnect() {
+    var key = apiKeyInput.value.trim();
+    if (!key) { authErr.textContent = 'Please enter a key.'; return; }
+    authErr.textContent = 'Connecting...';
+    btnDoConnect.disabled = true;
+
+    callAuthTorn(key, function (profile) {
+      tornKey = key;
+      localStorage.setItem('torn_api_key', key);
+      userProfile = profile;
+      localStorage.setItem('torn_profile', JSON.stringify(profile));
+      authOverlay.classList.remove('show');
+      btnDoConnect.disabled = false;
+      updateHeader(true);
+      bubble('Nice to meet you, ' + profile.profile.name + '. I can look up your Torn stats now \u2014 just ask.', 'them');
+    }, function (err) {
+      authErr.textContent = err.message || err || 'Connection failed. Check your key.';
+      btnDoConnect.disabled = false;
+    });
+  }
+
+  btnDisconnect.addEventListener('click', function () {
+    tornKey = '';
+    userProfile = null;
+    localStorage.removeItem('torn_api_key');
+    localStorage.removeItem('torn_profile');
+    avatar.classList.remove('has-torn');
+    avatarSvg.style.display = '';
+    var img = avatar.querySelector('img');
+    if (img) img.remove();
+    updateHeader(false);
+    bubble('Torn disconnected. I wont look up your stats anymore.', 'them');
+  });
+
+  /* ─── Chat ─── */
+
+  input.addEventListener('input', function () {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    send.disabled = busy || !input.value.trim();
+  });
+  send.disabled = true;
+
+  function bubble(text, who) {
+    var el = document.createElement('div');
+    el.className = 'msg ' + who;
+    el.textContent = text;
+    scroll.appendChild(el);
+    scroll.scrollTop = scroll.scrollHeight;
+    return el;
+  }
+
+  // Reveal a reply word-by-word for a "streaming" feel. Apps Script can't
+  // stream tokens (UrlFetchApp blocks until the full reply), so this animates
+  // the already-received text client-side. Uses textContent — never innerHTML —
+  // so any markup in Torn data (e.g. <a> tags in faction news) is shown
+  // literally and can't inject HTML.
+  function typeBubble(text) {
+    var el = document.createElement('div');
+    el.className = 'msg them';
+    scroll.appendChild(el);
+    var words = String(text).split(/(\s+)/); // keep whitespace as its own tokens
+    var i = 0;
+    (function step() {
+      if (i >= words.length) { scroll.scrollTop = scroll.scrollHeight; return; }
+      el.textContent += words[i++];
+      scroll.scrollTop = scroll.scrollHeight;
+      setTimeout(step, 28);
+    })();
+    return el;
+  }
+
+  // Detect block-level markdown worth rendering (table / fenced code / list /
+  // heading). Inline-only replies stay plain so the typewriter still runs.
+  function hasBlockMd(text) {
+    var t = String(text);
+    return /(^|\n)\s*\|.*\|/.test(t) ||      // table row
+           /```/.test(t) ||                   // fenced code
+           /(^|\n)\s*[-*+]\s+/.test(t) ||      // bullet list
+           /(^|\n)\s*\d+\.\s+/.test(t) ||      // ordered list
+           /(^|\n)#{1,6}\s+/.test(t);          // heading
+  }
+
+  // Render a reply as sanitized markdown (tables/lists/code). Sanitize is
+  // mandatory — the text contains LLM + Torn output (raw <a> tags etc.).
+  function mdBubble(text) {
+    var el = document.createElement('div');
+    el.className = 'msg them md';
+    var html = marked.parse(String(text), { gfm: true, breaks: true });
+    el.innerHTML = DOMPurify.sanitize(html);
+    scroll.appendChild(el);
+    scroll.scrollTop = scroll.scrollHeight;
+    return el;
+  }
+
+  // Choose renderer: structured markdown -> render; otherwise -> typewriter.
+  function replyBubble(text) {
+    if (hasBlockMd(text) && window.marked && window.DOMPurify) return mdBubble(text);
+    return typeBubble(text);
+  }
+
+  function showTyping() {
+    var t = document.createElement('div');
+    t.className = 'typing';
+    t.id = 'typing';
+    t.innerHTML = '<span></span><span></span><span></span>';
+    scroll.appendChild(t);
+    scroll.scrollTop = scroll.scrollHeight;
+  }
+  function hideTyping() {
+    var t = document.getElementById('typing');
+    if (t) t.remove();
+  }
+
+  function finish() {
+    busy = false;
+    send.disabled = !input.value.trim();
+    input.focus();
+  }
+
+  function sendMessage() {
+    var text = input.value.trim();
+    if (!text || busy) return;
+
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      bubble('Open this through the Apps Script web app URL (\u2026/exec or \u2026/dev). Opening the file directly won\'t work \u2014 the server bridge isn\'t loaded.', 'them');
+      return;
+    }
+
+    busy = true;
+    send.disabled = true;
+    bubble(text, 'me');
+    chatLog.push({ role: 'user', content: text });
+    input.value = '';
+    input.style.height = 'auto';
+    showTyping();
+
+    var req = {
+      history: chatLog.slice(),
+      tornApiKey: tornKey,
+      userProfile: userProfile,
+      thinking: thinking
+    };
+
+    google.script.run
+      .withSuccessHandler(function (reply) {
+        hideTyping();
+        replyBubble(reply);
+        chatLog.push({ role: 'assistant', content: reply });
+        finish();
+      })
+      .withFailureHandler(function (err) {
+        hideTyping();
+        bubble('Something went quiet on my end. (' + (err && err.message ? err.message : 'error') + ')', 'them');
+        finish();
+      })
+      .getReply(req);
+  }
+
+  send.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  reset.addEventListener('click', function () {
+    chatLog = [];
+    scroll.innerHTML = '<div class="greeting">fresh start. i\'m listening.</div>';
+  });
+
+  /* ─── Helper ─── */
+
+  function callAuthTorn(key, onSuccess, onFailure) {
+    var wrapper = function (result) {
+      if (result && result.error) {
+        onFailure(result.error);
+        return;
+      }
+      onSuccess(result);
+    };
+    google.script.run
+      .withSuccessHandler(wrapper)
+      .withFailureHandler(onFailure)
+      .authTorn(key);
+  }
+</script>
+</body>
+</html>

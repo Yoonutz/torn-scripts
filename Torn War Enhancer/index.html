@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>War Enforcer — Console</title>
+<style>
+  :root{
+    --bg:#15171a; --card:#1b1d21; --card2:#212429; --line:#2a2e34;
+    --tx:#e8e8e8; --mut:#8a9099; --green:#22c48a; --red:#ff5c5c; --amber:#f0a832; --blue:#4ea1ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--tx);
+    font:14px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:14px}
+  h1{font-size:18px;margin:0;font-weight:700;display:flex;align-items:center;gap:8px}
+  h1 .v{font-size:10px;font-weight:400;color:var(--mut)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .conn{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--mut)}
+  .dot.ok{background:var(--green)} .dot.err{background:var(--red)}
+  button{font:inherit;background:var(--green);color:#0f1113;border:0;border-radius:7px;
+    padding:7px 12px;font-weight:600;cursor:pointer}
+  button.ghost{background:var(--card2);color:var(--tx);border:1px solid var(--line);font-weight:500}
+  button:active{transform:translateY(1px)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700}
+  .big{font-size:20px;font-weight:800;letter-spacing:.02em}
+  .rows{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+  .r{display:flex;justify-content:space-between;gap:12px}
+  .r .k{color:var(--mut)} .r .val{font-variant-numeric:tabular-nums}
+  .ok{color:var(--green)} .hit{color:var(--red)} .am{color:var(--amber)} .mut{color:var(--mut)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label{display:block;font-size:12px;color:var(--mut);margin:0 0 4px}
+  input{width:100%;background:#0f1113;color:var(--tx);border:1px solid var(--line);
+    border-radius:7px;padding:8px 10px;font:inherit}
+  input:focus{outline:none;border-color:var(--blue)}
+  .pwwrap{position:relative}
+  .pwwrap input{padding-right:40px}
+  .eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:0;
+    color:var(--mut);cursor:pointer;padding:6px;display:flex;align-items:center;border-radius:6px}
+  .eye:active{transform:translateY(-50%)}
+  .eye:hover{color:var(--tx)}
+  .hint{font-size:11px;color:var(--mut);margin-top:6px}
+  .msg{font-size:12px;margin-top:8px;min-height:16px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none}
+  td.num,th.num{text-align:right}
+  .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600}
+  .pill.b{background:rgba(255,92,92,.15);color:var(--red)}
+  .pill.a{background:rgba(34,196,138,.15);color:var(--green)}
+  .empty{color:var(--mut);font-size:13px;padding:8px 2px}
+  details summary{cursor:pointer;color:var(--mut);font-size:12px}
+  .foot{color:var(--mut);font-size:11px;text-align:center;margin:14px 0 4px}
+  @media(max-width:520px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <h1>⚔️ War Enforcer <span class="v">console</span></h1>
+    <div class="conn">
+      <span class="dot" id="connDot"></span>
+      <span id="connTxt">connecting…</span>
+      <button class="ghost" id="notifBtn" style="padding:5px 10px" title="Enable desktop alerts">🔔</button>
+      <button class="ghost" id="refreshBtn" style="padding:5px 10px">↻</button>
+    </div>
+  </div>
+
+  <!-- WAR STATUS -->
+  <div class="card" id="warCard">
+    <h2>War status</h2>
+    <div class="big" id="warHead">…</div>
+    <div class="rows" id="warRows"></div>
+  </div>
+
+  <!-- YOU -->
+  <div class="card">
+    <h2>You</h2>
+    <div class="grid" style="align-items:end">
+      <div>
+        <label for="myid">Your Torn ID</label>
+        <input id="myid" inputmode="numeric" placeholder="e.g. 2805199">
+      </div>
+      <button id="saveId">Save ID</button>
+    </div>
+    <div class="rows" id="meRows" style="margin-top:10px"></div>
+  </div>
+
+  <!-- YOU section above; roster removed (visible in Torn's own UI) -->
+
+  <!-- ADMIN -->
+  <div class="card">
+    <h2>Admin — edit rules</h2>
+    <div class="grid">
+      <div><label for="r_total">Total score cap</label><input id="r_total" inputmode="numeric" placeholder="0 = no limit"></div>
+      <div><label for="r_perm">Per-member score</label><input id="r_perm" inputmode="numeric" placeholder="0 = no limit"></div>
+      <div><label for="r_hits">Max hits / member</label><input id="r_hits" inputmode="numeric" placeholder="0 = no limit"></div>
+      <div><label for="r_idle">Idle ≥ (min)</label><input id="r_idle" inputmode="numeric" placeholder="0 = off"></div>
+    </div>
+    <div style="margin-top:10px">
+      <label for="admtok">Admin token</label>
+      <div class="pwwrap">
+        <input id="admtok" type="password" placeholder="x-admin-token (kept in this browser only)">
+        <button type="button" class="eye" id="admtokEye" aria-label="Show token"></button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+      <button id="saveRules">Save rules</button>
+      <button class="ghost" id="fillRules">Load current</button>
+    </div>
+    <div class="msg" id="admMsg"></div>
+    <div class="hint">0 = no limit / off. Values apply on the next backend poll (~1 min) and to the userscript on its next refresh.</div>
+  </div>
+
+  <div class="foot" id="foot">—</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  // ───── connection (same public values as the userscript) ─────
+  var SUPABASE_URL = "https://mmoaqgkhfxmbgvirsgxw.supabase.co";
+  var ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb2FxZ2toZnhtYmd2aXJzZ3h3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NTkzODQsImV4cCI6MjA5NjQzNTM4NH0.axLRQuuDx3uHHR6kK4hZugPPllBz2gawxINOA7yPPJM";
+  var POLL_MS = 15000;   // fallback cadence; Realtime pushes updates instantly on top
+
+  var REASON_TEXT = { faction_target:"Faction cap", member_score:"Score cap", attack_limit:"Hit cap" };
+
+  var $ = function(id){ return document.getElementById(id); };
+  function hdr(){ return { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY }; }
+
+  function rest(path){
+    return fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: hdr() })
+      .then(function(r){ if(!r.ok) throw new Error("REST " + r.status); return r.json(); });
+  }
+  function setConn(ok, txt){
+    $("connDot").className = "dot " + (ok ? "ok" : "err");
+    $("connTxt").textContent = txt;
+  }
+
+  // ───── state ─────
+  var STATE = null, ME = null, rulesAutoFilled = false;
+
+  // ───── title-flash alert (works on file://, no permission needed) ─────
+  var BASE_TITLE = document.title, flashTimer = null, prevRed = false, notified = false;
+  function notify(){
+    if(notified) return;
+    if(!("Notification" in window) || Notification.permission !== "granted") return;
+    try{ new Notification("⛔ CAP REACHED — War Enforcer", { body:"Stop attacking — a cap has been hit.", tag:"tw-cap" }); notified = true; }catch(_){}
+  }
+  function isRed(){
+    var st = STATE;
+    if(!st || !st.active) return false;          // only meaningful during a live war
+    if(st.faction_blocked) return true;          // faction agreed-score cap reached
+    var myid = ($("myid").value||"").replace(/\D/g,"");
+    if(myid && ME && ME.blocked) return true;    // your personal cap hit
+    return false;
+  }
+  function startFlash(){
+    if(flashTimer) return;
+    var on = false;
+    flashTimer = setInterval(function(){ on = !on; document.title = on ? "🔴 CAP REACHED — stop attacking" : BASE_TITLE; }, 1000);
+  }
+  function stopFlash(){ if(flashTimer){ clearInterval(flashTimer); flashTimer = null; } document.title = BASE_TITLE; }
+  function checkAlert(){
+    var red = isRed();
+    if(red && !prevRed){ notified = false; if(document.hidden){ startFlash(); notify(); } }  // new red episode while away
+    if(!red){ stopFlash(); notified = false; }                                                // cleared → reset
+    prevRed = red;
+  }
+
+  function esc(s){ return String(s==null?"":s).replace(/[<>&]/g,function(c){return({"<":"&lt;",">":"&gt;","&":"&amp;"})[c];}); }
+  function countdown(ts){
+    var s = Math.max(0, Number(ts||0) - Math.floor(Date.now()/1000));
+    if(s<=0) return "now";
+    var d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60), x=s%60;
+    if(d>0) return d+"d "+h+"h "+m+"m";
+    if(h>0) return h+"h "+m+"m "+x+"s";
+    if(m>0) return m+"m "+x+"s";
+    return x+"s";
+  }
+  // green under limit, red once hit; 0 target = unlimited (∞, always green)
+  function capRow(label, val, target){
+    var t = Number(target)||0, cap = t>0 ? t : "∞";
+    var hit = t>0 && val!=null && Number(val) >= t;
+    var v = (val==null) ? "–" : val;
+    return '<div class="r"><span class="k">'+label+'</span><span class="val '+(hit?"hit":"ok")+'">'+v+" / "+cap+"</span></div>";
+  }
+
+  function render(){
+    var st = STATE;
+    var head = $("warHead"), rows = $("warRows");
+    if(!st || (!st.active && !st.enlisted)){
+      head.innerHTML = '<span class="ok">✅ No active war</span>';
+      rows.innerHTML = '<div class="r mut">Attacks allowed.</div>';
+    } else if(st.enlisted && !st.active){
+      head.innerHTML = '<span class="am">⏳ War enlisted</span>';
+      rows.innerHTML =
+        (st.opponent_name ? '<div class="r"><span class="k">Opponent</span><span class="val">'+esc(st.opponent_name)+"</span></div>" : "") +
+        '<div class="r"><span class="k">Starts in</span><span class="val am">'+countdown(st.start_ts)+"</span></div>" +
+        '<div class="r mut">War not started — no blocking yet.</div>';
+    } else {
+      var blocked = !!st.faction_blocked;
+      head.innerHTML = blocked
+        ? '<span class="hit">⛔ Faction cap reached</span>'
+        : '<span class="ok">✅ War live — attacks allowed</span>';
+      var html = "";
+      if(st.opponent_name) html += '<div class="r"><span class="k">Opponent</span><span class="val">'+esc(st.opponent_name)+"</span></div>";
+      html += capRow("Agreed score", st.our_score!=null?st.our_score:0, st.total_score_target);
+      html += '<div class="r"><span class="k">Their score</span><span class="val mut">'+(st.opp_score!=null?st.opp_score:0)+"</span></div>";
+      html += '<div class="r"><span class="k">Rules</span><span class="val mut">'
+        + "per-mbr " + capTxt(st.per_member_score_target) + " · hits " + capTxt(st.max_attacks_per_member)
+        + " · idle " + (Number(st.idle_minutes_target)>0 ? st.idle_minutes_target+"m" : "off") + "</span></div>";
+      rows.innerHTML = html;
+    }
+    renderMe();
+    $("foot").textContent = "updated " + new Date().toLocaleTimeString();
+    checkAlert();
+    maybeAutoFillRules();
+  }
+  function capTxt(t){ t = Number(t)||0; return t>0 ? String(t) : "∞"; }
+
+  function renderMe(){
+    var myid = ($("myid").value||"").replace(/\D/g,"");
+    var box = $("meRows");
+    if(!myid){ box.innerHTML = '<div class="r mut">Enter your ID to see your score / hits.</div>'; return; }
+    var me = ME;
+    var st = STATE || {};
+    if(!me){ box.innerHTML = '<div class="r mut">No data for ID '+esc(myid)+' yet.</div>'; return; }
+    var reasons = (me.blocked && Array.isArray(me.reasons)) ? me.reasons.map(function(c){return REASON_TEXT[c]||c;}).join(", ") : "";
+    box.innerHTML =
+      capRow("My score", me.score, st.per_member_score_target) +
+      capRow("My hits", me.attacks, st.max_attacks_per_member) +
+      '<div class="r"><span class="k">Status</span>'+
+        (me.blocked ? '<span class="pill b">BLOCKED'+(reasons?" · "+esc(reasons):"")+"</span>" : '<span class="pill a">OK</span>')+
+      "</div>";
+  }
+
+
+
+
+  // ───── data load ─────
+  function refresh(){
+    rest("war_state?id=eq.1&select=active,enlisted,start_ts,opponent_name,faction_blocked,our_score,opp_score,total_score_target,per_member_score_target,max_attacks_per_member,idle_minutes_target,war_id")
+      .then(function(rowsv){
+        STATE = Array.isArray(rowsv) ? rowsv[0] : null;
+        setConn(true, "connected");
+        var myid = ($("myid").value||"").replace(/\D/g,"");
+        if(STATE && STATE.war_id && STATE.active && myid){
+          return rest("member_progress?war_id=eq."+STATE.war_id+"&member_id=eq."+myid+"&select=member_id,score,attacks,blocked,reasons")
+            .then(function(mp){ ME = (Array.isArray(mp)?mp[0]:null) || null; });
+        }
+        ME = null;
+      })
+      .then(render)
+      .catch(function(e){ setConn(false, "error: "+e.message); });
+  }
+
+  // pre-fill admin inputs from the live war_state targets (config isn't anon-readable)
+  function fillRules(){
+    var st = STATE || {};
+    if(st.total_score_target!=null) $("r_total").value = st.total_score_target;
+    if(st.per_member_score_target!=null) $("r_perm").value = st.per_member_score_target;
+    if(st.max_attacks_per_member!=null) $("r_hits").value = st.max_attacks_per_member;
+    if(st.idle_minutes_target!=null) $("r_idle").value = st.idle_minutes_target;
+    $("admMsg").textContent = "Loaded current targets.";
+    $("admMsg").className = "msg mut";
+  }
+  // auto-load once on startup as soon as data arrives — only fills empty fields,
+  // so it never clobbers something you've started typing.
+  function maybeAutoFillRules(){
+    if(rulesAutoFilled || !STATE) return;
+    var st = STATE;
+    var any = st.total_score_target!=null || st.per_member_score_target!=null ||
+              st.max_attacks_per_member!=null || st.idle_minutes_target!=null;
+    if(!any) return;
+    function setIf(id, v){ var el=$(id); if(el && el.value==="" && v!=null) el.value = v; }
+    setIf("r_total", st.total_score_target);
+    setIf("r_perm",  st.per_member_score_target);
+    setIf("r_hits",  st.max_attacks_per_member);
+    setIf("r_idle",  st.idle_minutes_target);
+    rulesAutoFilled = true;
+  }
+
+  function saveRules(){
+    var msg = $("admMsg");
+    var vals = {
+      total_score_target: parseInt($("r_total").value,10),
+      per_member_score_target: parseInt($("r_perm").value,10),
+      max_attacks_per_member: parseInt($("r_hits").value,10),
+      idle_minutes_target: parseInt($("r_idle").value,10)
+    };
+    var bad = Object.keys(vals).some(function(k){ return !(Number.isInteger(vals[k]) && vals[k]>=0); });
+    if(bad){ msg.textContent="Enter 0 or a positive number in every field."; msg.className="msg hit"; return; }
+    var tok = $("admtok").value || "";
+    if(!tok){ msg.textContent="Admin token required."; msg.className="msg hit"; return; }
+    localStorage.setItem("tw_admin_token", tok);
+    msg.textContent="Saving…"; msg.className="msg mut";
+    fetch(SUPABASE_URL + "/functions/v1/set-rules", {
+      method:"POST",
+      headers: Object.assign({ "Content-Type":"application/json", "x-admin-token":tok }, hdr()),
+      body: JSON.stringify(vals)
+    }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+      .then(function(res){
+        if(res.ok && res.j && res.j.ok){ msg.textContent="Saved ✓"; msg.className="msg ok"; setTimeout(refresh,400); }
+        else { msg.textContent="Failed: "+((res.j&&res.j.error)||("HTTP "+ (res.j&&res.j.status||""))); msg.className="msg hit"; }
+      })
+      .catch(function(e){ msg.textContent="Error: "+e.message; msg.className="msg hit"; });
+  }
+
+  // ───── wire up ─────
+  $("myid").value = localStorage.getItem("tw_myid") || "";
+  $("admtok").value = localStorage.getItem("tw_admin_token") || "";
+  // show/hide admin token
+  (function(){
+    var inp = $("admtok"), btn = $("admtokEye");
+    var EYE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    var OFF = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    btn.innerHTML = EYE;
+    btn.addEventListener("click", function(){
+      var show = inp.type === "password";
+      inp.type = show ? "text" : "password";
+      btn.innerHTML = show ? OFF : EYE;
+      btn.setAttribute("aria-label", show ? "Hide token" : "Show token");
+      inp.focus();
+    });
+  })();
+  $("saveId").addEventListener("click", function(){
+    localStorage.setItem("tw_myid", ($("myid").value||"").replace(/\D/g,""));
+    renderMe();
+  });
+  $("refreshBtn").addEventListener("click", refresh);
+  // desktop-notification permission toggle (needs HTTPS — works on pages.dev)
+  var notifBtn = $("notifBtn");
+  function refreshNotifBtn(){
+    if(!("Notification" in window)){ notifBtn.style.display = "none"; return; }
+    if(Notification.permission === "granted"){ notifBtn.textContent = "🔔"; notifBtn.title = "Desktop alerts ON"; }
+    else if(Notification.permission === "denied"){ notifBtn.textContent = "🔕"; notifBtn.title = "Alerts blocked — enable in browser site settings"; }
+    else { notifBtn.textContent = "🔔"; notifBtn.title = "Tap to enable desktop alerts"; }
+  }
+  notifBtn.addEventListener("click", function(){
+    if(!("Notification" in window)) return;
+    Notification.requestPermission().then(refreshNotifBtn);
+  });
+  refreshNotifBtn();
+  // alerts: flash the tab title AND fire a desktop notification when you leave while red
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){ if(isRed()){ startFlash(); notify(); } }
+    else { stopFlash(); }
+  });
+  $("saveRules").addEventListener("click", saveRules);
+  $("fillRules").addEventListener("click", fillRules);
+
+  refresh();
+  setInterval(refresh, POLL_MS);
+  // tick the enlisted countdown each second
+  setInterval(function(){ if(STATE && STATE.enlisted && !STATE.active) render(); }, 1000);
+
+  // ───── realtime: push refresh() the instant the DB changes ─────
+  (function(){
+    var WSS = SUPABASE_URL.replace(/^https/, "wss") + "/realtime/v1/websocket?apikey=" + ANON_KEY + "&vsn=1.0.0";
+    var hb=null, backoff=2000, t=null;
+    function ping(){ if(t) return; t=setTimeout(function(){ t=null; refresh(); }, 300); }
+    function connect(){
+      var sock; try{ sock=new WebSocket(WSS); }catch(_){ return; }
+      sock.onopen=function(){
+        backoff=2000;
+        try{
+          sock.send(JSON.stringify({ topic:"realtime:tw", event:"phx_join", ref:"1", join_ref:"1",
+            payload:{ config:{ postgres_changes:[
+              { event:"*", schema:"public", table:"war_state" },
+              { event:"*", schema:"public", table:"member_progress" }
+            ] } } }));
+          sock.send(JSON.stringify({ topic:"realtime:tw", event:"access_token", ref:"2", payload:{ access_token:ANON_KEY } }));
+        }catch(_){}
+        clearInterval(hb);
+        hb=setInterval(function(){ try{ if(sock.readyState===1) sock.send(JSON.stringify({ topic:"phoenix", event:"heartbeat", ref:String(Date.now()), payload:{} })); }catch(_){} }, 25000);
+      };
+      sock.onmessage=function(ev){ var m; try{ m=JSON.parse(ev.data); }catch(_){ return; } if(m && m.event==="postgres_changes") ping(); };
+      sock.onerror=function(){ try{ sock.close(); }catch(_){} };
+      sock.onclose=function(){ clearInterval(hb); setTimeout(connect, backoff); backoff=Math.min(backoff*2,60000); };
+    }
+    connect();
+  })();
+})();
+</script>
+</body>
+</html>

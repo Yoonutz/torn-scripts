@@ -1,0 +1,163 @@
+{
+  "series": {
+    "title": "The Covenant Chronicles",
+    "tagline": "Wanted For Nothing",
+    "bio": "In the ruins of the survivor settlements, one man answers theft and murder with fire. M125CC walks where mercy died."
+  },
+  "books": [
+    {
+      "id": "covenant-ch1",
+      "title": "The Covenant Chronicles",
+      "chapter": "Chapter I",
+      "subtitle": "The Crows Wanted Proof",
+      "bio": "They stole from the innocent. They mocked mercy. They challenged M125CC.",
+      "background": "assets/covenant-ch1/background.webp",
+      "pages": [
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p1_1.webp",
+              "ar": 0.909
+            },
+            {
+              "src": "assets/covenant-ch1/p1_2.webp",
+              "ar": 0.912
+            },
+            {
+              "src": "assets/covenant-ch1/p1_3.webp",
+              "ar": 0.923
+            },
+            {
+              "src": "assets/covenant-ch1/p1_4.webp",
+              "ar": 0.894
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p2_1.webp",
+              "ar": 0.838
+            },
+            {
+              "src": "assets/covenant-ch1/p2_2.webp",
+              "ar": 0.71
+            },
+            {
+              "src": "assets/covenant-ch1/p2_3.webp",
+              "ar": 2.065
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p3_1.webp",
+              "ar": 1.01
+            },
+            {
+              "src": "assets/covenant-ch1/p3_2.webp",
+              "ar": 0.601
+            },
+            {
+              "src": "assets/covenant-ch1/p3_3.webp",
+              "ar": 0.663
+            },
+            {
+              "src": "assets/covenant-ch1/p3_4.webp",
+              "ar": 1.452
+            },
+            {
+              "src": "assets/covenant-ch1/p3_5.webp",
+              "ar": 1.258
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p4_1.webp",
+              "ar": 1.651
+            },
+            {
+              "src": "assets/covenant-ch1/p4_2.webp",
+              "ar": 0.473
+            },
+            {
+              "src": "assets/covenant-ch1/p4_3.webp",
+              "ar": 1.043
+            },
+            {
+              "src": "assets/covenant-ch1/p4_4.webp",
+              "ar": 1.063
+            },
+            {
+              "src": "assets/covenant-ch1/p4_5.webp",
+              "ar": 1.011
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p5_1.webp",
+              "ar": 1.559
+            },
+            {
+              "src": "assets/covenant-ch1/p5_2.webp",
+              "ar": 1.5
+            },
+            {
+              "src": "assets/covenant-ch1/p5_3.webp",
+              "ar": 0.747
+            },
+            {
+              "src": "assets/covenant-ch1/p5_4.webp",
+              "ar": 0.537
+            },
+            {
+              "src": "assets/covenant-ch1/p5_5.webp",
+              "ar": 0.989
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p6_1.webp",
+              "ar": 1.072
+            },
+            {
+              "src": "assets/covenant-ch1/p6_2.webp",
+              "ar": 0.815
+            },
+            {
+              "src": "assets/covenant-ch1/p6_3.webp",
+              "ar": 1.169
+            },
+            {
+              "src": "assets/covenant-ch1/p6_4.webp",
+              "ar": 2.051
+            }
+          ]
+        },
+        {
+          "panels": [
+            {
+              "src": "assets/covenant-ch1/p7_1.webp",
+              "ar": 1.601
+            },
+            {
+              "src": "assets/covenant-ch1/p7_2.webp",
+              "ar": 1.601
+            },
+            {
+              "src": "assets/covenant-ch1/p7_3.webp",
+              "ar": 2.251
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "torn-paid-trains-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Google Apps Script workspace powered by clasp.",
+  "scripts": {
+    "login": "clasp login",
+    "status": "clasp status",
+    "pull": "clasp pull",
+    "push": "clasp push",
+    "open": "clasp open",
+    "deploy": "clasp deploy",
+    "clasp:version": "clasp --version",
+    "logs": "clasp logs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@google/clasp": "^3.3.0"
+  }
+}

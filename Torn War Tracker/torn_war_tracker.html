@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Torn War Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+[data-theme="dark"]{
+  --bg:#0f0f0f;--bg2:#1a1a1a;--bg3:#252525;--card:#181818;
+  --border:#2a2a2a;--border2:#3a3a3a;
+  --text:#f0f0f0;--muted:#777;--hint:#555;
+  --green:#22c48a;--green-d:#1a9e6e;--green-l:rgba(34,196,138,.12);
+  --red:#ff5c5c;--red-d:#cc3333;--red-l:rgba(255,92,92,.12);
+  --amber:#f0a832;--amber-d:#c07010;--amber-l:rgba(240,168,50,.12);
+  --blue:#5ba4f5;--blue-d:#2266cc;--blue-l:rgba(91,164,245,.12);
+  --bar-bg:#2a2a2a;--bar-green:#22c48a;--bar-red:#ff5c5c;
+}
+[data-theme="light"]{
+  --bg:#f2f2ef;--bg2:#eaeae6;--bg3:#ddd;--card:#fff;
+  --border:#e0e0db;--border2:#ccc;
+  --text:#111;--muted:#666;--hint:#aaa;
+  --green:#1D9E75;--green-d:#0F6E56;--green-l:#E1F5EE;
+  --red:#E24B4A;--red-d:#b03030;--red-l:#FCEBEB;
+  --amber:#BA7517;--amber-d:#8a5010;--amber-l:#FAEEDA;
+  --blue:#185FA5;--blue-d:#0d4080;--blue-l:#E6F1FB;
+  --bar-bg:#e0e0db;--bar-green:#1D9E75;--bar-red:#E24B4A;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+.wrap{max-width:1140px;margin:0 auto;padding:1.5rem 1rem}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
+.logo{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.logo span{color:var(--green)}
+.logo-wrap{display:flex;align-items:baseline;gap:10px}
+.byline{font-size:13px;color:var(--muted)}
+.byline a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--muted)}
+.byline a:hover{color:var(--green);border-bottom-color:var(--green)}
+.hright{display:flex;align-items:center;gap:8px}
+.hbtn{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.hbtn:hover{color:var(--text);border-color:var(--border2)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal-box{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:860px;width:100%;max-height:90vh;overflow-y:auto}
+.modal-head{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card)}
+.modal-head h2{font-size:15px;font-weight:700}
+.modal-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px}
+.modal-body{padding:1.25rem}
+.war-banner{display:none;border-radius:10px;padding:.875rem 1rem;margin-bottom:1.25rem;border:1px solid}
+.war-banner.active{display:flex;align-items:center;justify-content:space-between;background:var(--red-l);border-color:var(--red);flex-wrap:wrap;gap:10px}
+.war-banner.scheduled{display:flex;align-items:center;justify-content:space-between;background:var(--amber-l);border-color:var(--amber);flex-wrap:wrap;gap:10px}
+.banner-left{display:flex;align-items:center;gap:10px}
+.bdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.active .bdot{background:var(--red);animation:blink 1.2s infinite}
+.scheduled .bdot{background:var(--amber)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.banner-title{font-size:13px;font-weight:700}
+.active .banner-title{color:var(--red)}
+.scheduled .banner-title{color:var(--amber)}
+.banner-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.banner-btn{padding:7px 16px;border-radius:8px;border:none;font-size:12px;font-weight:700;cursor:pointer}
+.active .banner-btn{background:var(--red);color:#fff}
+.scheduled .banner-btn{background:var(--amber);color:#fff;cursor:default;opacity:.7}
+.card{background:var(--card);border-radius:12px;border:1px solid var(--border);padding:1.25rem;margin-bottom:1.25rem}
+.row{display:grid;gap:10px;align-items:flex-end}
+.r2{grid-template-columns:1fr auto}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;font-weight:500;color:var(--muted)}
+input[type=password],input[type=datetime-local],select{font-size:14px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);width:100%;transition:border .15s}
+input:focus,select:focus{outline:none;border-color:var(--green)}
+select option{background:var(--bg2);color:var(--text)}
+.btn{padding:10px 18px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .12s}
+.btn:hover{background:var(--bg2)}
+.btn-g{background:var(--green);color:#fff;border-color:var(--green-d)}
+.btn-g:hover{background:var(--green-d)}
+.btn-g:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:6px 12px;font-size:12px}
+.note{font-size:11px;color:var(--hint);margin-top:8px;padding:7px 11px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--border2)}
+.score-box{background:var(--bg2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);margin-top:10px}
+.rf-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.rf-row label{font-size:12px;color:var(--muted)}
+.rf-row input[type=range]{-webkit-appearance:none;appearance:none;width:110px;height:18px;background:transparent;cursor:pointer;outline:none;padding:0;margin:0}
+.rf-row input[type=range]::-webkit-slider-runnable-track{height:4px;background:var(--bar-bg);border-radius:999px;border:1px solid var(--border)}
+.rf-row input[type=range]::-moz-range-track{height:4px;background:var(--bar-bg);border-radius:999px;border:1px solid var(--border)}
+.rf-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--green);border:2px solid var(--card);box-shadow:0 0 0 1px var(--green-d);margin-top:-6px;transition:transform .15s ease,box-shadow .15s ease}
+.rf-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--green);border:2px solid var(--card);box-shadow:0 0 0 1px var(--green-d);transition:transform .15s ease,box-shadow .15s ease}
+.rf-row input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.2);box-shadow:0 0 0 1px var(--green-d),0 0 0 6px var(--green-l)}
+.rf-row input[type=range]:hover::-moz-range-thumb{transform:scale(1.2);box-shadow:0 0 0 1px var(--green-d),0 0 0 6px var(--green-l)}
+.rf-row input[type=range]:active::-webkit-slider-thumb{transform:scale(1.25);box-shadow:0 0 0 1px var(--green-d),0 0 0 8px var(--green-l)}
+.rf-row input[type=range]:active::-moz-range-thumb{transform:scale(1.25);box-shadow:0 0 0 1px var(--green-d),0 0 0 8px var(--green-l)}
+.rf-row input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 1px var(--green-d),0 0 0 4px var(--green-l)}
+.rf-row input[type=range]:focus-visible::-moz-range-thumb{box-shadow:0 0 0 1px var(--green-d),0 0 0 4px var(--green-l)}
+.rf-val{font-size:12px;font-weight:600;min-width:38px;color:var(--text)}
+.cd{font-size:11px;color:var(--hint)}
+.status{display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.tag{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--bg2);border:1px solid var(--border);color:var(--muted)}
+.tag.g{background:var(--green-l);color:var(--green);border-color:var(--green-d)}
+.tag.r{background:var(--red-l);color:var(--red);border-color:var(--red)}
+.tag.a{background:var(--amber-l);color:var(--amber);border-color:var(--amber)}
+.err{font-size:13px;padding:10px 14px;background:var(--red-l);border:1px solid var(--red);border-radius:8px;color:var(--red);margin-top:10px;line-height:1.6;display:none}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:1.25rem}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.ml{font-size:10px;color:var(--muted);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.mv{font-size:22px;font-weight:700;line-height:1.2}
+.ms{font-size:11px;color:var(--hint);margin-top:3px}
+.badge{display:inline-block;font-size:11px;padding:3px 10px;border-radius:6px;font-weight:600}
+.bw{background:var(--green-l);color:var(--green)}
+.bl{background:var(--red-l);color:var(--red)}
+.score-vis{margin-bottom:1.25rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.score-track{height:10px;border-radius:5px;background:var(--bar-bg);overflow:hidden;display:flex;margin:6px 0}
+.score-my{height:100%;background:var(--bar-green);transition:width .5s}
+.score-opp{height:100%;background:var(--bar-red);transition:width .5s}
+.target-info{font-size:12px;color:var(--muted);margin-top:8px;padding:8px 10px;background:var(--bg2);border-radius:6px;display:flex;gap:16px;flex-wrap:wrap}
+.target-info strong{color:var(--text);font-weight:600}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:1.25rem}
+.pc{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.pt{font-size:10px;font-weight:700;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.06em}
+.pb{font-size:10px;padding:2px 7px;border-radius:3px;font-weight:700}
+.pb1{background:var(--green-l);color:var(--green)}
+.pb2{background:var(--blue-l);color:var(--blue)}
+.pb3{background:var(--amber-l);color:var(--amber)}
+.ps{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)}
+.ps:last-child{border:none}
+.psl{color:var(--muted)}.psv{font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.ptitle{font-size:13px;font-weight:700;margin-bottom:.875rem}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:.75rem}
+.tab{padding:7px 12px;font-size:12px;border:none;background:none;color:var(--hint);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500;border-radius:4px 4px 0 0}
+.tab:hover{color:var(--text);background:var(--bg2)}
+.tab.on{color:var(--green);border-bottom-color:var(--green);font-weight:700;background:var(--green-l)}
+.tab-note{font-size:11px;color:var(--hint);padding:4px 0 8px;font-style:italic;line-height:1.5;display:none}
+.mrow{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.mrow:last-child{border:none}
+.rnk{width:20px;text-align:center;font-size:10px;color:var(--hint);flex-shrink:0;font-weight:600}
+.rnk.g{color:#f0a832}.rnk.s{color:#888}.rnk.b{color:#b07040}
+.mn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bbar{width:60px;height:6px;background:var(--bar-bg);border-radius:3px;overflow:hidden;flex-shrink:0}
+.bfill{height:100%;border-radius:3px;background:var(--bar-green)}
+.bfill.e{background:var(--bar-red)}
+.mh{width:32px;text-align:right;color:var(--hint);flex-shrink:0;font-size:11px}
+.msc{width:52px;text-align:right;font-weight:700;color:var(--green);flex-shrink:0}
+.msc.e{color:var(--red)}
+/* Mini bar chart (no CDN) */
+.mini-chart{width:100%;height:160px;margin-top:.5rem;display:flex;align-items:flex-end;gap:3px;padding:4px 0 20px}
+.mini-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;position:relative;min-width:0}
+.mini-bar{width:100%;border-radius:2px 2px 0 0;transition:height .4s}
+.mini-label{font-size:8px;color:var(--hint);margin-top:3px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;position:absolute;bottom:-18px}
+.mini-val{font-size:8px;color:var(--muted);margin-bottom:2px}
+.ch-leg{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-bottom:5px}
+.ch-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.fp{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem;overflow-x:auto;margin-bottom:1.5rem}
+.fpt{font-size:14px;font-weight:700;margin-bottom:.75rem}
+table{width:100%;font-size:12px;border-collapse:collapse}
+th{font-size:10px;color:var(--muted);font-weight:600;padding:7px 8px;border-bottom:2px solid var(--border);text-align:left;cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--text);background:var(--bg2)}
+th.asc::after{content:' \2191';color:var(--green)}
+th.desc::after{content:' \2193';color:var(--green)}
+th.asc,th.desc{color:var(--green)}
+th.r,td.r{text-align:right}
+th.nc{cursor:default}
+td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text)}
+tr:hover td{background:var(--bg2)}
+.zz{color:var(--hint)}
+.cbar{height:6px;background:var(--bar-bg);border-radius:3px;width:80px;overflow:hidden}
+.cin{height:100%;border-radius:3px;background:var(--bar-green)}
+.empty{font-size:12px;color:var(--hint);padding:10px 0}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border2);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.col-note{font-size:11px;color:var(--hint);margin-top:7px;padding:5px 8px;background:var(--bg2);border-radius:5px}
+@media(max-width:720px){
+  .metrics,.phases{grid-template-columns:1fr 1fr}
+  .two{grid-template-columns:1fr}
+  .r2{grid-template-columns:1fr}
+}
+
+/* Login modal */
+.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;display:flex;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(8px)}
+.login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;width:100%;max-width:400px;box-shadow:0 24px 64px rgba(0,0,0,.4)}
+.login-logo{font-size:24px;font-weight:700;letter-spacing:-.3px;margin-bottom:.25rem}
+.login-logo span{color:var(--green)}
+.login-sub{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+.login-field{display:flex;flex-direction:column;gap:6px;margin-bottom:1rem}
+.login-field label{font-size:12px;font-weight:600;color:var(--muted)}
+.login-field input{font-size:14px;padding:10px 13px;border-radius:9px;border:1px solid var(--border);background:var(--bg2);color:var(--text);transition:border .15s}
+.login-field input:focus{outline:none;border-color:var(--green)}
+.login-btn{width:100%;padding:11px;border-radius:9px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:background .12s;margin-top:.25rem}
+.login-btn:hover{background:var(--green-d)}
+.login-btn:disabled{opacity:.4;cursor:not-allowed}
+.login-err{font-size:12px;color:var(--red);margin-top:8px;display:none;padding:6px 10px;background:var(--red-l);border-radius:6px;border:1px solid var(--red)}
+.login-hint{font-size:11px;color:var(--hint);margin-top:10px;line-height:1.5}
+/* Main content blur when login shown */
+.app-blur{filter:blur(4px);pointer-events:none;user-select:none}
+/* Greeting + logout in header */
+.greeting{font-size:12px;color:var(--muted);font-weight:500}
+.greeting strong{color:var(--green)}
+</style>
+</head>
+<body>
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="login-logo">Torn War <span>Tracker</span></div>
+    <div class="login-sub">Enter your faction API key to continue</div>
+    <div class="login-field">
+      <label>Faction API Key</label>
+      <input type="password" id="loginKey" placeholder="Paste your Torn API key" autocomplete="off"/>
+    </div>
+    <button class="login-btn" id="loginBtn">Connect &#8599;</button>
+    <div class="login-err" id="loginErr"></div>
+    <div class="login-hint">Your key needs: faction &rarr; rankedwars, attacksfull, revivesfull, warfare &middot; torn &rarr; rankedwarreport.<br>Key is stored locally in your browser only.</div>
+  </div>
+</div>
+<div class="wrap" id="appWrap">
+<header>
+  <div class="logo-wrap"><div class="logo">Torn War <span>Tracker</span></div><span class="byline"> by <a href="https://www.torn.com/profiles.php?XID=2805199" target="_blank" rel="noopener">KamiRen [2805199]</a></span></div>
+  <div class="hright">
+    <span class="greeting" id="greeting" style="display:none">Hello, <strong id="greetName"></strong></span>
+    <button class="hbtn" id="logoutBtn" style="display:none">Logout</button>
+    <button class="hbtn" id="aboutBtn">i About</button>
+    <button class="hbtn" id="themeBtn">&#9728; Light</button>
+  </div>
+</header>
+
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>About Torn War Tracker</h2>
+      <button class="modal-close" id="aboutClose">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.25rem">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">What it does</div>
+          <p style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:8px">Torn shows totals. This app shows <strong style="color:var(--text)">who did what, when</strong> &mdash; slicing every ranked war into three phases so leadership can evaluate member performance with precision.</p>
+          <p style="font-size:13px;color:var(--muted);line-height:1.7">Tracks opponent top hitters, live score vs target, and auto-refreshes during active wars.</p>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">The three phases</div>
+          <div style="font-size:12px;color:var(--muted);line-height:2.1">
+            <span style="display:inline-block;padding:1px 6px;border-radius:3px;background:var(--green-l);color:var(--green);font-weight:700;font-size:10px;margin-right:6px">Phase 1</span>First 24h &mdash; target score is fixed. Main fighting window.<br>
+            <span style="display:inline-block;padding:1px 6px;border-radius:3px;background:var(--blue-l);color:var(--blue);font-weight:700;font-size:10px;margin-right:6px">Phase 2</span>24h until net score crosses target. Decays 1%/hr.<br>
+            <span style="display:inline-block;padding:1px 6px;border-radius:3px;background:var(--amber-l);color:var(--amber);font-weight:700;font-size:10px;margin-right:6px">Phase 3</span>After target is crossed until war ends.
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">How to use</div>
+          <ol style="font-size:12px;color:var(--muted);line-height:2;padding-left:16px">
+            <li>Paste faction API key</li>
+            <li>Click <strong style="color:var(--text)">Load wars</strong></li>
+            <li>Select a war or use the active war banner</li>
+            <li>Click <strong style="color:var(--text)">Analyse</strong></li>
+            <li>Click <strong style="color:var(--text)">Auto-detect</strong> &mdash; phase splits update automatically</li>
+          </ol>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">API key selections needed</div>
+          <code style="display:block;font-size:11px;color:var(--muted);background:var(--bg2);padding:8px 10px;border-radius:6px;line-height:2.1">faction &rarr; rankedwars<br>faction &rarr; attacksfull<br>faction &rarr; revivesfull<br>faction &rarr; warfare<br>torn &rarr; rankedwarreport</code>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Privacy</div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.7">Runs <strong style="color:var(--text)">100% locally</strong>. Key and data stay on your machine. Only contacts <code style="background:var(--bg2);padding:1px 4px;border-radius:3px">api.torn.com</code>. No servers, no tracking, no ads.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="war-banner" id="warBanner">
+  <div class="banner-left">
+    <div class="bdot"></div>
+    <div>
+      <div class="banner-title" id="bannerTitle"></div>
+      <div class="banner-sub" id="bannerSub"></div>
+    </div>
+  </div>
+  <button class="banner-btn" id="bannerBtn">Load live war</button>
+</div>
+
+<div class="card">
+  <input type="hidden" id="apiKey"/>
+
+  <div id="warArea" style="display:none;margin-top:14px">
+    <div class="row r2" style="margin-bottom:0">
+      <div class="field">
+        <label>Past wars</label>
+        <select id="warSel"><option value="">&#8212; choose a past war &#8212;</option></select>
+      </div>
+      <button class="btn btn-g" id="goBtn" disabled>Analyse</button>
+    </div>
+    <div class="score-box">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center">
+        <div class="field" style="margin:0">
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+            When did we hit the target score?
+            <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--green-l);color:var(--green);font-weight:600">optional</span>
+          </label>
+          <input type="datetime-local" id="scoreTime" style="background:var(--card)"/>
+        </div>
+        <button class="btn btn-sm" id="autoPopBtn" style="margin-top:20px">Auto-detect</button>
+      </div>
+      <div style="font-size:11px;color:var(--hint);margin-top:6px;line-height:1.6">The exact Torn time (TCT = UTC) when your net score first crossed the war target. Run Analyse first, then Auto-detect to calculate automatically from the attack log.</div>
+      <div id="autoPopStatus" style="font-size:11px;margin-top:5px;line-height:1.5;display:none"></div>
+    </div>
+    <div class="rf-row" id="rfRow" style="display:none">
+      <div class="bdot" style="flex-shrink:0;background:var(--red);animation:blink 1.2s infinite"></div>
+      <label>Auto-refresh every</label>
+      <input type="range" id="rfSlider" min="2" max="10" value="3" step="1"/>
+      <span class="rf-val" id="rfLabel">3 min</span>
+      <button class="btn btn-sm" id="pauseBtn">Pause</button>
+      <span class="cd" id="cd"></span>
+    </div>
+  </div>
+  <div class="status" id="statusBar"></div>
+  <div class="err" id="errBox"></div>
+</div>
+
+<div id="dash" style="display:none">
+  <div class="metrics" id="metrics"></div>
+  <div class="score-vis" id="scoreVis"></div>
+  <div class="phases" id="phases"></div>
+  <div class="two">
+    <div class="panel">
+      <div class="ptitle" id="myTitle">Your faction</div>
+      <div class="tabs">
+        <button class="tab on" data-tab="all">All war</button>
+        <button class="tab" data-tab="p1">Phase 1</button>
+        <button class="tab" data-tab="p2">Phase 2</button>
+        <button class="tab" data-tab="p3">Phase 3</button>
+      </div>
+      <div id="tabNote" class="tab-note"></div>
+      <div id="myList"></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle" id="oppTitle">Opponent &#8212; top threats</div>
+      <div id="oppList"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:.875rem;margin-bottom:5px">Score progression (estimated)</div>
+      <div class="ch-leg">
+        <span style="display:flex;align-items:center;gap:4px"><span class="ch-dot" id="myChDot"></span><span id="myLeg">Yours</span></span>
+        <span style="display:flex;align-items:center;gap:4px"><span class="ch-dot" id="oppChDot"></span><span id="oppLeg">Opponent</span></span>
+      </div>
+      <div class="mini-chart" id="miniChart"></div>
+    </div>
+  </div>
+  <div class="fp">
+    <div class="fpt">All members &#8212; full breakdown</div>
+    <table id="fullTbl"></table>
+    <div id="colNote" class="col-note" style="display:none"></div>
+  </div>
+</div>
+
+</div>
+<script>
+function el(id) { return document.getElementById(id); }
+
+(function() {
+'use strict';
+
+// State
+var S = {
+  warList: [], warData: null, warId: null, isLive: false,
+  rfTimer: null, paused: false, cdInt: null, nextRf: null,
+  activeTab: 'all', myFid: null, oppFid: null,
+  currentWarState: null, warMeta: { wStart: 0, wEnd: 0 },
+  cachedAttacks: [], cachedRevives: {}, cachedDefends: {},
+  cachedReviveSettings: {}, // memberId -> boolean (true = revives ON, false = OFF). Live only.
+  tableSortCol: 'score', tableSortDir: -1,
+  diag: { v1Attempts: 0, v2Attempts: 0, v1Hits: 0, v2Hits: 0, errors: [], sample: null }
+};
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+// Wrap a player name in an anchor that opens their Torn profile in a new tab.
+// If no id is available, returns plain text so we never render a broken link.
+function nameLink(id, name) {
+  var safeName = String(name || 'Unknown');
+  if (!id) return safeName;
+  return '<a href="https://www.torn.com/profiles.php?XID=' + encodeURIComponent(id) +
+    '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor">' +
+    safeName + '</a>';
+}
+function fmtUTC(ts) { return new Date(ts * 1000).toUTCString().replace(' GMT', ''); }
+function tsToInput(ts) {
+  var d = new Date(ts * 1000);
+  return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth()+1) + '-' + pad2(d.getUTCDate()) + 'T' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+}
+function fmtCd(secs) {
+  if (secs <= 0) return 'Starting now';
+  var h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60);
+  return h > 0 ? 'in ' + h + 'h ' + m + 'm' : 'in ' + m + 'm';
+}
+function key() { return el('apiKey').value.trim(); }
+function showErr(m) { var b = el('errBox'); b.innerHTML = m; b.style.display = 'block'; }
+function clearErr() { el('errBox').style.display = 'none'; }
+function setStatus(parts) {
+  var b = el('statusBar'); b.style.display = 'flex';
+  b.innerHTML = parts.map(function(p) { return '<span class="tag ' + (p.c||'') + '">' + p.t + '</span>'; }).join('');
+}
+
+// API call. Auth scheme depends on version:
+//   v1: `?key={apiKey}` query parameter (legacy)
+//   v2: `Authorization: ApiKey {apiKey}` HEADER (NOT query — confirmed by
+//        official torn-client source, which explicitly strips `key` from query
+//        params and uses Authorization header instead)
+async function apiCall(path, useV2) {
+  var k = key();
+  var url, opts = { headers: { 'Accept': 'application/json' } };
+  if (useV2) {
+    url = 'https://api.torn.com/v2' + path;
+    opts.headers['Authorization'] = 'ApiKey ' + k;
+  } else {
+    var sep = path.indexOf('?') >= 0 ? '&' : '?';
+    url = 'https://api.torn.com' + path + sep + 'key=' + k;
+  }
+  var r = await fetch(url, opts);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  var j = await r.json();
+  if (j.error) {
+    var c = String(j.error.code || j.error || '');
+    if (c === '2') throw new Error('Invalid API key.');
+    if (c === '7') throw new Error('Key lacks required permissions.');
+    if (c === '16') throw new Error('Key access level too low.');
+    if (c === '22') throw new Error('Selection only available in API v1.');
+    if (c === '23') throw new Error('Selection only available in API v2.');
+    throw new Error(j.error.error || JSON.stringify(j.error));
+  }
+  return j;
+}
+
+// Theme
+el('themeBtn').addEventListener('click', function() {
+  var h = document.documentElement;
+  var dark = h.getAttribute('data-theme') === 'dark';
+  h.setAttribute('data-theme', dark ? 'light' : 'dark');
+  el('themeBtn').innerHTML = dark ? '&#127769; Dark' : '&#9728; Light';
+  updateChartColors();
+});
+
+// About modal
+el('aboutBtn').addEventListener('click', function() { el('aboutModal').classList.add('open'); });
+el('aboutClose').addEventListener('click', function() { el('aboutModal').classList.remove('open'); });
+el('aboutModal').addEventListener('click', function(e) { if (e.target === el('aboutModal')) el('aboutModal').classList.remove('open'); });
+
+// Load wars
+el('warSel').addEventListener('change', onWC);
+el('goBtn').addEventListener('click', loadSelectedWar);
+el('bannerBtn').addEventListener('click', loadCurrentWar);
+el('autoPopBtn').addEventListener('click', autoPopulateScoreTime);
+el('rfSlider').addEventListener('input', function() { el('rfLabel').textContent = el('rfSlider').value + ' min'; if (!S.paused && S.isLive) startRF(); });
+el('pauseBtn').addEventListener('click', togglePause);
+
+// Tab clicks
+document.querySelectorAll('.tab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    S.activeTab = btn.dataset.tab;
+    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('on'); });
+    btn.classList.add('on');
+    if (S.warData) renderMyList(S.activeTab, S.warData.factions[S.myFid]);
+  });
+});
+
+window.fetchWars = async function fetchWars() {
+  clearErr();
+  if (!key()) { showErr('Enter your API key first.'); return; }
+  setStatus([{ t: 'Connecting...', c: 'a' }]);
+  try {
+    var results = await Promise.all([
+      apiCall('/faction/?selections=rankedwars,basic'),
+      apiCall('/faction/wars', true).catch(function() { return null; })
+    ]);
+    var base = results[0];
+    S.myFid = String(base.ID || '');
+    var myName = base.name || 'Your faction';
+    var past = base.rankedwars || {};
+    var now = Math.floor(Date.now() / 1000);
+
+    // Detect active/scheduled war
+    S.currentWarState = null;
+    var banner = el('warBanner');
+    banner.className = 'war-banner';
+    var allEntries = Object.entries(past);
+    for (var i = 0; i < allEntries.length; i++) {
+      var wid0 = allEntries[i][0], w0 = allEntries[i][1], wo = w0.war || {};
+      if (!wo.end || wo.end === 0) {
+        var fids0 = Object.keys(w0.factions || {});
+        var oId0 = fids0.filter(function(f) { return f !== S.myFid; })[0] || fids0[0] || '';
+        var oName0 = (w0.factions[oId0] || {}).name || 'Unknown';
+        var startTs0 = wo.start || 0;
+        var isSched = startTs0 > now;
+        S.currentWarState = { type: isSched ? 'scheduled' : 'active', wid: wid0, myId: S.myFid, oppId: oId0, startTs: startTs0 };
+        el('bannerTitle').textContent = (isSched ? '\u23F3 Scheduled vs ' : '\u26A1 Active war vs ') + oName0;
+        if (isSched) {
+          var upd = function() { el('bannerSub').textContent = 'Starts ' + fmtCd(startTs0 - Math.floor(Date.now()/1000)) + ' \u2014 ' + fmtUTC(startTs0); };
+          upd(); setInterval(upd, 60000);
+          el('bannerBtn').textContent = 'Not started yet';
+          banner.className = 'war-banner scheduled';
+        } else {
+          el('bannerSub').textContent = 'War in progress \u2014 click to load live data';
+          el('bannerBtn').textContent = 'Load live war \u2197';
+          banner.className = 'war-banner active';
+        }
+        break;
+      }
+    }
+
+    // Populate dropdown with completed wars only
+    S.warList = [];
+    var sel = el('warSel');
+    sel.innerHTML = '<option value="">&#8212; choose a past war &#8212;</option>';
+    var completed = allEntries
+      .filter(function(e) { return e[1].war && e[1].war.end && e[1].war.end > 0; })
+      .sort(function(a, b) { return (b[1].war.end||0) - (a[1].war.end||0); });
+    completed.forEach(function(entry) {
+      var wid = entry[0], w = entry[1];
+      var fids = Object.keys(w.factions || {});
+      var oId = fids.filter(function(f) { return f !== S.myFid; })[0] || fids[0] || '';
+      var oName = (w.factions[oId] || {}).name || 'Unknown';
+      var winner = w.war && w.war.winner;
+      var iWon = winner && String(winner) === S.myFid;
+      var res = winner ? (iWon ? '\u2713 Win' : '\u2717 Loss') : '\u2014';
+      var dt = new Date((w.war.end||0)*1000).toUTCString().substring(5,16);
+      S.warList.push({ wid: wid, myId: S.myFid, oppId: oId, live: false, iWon: iWon, target: w.war.target||0, wStart: w.war.start||0, wEnd: w.war.end||0 });
+      var o = document.createElement('option');
+      o.value = wid;
+      o.textContent = res + '  vs ' + oName + '  \u2014  ' + dt;
+      sel.appendChild(o);
+    });
+    el('warArea').style.display = 'block';
+    var parts = [{ t: myName, c: 'g' }, { t: completed.length + ' past wars' }];
+    if (S.currentWarState) parts.push({ t: S.currentWarState.type === 'active' ? '\u26A1 Active war' : '\u23F3 Scheduled', c: S.currentWarState.type === 'active' ? 'r' : 'a' });
+    setStatus(parts);
+  } catch(e) {
+    showErr('<strong>Failed:</strong> ' + e.message);
+    setStatus([{ t: 'Failed', c: 'r' }]);
+  } finally {
+    }
+};
+
+function onWC() {
+  el('goBtn').disabled = !el('warSel').value;
+  el('autoPopStatus').style.display = 'none';
+  el('scoreTime').value = '';
+  S.cachedAttacks = []; S.cachedRevives = {}; S.cachedDefends = {}; S.cachedReviveSettings = {};
+}
+
+async function loadCurrentWar() {
+  if (!S.currentWarState || S.currentWarState.type !== 'active') return;
+  clearErr();
+  S.myFid = S.currentWarState.myId; S.oppFid = S.currentWarState.oppId;
+  S.warId = '__live__'; S.isLive = true;
+  el('rfRow').style.display = 'flex'; startRF();
+  await fetchAndRender('__live__');
+  // The initial render already fetched the full windowed attack log (live mode
+  // does this in fetchAndRender, no separate Analyse step needed). We just need
+  // to fetch revives once for the Revives column — fire-and-forget, render
+  // updates when it returns.
+  if (S.warData && S.warMeta && S.warMeta.wStart) {
+    apiCall('/faction/?selections=revivesfull&from=' + S.warMeta.wStart + '&to=' + S.warMeta.wEnd, false)
+      .then(function(revD) {
+        S.cachedRevives = {};
+        Object.values(revD.revives || {}).forEach(function(rv) {
+          var rid = String(rv.reviver_id || (rv.reviver && rv.reviver.id) || '');
+          if (rid) S.cachedRevives[rid] = (S.cachedRevives[rid] || 0) + 1;
+        });
+        if (S.warData) {
+          renderTable(S.warData.factions[S.myFid]);
+          renderMyList(S.activeTab, S.warData.factions[S.myFid]);
+        }
+      })
+      .catch(function() {});
+    // Live-only: fetch revive-on/off settings via v2/faction/members.
+    // Fire and forget — when it returns, re-render the table.
+    fetchReviveSettings().then(function() {
+      if (S.warData) renderTable(S.warData.factions[S.myFid]);
+    });
+  }
+}
+
+async function loadSelectedWar() {
+  var wid = el('warSel').value; if (!wid) return;
+  clearErr();
+  var e = S.warList.filter(function(x) { return x.wid === wid; })[0]; if (!e) return;
+  S.warId = wid; S.isLive = false; S.myFid = e.myId; S.oppFid = e.oppId;
+  stopRF(); el('rfRow').style.display = 'none';
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('on'); });
+  document.querySelectorAll('.tab')[0].classList.add('on');
+  S.activeTab = 'all';
+  await fetchAndRender(wid);
+}
+
+async function fetchAndRender(wid) {
+  setStatus([{ t: 'Loading...', c: 'a' }]);
+  try {
+    if (wid === '__live__') {
+      // LIVE MODE: assemble the same shape as torn/rankedwarreport so the renderer
+      // doesn't need to know whether it's live or past data.
+      //
+      // Three-phase parallel fetch:
+      //   Phase A (parallel): war metadata + both faction member rosters
+      //   Phase B (parallel windowed): full war attack log from warStart→now
+      //   Then: tally attacks per member, render
+      //
+      // Why windowed? A single /faction/attacksfull returns only ~1000 recent attacks
+      // across all activity — not enough for a multi-hour war, and not war-scoped.
+      // The auto-detect path already uses 1-hour parallel windows for past wars;
+      // we reuse the same helper here so live and auto-detect stay in sync.
+
+      var myF = S.myFid, oppF = S.oppFid;
+
+      // Phase A: war metadata + member rosters, all parallel
+      var phaseA = await Promise.all([
+        apiCall('/faction/wars', true),
+        myF  ? apiCall('/faction/' + myF  + '/?selections=basic').catch(function() { return null; }) : Promise.resolve(null),
+        oppF ? apiCall('/faction/' + oppF + '/?selections=basic').catch(function() { return null; }) : Promise.resolve(null)
+      ]);
+
+      // Parse war metadata. v2 /faction/wars shape: { wars: { ranked: { war_id, start, target, factions: [...] } } }
+      var warsResp = phaseA[0].wars || phaseA[0];
+      var rankedW = warsResp.ranked || warsResp.war || warsResp;
+      if (!rankedW || (!rankedW.start && !rankedW.war_id)) throw new Error('No active war found.');
+
+      // Extract per-faction war stats (score, attacks, chain) from v2 wars response
+      var warFactions = {};
+      (rankedW.factions || []).forEach(function(f) {
+        warFactions[String(f.id || f.ID)] = {
+          name: f.name || 'Unknown',
+          score: f.score || 0,
+          attacks: f.attacks || 0,
+          chain: f.chain || 0
+        };
+      });
+
+      // Build the past-war-shaped report object
+      var liveReport = {
+        war: {
+          start:  rankedW.start  || 0,
+          end:    0,
+          target: rankedW.target || 0,
+          winner: 0
+        },
+        factions: {}
+      };
+
+      // Ingest member rosters from v1 faction/{fid}?selections=basic for both sides
+      function _buildFactionEntry(fid, basicResp) {
+        var wfac = warFactions[fid] || { name: 'Unknown', score: 0, attacks: 0 };
+        var members = {};
+        if (basicResp && basicResp.members) {
+          // v1 basic returns members as an object: { "12345": { name, level, ... } }
+          Object.entries(basicResp.members).forEach(function(entry) {
+            var mid = String(entry[0]);
+            var m = entry[1] || {};
+            members[mid] = {
+              name:    m.name || 'Unknown',
+              level:   m.level || 0,
+              attacks: 0,
+              score:   0
+            };
+          });
+        }
+        return {
+          name:        (basicResp && basicResp.name) || wfac.name,
+          score:       wfac.score,
+          attacks:     wfac.attacks,
+          rank_before: '?',
+          rank_after:  '?',
+          members:     members
+        };
+      }
+
+      if (myF)  liveReport.factions[myF]  = _buildFactionEntry(myF,  phaseA[1]);
+      if (oppF) liveReport.factions[oppF] = _buildFactionEntry(oppF, phaseA[2]);
+      Object.keys(warFactions).forEach(function(fid) {
+        if (!liveReport.factions[fid]) liveReport.factions[fid] = _buildFactionEntry(fid, null);
+      });
+
+      // Phase B: full war attack log via parallel 1-hour windows
+      var warStart = liveReport.war.start;
+      var now = Math.floor(Date.now() / 1000);
+      var liveAttacks = await fetchWarAttacks(warStart, now);
+
+      // Cache for phase tabs + revives column (consistent with past-war flow after Auto-detect)
+      S.cachedAttacks = liveAttacks;
+      S.warMeta = { wStart: warStart, wEnd: now };
+
+      // Build defends map (times my members were successfully hit by opponent)
+      S.cachedDefends = {};
+      liveAttacks.forEach(function(a) {
+        var af = String(a.attacker_faction||''), df = String(a.defender_faction||'');
+        if (af === oppF && df === myF && (a.respect || 0) > 0) {
+          var defId = String(a.defender_id || '');
+          if (defId) S.cachedDefends[defId] = (S.cachedDefends[defId] || 0) + 1;
+        }
+      });
+
+      // Tally per attacker_id for both factions so opponent threats populate too
+      var tally = {};
+      liveAttacks.forEach(function(a) {
+        var af = String(a.attacker_faction||''), df = String(a.defender_faction||'');
+        var resp = parseFloat(a.respect) || 0;
+        if (resp <= 0) return;
+        if (af === myF && df === oppF) {
+          var aid = String(a.attacker_id||'');
+          if (!tally[aid]) tally[aid] = { f: myF, attacks: 0, score: 0 };
+          tally[aid].attacks++; tally[aid].score += resp;
+        } else if (af === oppF && df === myF) {
+          var bid = String(a.attacker_id||'');
+          if (!tally[bid]) tally[bid] = { f: oppF, attacks: 0, score: 0 };
+          tally[bid].attacks++; tally[bid].score += resp;
+        }
+      });
+      Object.entries(tally).forEach(function(e) {
+        var mid = e[0], t = e[1];
+        var fac = liveReport.factions[t.f];
+        if (!fac || !fac.members[mid]) return;
+        fac.members[mid].attacks = t.attacks;
+        fac.members[mid].score   = parseFloat(t.score.toFixed(2));
+      });
+
+      S.warData = liveReport;
+      renderDash(liveReport, true);
+    } else {
+      var d = await apiCall('/torn/' + wid + '?selections=rankedwarreport');
+      var r = d.rankedwarreport;
+      if (!r) throw new Error('No war report returned.');
+      var entry = S.warList.filter(function(x) { return x.wid === wid; })[0];
+      if (entry && entry.target) r.war.target = entry.target;
+      S.warData = r; renderDash(r, false);
+    }
+    var t = new Date().toUTCString().substring(17,25);
+    var parts = [];
+    if (S.isLive) parts.push({ t: '\u26A1 Live', c: 'r' });
+    parts.push({ t: 'Updated ' + t + ' UTC', c: 'g' });
+    if (!S.paused && S.isLive) parts.push({ t: 'Auto-refresh on' });
+    setStatus(parts);
+  } catch(e) {
+    showErr('Error: <strong>' + e.message + '</strong>');
+    setStatus([{ t: 'Error', c: 'r' }]);
+  }
+}
+
+// Diagnostic counters live on S.diag (initialized at module load) and
+// are reset at the start of every fetchWarAttacks() call.
+
+// Normalize one attack record to a single canonical flat shape.
+//
+// The canonical v1 attacksfull shape (documented in Torn forums since 2018,
+// still current today):
+//   {
+//     "code": "10fbabd21adcb15d5c757f87e2eb3f2b",
+//     "timestamp_started": 1622014921,
+//     "timestamp_ended":   1622014935,
+//     "attacker_id": 1386133,
+//     "attacker_faction": 8989,
+//     "defender_id": 2095076,
+//     "defender_faction": 3241,
+//     "result": "Hospitalized",
+//     "stealthed": 0,
+//     "respect_gain": 12.34,
+//     "chain": 0,
+//     "modifiers": { "fairFight": 1, "war": 1, ... }
+//   }
+//
+// v2 introduces optional nested attacker/defender objects with .id and
+// .faction.id, plus identical respect_gain at the top level. We unwrap.
+//
+// Output shape used throughout the app:
+//   attacker_id, attacker_faction, defender_id, defender_faction (numeric),
+//   respect (numeric), timestamp_started, timestamp_ended, code.
+function _normAtk(a) {
+  if (!a || typeof a !== 'object') return null;
+
+  // Resolve attacker/defender IDs from either flat (v1) or nested (v2) shape
+  var att = a.attacker || null, def = a.defender || null;
+  var attId, attFacId, defId, defFacId;
+
+  if (a.attacker_id !== undefined) {
+    // v1 flat
+    attId    = a.attacker_id;
+    attFacId = a.attacker_faction;
+    defId    = a.defender_id;
+    defFacId = a.defender_faction;
+    if (!S.diag.sample) S.diag.sample = { shape: 'v1-flat', keys: Object.keys(a).slice(0, 12) };
+  } else if (att && typeof att === 'object') {
+    // v2 nested
+    attId    = att.id;
+    attFacId = (att.faction && att.faction.id) || 0;
+    defId    = (def && def.id) || 0;
+    defFacId = (def && def.faction && def.faction.id) || 0;
+    if (!S.diag.sample) S.diag.sample = { shape: 'v2-nested', keys: Object.keys(a).slice(0, 12) };
+  } else {
+    return null;
+  }
+
+  // respect_gain is the field name in BOTH v1 and v2 — check it first
+  var resp = (a.respect_gain !== undefined) ? a.respect_gain
+           : (a.respect       !== undefined) ? a.respect
+           : 0;
+
+  return {
+    code:              a.code || a.id || '',
+    timestamp_started: a.timestamp_started || a.started || a.start || 0,
+    timestamp_ended:   a.timestamp_ended   || a.ended   || a.end   || 0,
+    attacker_id:       attId || 0,
+    attacker_faction:  attFacId || 0,
+    defender_id:       defId || 0,
+    defender_faction:  defFacId || 0,
+    respect:           parseFloat(resp) || 0,
+    result:            a.result || ''
+  };
+}
+
+// Coerce a payload into a flat normalized array.
+// Accepts every shape we've observed:
+//   v1:        { attacks: { "id": {...}, ... } }       → object-of-objects
+//   v2 array:  { attacks: [ {...}, {...} ] }            → array
+//   v2 deep:   { attacksfull: { attacks: [...] } }     → wrapped
+//   raw array: [...]                                    → just an array
+function _normAtks(payload) {
+  if (!payload) return [];
+  var raw = payload.attacks
+         || (payload.attacksfull && payload.attacksfull.attacks)
+         || (Array.isArray(payload) ? payload : null);
+  if (!raw) return [];
+  var arr = Array.isArray(raw) ? raw : Object.values(raw);
+  return arr.map(_normAtk).filter(function(x) { return x && x.timestamp_started; });
+}
+
+// Fetch one time window of attacks. Tries v1 FIRST (proven, documented since
+// 2018: /faction/?selections=attacksfull&from=X&to=Y returns object-of-objects
+// keyed by attack ID with flat fields: attacker_id, defender_id, respect_gain,
+// timestamp_started, etc.). Falls back to v2 if v1 errors out.
+//
+// Why v1 first? v1 is the most stable, well-documented Torn endpoint for
+// attack logs. v2 is still under active development and its shape changes.
+// Forum threads, third-party tools (Torn Stats, Debrief, YATA), and the
+// Wiki all use v1 selection-style for ranked war attack reports.
+async function _fetchAttackWindow(from, to) {
+  // Primary: v1 selection-style
+  S.diag.v1Attempts++;
+  try {
+    var v1 = await apiCall('/faction/?selections=attacksfull&from=' + from + '&to=' + to, false);
+    var rows1 = _normAtks(v1);
+    if (rows1.length > 0) {
+      S.diag.v1Hits++;
+      return rows1;
+    }
+    // v1 returned 0 rows — this is a legitimate "no attacks in window" result,
+    // but we'll still try v2 in case v1 has a transient issue
+  } catch (e) {
+    S.diag.errors.push('v1 ' + from + '-' + to + ': ' + (e.message || e));
+  }
+  // Fallback: v2 path-style
+  S.diag.v2Attempts++;
+  try {
+    var v2 = await apiCall('/faction/attacksfull?from=' + from + '&to=' + to, true);
+    var rows2 = _normAtks(v2);
+    if (rows2.length > 0) S.diag.v2Hits++;
+    return rows2;
+  } catch (e2) {
+    S.diag.errors.push('v2 ' + from + '-' + to + ': ' + (e2.message || e2));
+    return [];
+  }
+}
+
+// Fetch the full attack log for a time range using parallel 1-hour windows.
+// Returns a deduplicated, ASC-sorted array of normalized attacks.
+// Also stores window count on S.diag.windowCount for callers that want to
+// display progress info.
+async function fetchWarAttacks(warStart, warEnd) {
+  // Reset diagnostics for this run
+  S.diag = { v1Attempts: 0, v2Attempts: 0, v1Hits: 0, v2Hits: 0, errors: [], sample: null, windowCount: 0 };
+  var WINDOW = 3600;
+  var windows = [];
+  for (var ts = warStart; ts < warEnd; ts += WINDOW) {
+    windows.push({ from: ts, to: Math.min(ts + WINDOW - 1, warEnd) });
+  }
+  S.diag.windowCount = windows.length;
+  var batches = await Promise.all(windows.map(function(w) {
+    return _fetchAttackWindow(w.from, w.to);
+  }));
+  // Flatten, dedupe by code, sort ASC by start time
+  var all = [], seen = {};
+  batches.forEach(function(batch) {
+    batch.forEach(function(a) {
+      var k = a.code || (String(a.timestamp_started) + '_' + String(a.attacker_id));
+      if (!seen[k]) { seen[k] = 1; all.push(a); }
+    });
+  });
+  all.sort(function(a, b) { return (a.timestamp_started || 0) - (b.timestamp_started || 0); });
+  // Expose diagnostics on the window object so it's visible in DevTools
+  try {
+    console.log('[TWT fetchWarAttacks]', {
+      windows: windows.length,
+      totalAttacks: all.length,
+      diag: S.diag
+    });
+  } catch (_) {}
+  return all;
+}
+
+// Fetch revive-on/off setting for own faction members. Live mode only.
+// The /v2/faction/members endpoint returns per-member metadata including
+// the revive_setting field (visible to leader/co-leader, or with sufficient
+// API privileges). Values observed in the wild:
+//   - "Everyone"            -> revives ON
+//   - "Friends & faction"   -> revives ON (treat as on; reviver-context filtering
+//                              happens on Torn's side)
+//   - "No one"              -> revives OFF
+// Defensive parsing: accepts boolean, integer (0/1/2/3), or string. Returns
+// null for any member where the field is missing or unrecognized, so the UI
+// can show a neutral state instead of misclassifying.
+async function fetchReviveSettings() {
+  S.cachedReviveSettings = {};
+  try {
+    var resp = await apiCall('/faction/members', true);
+    // The v2 response wraps members in a `members` array of objects, each
+    // with `id`, `name`, and (optionally) revive_setting.
+    var members = resp && (resp.members || resp);
+    if (!members) { console.log('[TWT reviveSettings] no members in response'); return; }
+    // Members might be an array OR an object-of-objects (v1-style). Handle both.
+    var arr = Array.isArray(members) ? members : Object.values(members);
+
+    // Log the first member's keys so we can verify the field name in DevTools.
+    if (arr.length > 0) {
+      console.log('[TWT reviveSettings] sample member keys:', Object.keys(arr[0]),
+                  'first member:', arr[0]);
+    }
+
+    arr.forEach(function(m) {
+      if (!m || typeof m !== 'object') return;
+      var mid = String(m.id || m.user_id || '');
+      if (!mid) return;
+      // Try every plausible field name. Order matters: prefer the documented
+      // names from the Torn forums first.
+      var v = (m.revive_setting !== undefined) ? m.revive_setting
+            : (m.reviveSetting   !== undefined) ? m.reviveSetting
+            : (m.is_revivable    !== undefined) ? m.is_revivable
+            : (m.revivable       !== undefined) ? m.revivable
+            : (m.revive          !== undefined) ? m.revive
+            : null;
+      if (v === null || v === undefined) return; // leave unset -> renders neutral
+      // Coerce to boolean: ON if value is truthy, "Everyone", "Friends & faction",
+      // or any numeric > 0; OFF if "No one", "Disabled", 0, false, ""
+      var on;
+      if (typeof v === 'boolean') on = v;
+      else if (typeof v === 'number') on = v > 0;
+      else if (typeof v === 'string') {
+        var lc = v.toLowerCase();
+        if (lc === 'no one' || lc === 'disabled' || lc === 'off' || lc === 'none' || lc === '') {
+          on = false;
+        } else {
+          on = true; // "Everyone", "Friends & faction", anything else -> ON
+        }
+      } else {
+        return;
+      }
+      S.cachedReviveSettings[mid] = on;
+    });
+    console.log('[TWT reviveSettings] loaded for', Object.keys(S.cachedReviveSettings).length, 'members');
+  } catch (e) {
+    console.log('[TWT reviveSettings] fetch failed:', e.message || e);
+    // Silently fail — column simply won't render. Key may lack permissions
+    // (revive_setting requires leader/co-leader or sufficient API access).
+  }
+}
+
+function buildLiveReport(wf, atkData) {
+  var war = wf.war || {}, factions = wf.factions || {};
+  var attacks = _normAtks(atkData);
+  var fids = Object.keys(factions);
+  var tally = {};
+  attacks.forEach(function(a) {
+    var af = String(a.attacker_faction||''), df = String(a.defender_faction||''), resp = parseFloat(a.respect)||0;
+    if (resp <= 0) return;
+    if (af === S.myFid && fids.indexOf(df) >= 0 && df !== S.myFid) {
+      var id = String(a.attacker_id||'');
+      if (!tally[id]) tally[id] = { attacks:0, score:0 };
+      tally[id].attacks++; tally[id].score += resp;
+    }
+  });
+  var enriched = {};
+  Object.entries(factions).forEach(function(fe) {
+    var fid = fe[0], fac = fe[1], members = {};
+    Object.entries(fac.members||{}).forEach(function(me) {
+      var mid = me[0], m = me[1], t2 = tally[mid]||{attacks:0,score:0};
+      members[mid] = { name:m.name||'Unknown', level:m.level||0, attacks:t2.attacks, score:parseFloat(t2.score.toFixed(2)) };
+    });
+    enriched[fid] = { name:fac.name||'Unknown', score:fac.score||0, attacks:fac.attacks||0, rank_before:fac.rank||'?', rank_after:fac.rank||'?', members:members };
+  });
+  return { war:{ start:war.start||0, end:0, winner:0, target:war.target||0 }, factions:enriched };
+}
+
+// Refresh
+function startRF() { stopRF(); S.paused=false; el('pauseBtn').textContent='Pause'; schedNext(); }
+function schedNext() {
+  if (S.paused || !S.isLive) return;
+  var ms = parseInt(el('rfSlider').value)*60000; S.nextRf = Date.now()+ms;
+  S.rfTimer = setTimeout(async function() { await fetchAndRender(S.warId); schedNext(); }, ms);
+  startCD();
+}
+function stopRF() { clearTimeout(S.rfTimer); clearInterval(S.cdInt); S.rfTimer=null; S.cdInt=null; S.nextRf=null; el('cd').textContent=''; }
+function togglePause() {
+  if (S.paused) { S.paused=false; el('pauseBtn').textContent='Pause'; schedNext(); }
+  else { S.paused=true; stopRF(); el('pauseBtn').textContent='Resume'; setStatus([{t:'Paused',c:'a'}]); }
+}
+function startCD() {
+  clearInterval(S.cdInt);
+  S.cdInt = setInterval(function() {
+    if (!S.nextRf) { clearInterval(S.cdInt); return; }
+    var s = Math.max(0, Math.round((S.nextRf-Date.now())/1000));
+    el('cd').textContent = 'Next: ' + Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+  }, 1000);
+}
+function getScoreTs() { var v=el('scoreTime').value; if(!v) return null; return Math.floor(new Date(v).getTime()/1000); }
+
+// Auto-detect: paginate DESC using `to` cursor
+async function autoPopulateScoreTime() {
+  var statusEl = el('autoPopStatus'), btn = el('autoPopBtn');
+  var wid = el('warSel').value;
+  // Live mode bypasses the dropdown check — it uses '__live__' as warId.
+  if (!S.isLive && !wid) { statusEl.style.display='block'; statusEl.style.color='var(--amber)'; statusEl.textContent='Select a war first.'; return; }
+  if (!S.warData) { statusEl.style.display='block'; statusEl.style.color='var(--amber)'; statusEl.textContent='Click Analyse first, then Auto-detect.'; return; }
+  btn.innerHTML = '<span class="spin"></span>Detecting...'; btn.disabled = true;
+  statusEl.style.display = 'block'; statusEl.style.color = 'var(--muted)';
+  try {
+    var war = S.warData.war;
+    var warStart = war.start||0, warEnd = war.end||Math.floor(Date.now()/1000);
+    var target = war.target||0;
+    if (!target) {
+      var mf0=S.warData.factions[S.myFid], of0=S.warData.factions[S.oppFid];
+      if (mf0&&of0) target = Math.abs((mf0.score||0)-(of0.score||0));
+    }
+    if (!target) { statusEl.style.color='var(--amber)'; statusEl.textContent='Could not determine target score. Enter manually.'; return; }
+
+    // Use the centralized robust fetcher (v1-first with v2 fallback).
+    statusEl.textContent = 'Fetching war attack log...';
+    var allAtk = await fetchWarAttacks(warStart, warEnd);
+
+    // Surface diagnostics so the user can see what happened
+    var d = S.diag || {};
+    var diagSummary = 'v2 ' + (d.v2Hits||0) + '/' + (d.v2Attempts||0) + ' hits, ' +
+                      'v1 ' + (d.v1Hits||0) + '/' + (d.v1Attempts||0) + ' hits';
+    console.log('[TWT auto-detect diagnostics]', diagSummary, d);
+
+    // Walk ASC to find when NET score (mine - opponent's) first reached the
+    // decayed target. Decay starts at H+24 and shrinks the target by 1%/hour.
+    // For wars I won this finds the crossing precisely. For wars I lost this
+    // returns null and we fall through to the decay-win fallback (which only
+    // triggers if the *opponent* met their decayed target — i.e. I lost).
+    var h24 = warStart + 86400;
+    var myRunning = 0, oppRunning = 0, crossedTsEarly = null;
+    var opp_crossedTs = null;  // when opponent's NET first met decayed target (loss path)
+    for (var bi = 0; bi < allAtk.length; bi++) {
+      var ba = allAtk[bi];
+      var baf = String(ba.attacker_faction||''), bdf = String(ba.defender_faction||'');
+      var bresp = parseFloat(ba.respect)||0;
+      var bts = ba.timestamp_ended||ba.timestamp_started||0;
+      if (bresp <= 0) continue;
+      if (baf===S.myFid && bdf===S.oppFid) myRunning += bresp;
+      else if (baf===S.oppFid && bdf===S.myFid) oppRunning += bresp;
+      else continue;
+      // Compute the decayed target at this timestamp
+      var hoursPastH24 = Math.max(0, Math.floor((bts - h24) / 3600));
+      var decayedTarget = Math.round(target * Math.pow(0.99, hoursPastH24));
+      var myNet  = myRunning  - oppRunning;
+      var oppNet = oppRunning - myRunning;
+      if (crossedTsEarly === null && myNet  >= decayedTarget) crossedTsEarly = bts;
+      if (opp_crossedTs   === null && oppNet >= decayedTarget) opp_crossedTs = bts;
+      if (crossedTsEarly !== null && opp_crossedTs !== null) break; // both detected (impossible but safe)
+      if (crossedTsEarly !== null) break; // we won, stop
+    }
+
+    // Fetch revives
+    statusEl.textContent = 'Fetching revives...';
+    try {
+      var revD = await apiCall('/faction/?selections=revivesfull&from=' + warStart + '&to=' + warEnd, false);
+      S.cachedRevives = {};
+      Object.values(revD.revives||{}).forEach(function(rv) {
+        var rid = String(rv.reviver_id||'');
+        if (rid) S.cachedRevives[rid] = (S.cachedRevives[rid]||0) + 1;
+      });
+    } catch(e2) { S.cachedRevives = {}; }
+
+    // allAtk is already deduplicated and sorted ASC from the parallel fetch above
+    var windowCount = (S.diag && S.diag.windowCount) || 0;
+    statusEl.textContent = 'Processing ' + allAtk.length.toLocaleString() + ' attacks from ' + windowCount + ' windows...';
+    S.cachedAttacks = allAtk;
+    var deduped = allAtk; // alias for compatibility with code below
+
+    // Build defends map
+    S.cachedDefends = {};
+    deduped.forEach(function(a) {
+      var af=String(a.attacker_faction||''), df=String(a.defender_faction||'');
+      if (af===S.oppFid && df===S.myFid && (a.respect||0)>0) {
+        var defId=String(a.defender_id||'');
+        if (defId) S.cachedDefends[defId]=(S.cachedDefends[defId]||0)+1;
+      }
+    });
+
+    // crossedTsEarly was set during windowed fetch if crossing was found.
+    // Run a confirmatory walk on the full deduped+sorted log as a safety check.
+    var crossedTs = crossedTsEarly; // use early result directly
+
+    function setField(ts, prefix, color) {
+      el('scoreTime').value = tsToInput(ts);
+      statusEl.style.color = color || 'var(--green)';
+      statusEl.innerHTML = prefix + ' <strong>' + fmtUTC(ts) + '</strong> &mdash; updating phase splits&hellip;';
+    }
+    if (crossedTs) {
+      // I won — net score crossed the (decayed) target
+      setField(crossedTs, '\u2713 Target crossed at');
+    } else if (opp_crossedTs) {
+      // I lost — opponent's net score met the decayed target first.
+      // Phase 3 in this case is the post-loss wind-down from their crossing.
+      // Detection succeeded, so use green even though the war outcome was a loss.
+      setField(opp_crossedTs, '\u2717 Opponent reached target at');
+    } else {
+      // Neither side met the decayed target during the attack log.
+      // If we got 0 attacks the problem is data fetch, not logic — surface that.
+      var endTs = warEnd;
+      el('scoreTime').value = tsToInput(endTs);
+      var dg = S.diag || {};
+      if (deduped.length === 0) {
+        statusEl.style.color = 'var(--red)';
+        statusEl.innerHTML = '\u2717 No attacks returned from API. ' +
+          'v2: ' + (dg.v2Hits||0) + '/' + (dg.v2Attempts||0) + ' windows. ' +
+          'v1: ' + (dg.v1Hits||0) + '/' + (dg.v1Attempts||0) + ' windows. ' +
+          'Check that your key has <strong>faction \u2192 attacksfull</strong> access. ' +
+          'Open DevTools \u2192 Console for full diagnostic output.';
+      } else {
+        statusEl.style.color = 'var(--muted)';
+        statusEl.innerHTML = '\u26A0 Net score never crossed target across ' + deduped.length.toLocaleString() +
+          ' attacks. Using war end as score time so Phase 3 = empty. ' +
+          '<strong>' + fmtUTC(endTs) + '</strong>';
+      }
+    }
+
+    // AUTO-ANALYSE: re-render the dashboard with the new score timestamp so
+    // phase splits update immediately. We already have S.warData and the full
+    // attack log cached — no need to re-fetch anything from the API.
+    // renderDash() reads getScoreTs() internally to compute phase windows.
+    if (S.warData) {
+      renderDash(S.warData, S.isLive);
+      // Append confirmation to the status message
+      var origHtml = statusEl.innerHTML;
+      // Replace the "updating phase splits..." suffix with a done state
+      if (origHtml.indexOf('updating phase splits') !== -1) {
+        statusEl.innerHTML = origHtml.replace(/&mdash; updating phase splits&hellip;/, '&mdash; phase splits updated.');
+      }
+    }
+  } catch(e) {
+    statusEl.style.color='var(--red)'; statusEl.textContent='Error: '+e.message;
+  } finally {
+    btn.innerHTML='Auto-detect'; btn.disabled=false;
+  }
+}
+
+// Phase filtering
+function getMembersForTab(tab, fac) {
+  var ms = Object.values(fac.members||{});
+  if (tab==='all') return ms;
+  var wStart=S.warMeta.wStart, wEnd=S.warMeta.wEnd, sTs=getScoreTs()||wEnd, h24=wStart+86400;
+  var pFrom, pTo;
+  if (tab==='p1') { pFrom=wStart; pTo=Math.min(h24,wEnd); }
+  else if (tab==='p2') { pFrom=Math.min(h24,wEnd); pTo=Math.min(sTs,wEnd); }
+  else { pFrom=Math.min(sTs,wEnd); pTo=wEnd; }
+
+  if (S.cachedAttacks.length>0) {
+    var tally={};
+    S.cachedAttacks.forEach(function(a) {
+      var ts=a.timestamp_ended||a.timestamp_started||0;
+      if (ts<pFrom||ts>pTo) return;
+      var af=String(a.attacker_faction||''), df=String(a.defender_faction||''), resp=parseFloat(a.respect)||0;
+      if (resp<=0||af!==S.myFid||df!==S.oppFid) return;
+      var id=String(a.attacker_id||'');
+      if (!tally[id]) tally[id]={attacks:0,score:0};
+      tally[id].attacks++; tally[id].score+=resp;
+    });
+    var facEntries=Object.entries(fac.members||{});
+    return ms.map(function(m) {
+      var me=facEntries.filter(function(e){return e[1].name===m.name;})[0];
+      var mid=me?me[0]:null;
+      var data=(mid&&tally[mid])||{attacks:0,score:0};
+      return Object.assign({},m,{attacks:data.attacks,score:parseFloat(data.score.toFixed(2)),_real:true});
+    });
+  }
+
+  // Estimate
+  var totD=Math.max(1,wEnd-wStart);
+  var p1R=Math.min(1,Math.max(0,(Math.min(h24,wEnd)-wStart)/totD));
+  var p2R=Math.min(1,Math.max(0,(Math.min(sTs,wEnd)-Math.min(h24,wEnd))/totD));
+  var p3R=Math.min(1,Math.max(0,(wEnd-Math.min(sTs,wEnd))/totD));
+  var pw=function(x){return Math.pow(Math.max(0,Math.min(1,x)),0.82);};
+  var fracs={p1:{a:p1R,s:pw(p1R)},p2:{a:p2R,s:pw(p1R+p2R)-pw(p1R)},p3:{a:p3R,s:1-pw(p1R+p2R)}};
+  var fr=fracs[tab]||fracs.p1;
+  return ms.map(function(m){return Object.assign({},m,{attacks:Math.round(m.attacks*fr.a),score:parseFloat((m.score*fr.s).toFixed(2)),_estimated:true});});
+}
+
+// Render dashboard
+function renderDash(r, live) {
+  el('dash').style.display='block';
+  var war=r.war, facs=r.factions, fids=Object.keys(facs);
+  if (!S.myFid||!facs[S.myFid]) { S.myFid=fids[0]; S.oppFid=fids[1]; }
+  if (!S.oppFid||!facs[S.oppFid]) { S.oppFid=fids.filter(function(f){return f!==S.myFid;})[0]||fids[1]; }
+  var mf=facs[S.myFid], of=facs[S.oppFid]; if(!mf||!of) return;
+  var isLiveR=live||(!war.end||war.end===0);
+  var wEnd=isLiveR?Math.floor(Date.now()/1000):war.end, wStart=war.start||0;
+  S.warMeta={wStart:wStart,wEnd:wEnd};
+  var durH=Math.round((wEnd-wStart)/3600), h24=wStart+86400, sTs=getScoreTs();
+  var iWon=war.winner&&String(war.winner)===S.myFid;
+  var myS=mf.score||0, oppS=of.score||0, tot=myS+oppS||1, myPct=Math.round(myS/tot*100);
+  var target=war.target||0, net=myS-oppS;
+
+  el('myTitle').textContent=mf.name; el('oppTitle').textContent=of.name+' \u2014 top threats';
+  el('myLeg').textContent=mf.name; el('oppLeg').textContent=of.name;
+
+  // Metrics
+  var statusBadge=isLiveR
+    ?'<span class="badge" style="background:var(--red-l);color:var(--red)">\u26A1 Live</span>'
+    :(war.winner?(iWon?'<span class="badge bw">\u2713 Victory</span>':'<span class="badge bl">\u2717 Defeat</span>'):'<span class="badge">Complete</span>');
+  el('metrics').innerHTML=
+    '<div class="metric"><div class="ml">Status</div><div class="mv" style="font-size:13px;margin-top:4px">'+statusBadge+'</div><div class="ms">vs '+of.name+'</div></div>'+
+    '<div class="metric"><div class="ml">'+mf.name+'</div><div class="mv" style="color:var(--green)">'+myS.toLocaleString()+'</div><div class="ms">'+(mf.attacks||0)+' attacks &middot; '+(mf.rank_before||'?')+'\u2192'+(mf.rank_after||'?')+'</div></div>'+
+    '<div class="metric"><div class="ml">'+of.name+'</div><div class="mv" style="color:var(--red)">'+oppS.toLocaleString()+'</div><div class="ms">'+(of.attacks||0)+' attacks &middot; '+(of.rank_before||'?')+'\u2192'+(of.rank_after||'?')+'</div></div>'+
+    '<div class="metric"><div class="ml">Duration</div><div class="mv">'+durH+'h</div><div class="ms">'+(isLiveR?'Ongoing':new Date(wEnd*1000).toUTCString().substring(5,16))+'</div></div>';
+
+  // Score vis
+  var tHtml='';
+  if (target>0) {
+    var decH=Math.max(0,durH-24), decayed=Math.round(target*Math.pow(0.99,decH)), needed=Math.max(0,decayed-net);
+    tHtml='<div class="target-info">'+
+      '<span>Original target: <strong>'+target.toLocaleString()+'</strong></span>'+
+      '<span>Current target: <strong>'+decayed.toLocaleString()+'</strong></span>'+
+      '<span>Net score: <strong style="color:'+(net>=0?'var(--green)':'var(--red)')+'">'+(net>=0?'+':'')+net.toLocaleString()+'</strong></span>'+
+      (isLiveR?'<span>Still needed: <strong style="color:'+(needed===0?'var(--green)':'var(--amber)')+'">'+(needed===0?'\u2713 Met':needed.toLocaleString())+'</strong></span>':'')+
+      '</div>';
+  }
+  el('scoreVis').innerHTML=
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:5px;display:flex;justify-content:space-between;font-weight:600">'+
+    '<span style="color:var(--green)">'+mf.name+': '+myS.toLocaleString()+' ('+myPct+'%)</span>'+
+    '<span style="color:var(--red)">'+of.name+': '+oppS.toLocaleString()+' ('+(100-myPct)+'%)</span></div>'+
+    '<div class="score-track"><div class="score-my" style="width:'+myPct+'%"></div><div class="score-opp" style="width:'+(100-myPct)+'%"></div></div>'+tHtml;
+
+  // Phases
+  var p2E=sTs||wEnd, p1H=Math.max(0,Math.round((Math.min(h24,wEnd)-wStart)/3600));
+  var p2H=Math.max(0,Math.round((p2E-Math.min(h24,wEnd))/3600)), p3H=Math.max(0,Math.round((wEnd-p2E)/3600));
+  var myMs=Object.values(mf.members||{}), active=myMs.filter(function(m){return m.attacks>0;}).length;
+  var pPct=myMs.length>0?Math.round(active/myMs.length*100):0;
+  var p2Dur=p2H<1?'< 1h':p2H+'h';
+  el('phases').innerHTML=
+    '<div class="pc"><div class="pt"><span class="pb pb1">Phase 1</span> First 24h &mdash; fixed target</div>'+
+    '<div class="ps"><span class="psl">Window</span><span class="psv">H+0 \u2192 H+24</span></div>'+
+    '<div class="ps"><span class="psl">Active members</span><span class="psv">'+active+' / '+myMs.length+'</span></div>'+
+    '<div class="ps"><span class="psl">Participation</span><span class="psv" style="color:'+(pPct>=60?'var(--green)':pPct>=40?'var(--amber)':'var(--red)')+'">'+pPct+'%</span></div>'+
+    '<div class="ps"><span class="psl">No-shows</span><span class="psv" style="color:var(--hint)">'+(myMs.length-active)+'</span></div></div>'+
+    '<div class="pc"><div class="pt"><span class="pb pb2">Phase 2</span> 24h \u2192 score reached</div>'+
+    '<div class="ps"><span class="psl">Window</span><span class="psv">H+24 \u2192 H+'+(p1H+p2H)+'</span></div>'+
+    '<div class="ps"><span class="psl">Duration</span><span class="psv">'+p2Dur+'</span></div>'+
+    '<div class="ps"><span class="psl">Target decay</span><span class="psv">1% / hr</span></div>'+
+    '<div class="ps"><span class="psl">Score time</span><span class="psv" style="font-size:10px">'+(sTs?fmtUTC(sTs).substring(0,16):'Not set \u2014 enter above')+'</span></div></div>'+
+    '<div class="pc"><div class="pt"><span class="pb pb3">Phase 3</span> Post-score wind-down</div>'+
+    '<div class="ps"><span class="psl">Window</span><span class="psv">H+'+(p1H+p2H)+' \u2192 H+'+durH+'</span></div>'+
+    '<div class="ps"><span class="psl">Duration</span><span class="psv">'+p3H+'h</span></div>'+
+    '<div class="ps"><span class="psl">War end</span><span class="psv" style="font-size:10px">'+(isLiveR?'Still live':new Date(wEnd*1000).toUTCString().substring(5,16))+'</span></div>'+
+    '<div class="ps"><span class="psl">Status</span><span class="psv">'+(isLiveR?'Ongoing':'Complete')+'</span></div></div>';
+
+  renderMyList(S.activeTab, mf);
+  renderOppList(of);
+  renderMiniChart(mf, of, wStart, wEnd);
+  renderTable(mf);
+}
+
+function renderMyList(tab, fac) {
+  fac=fac||(S.warData&&S.warData.factions[S.myFid]); if(!fac) return;
+  var members=getMembersForTab(tab,fac);
+  var ms=members.filter(function(m){return m.attacks>0;}).sort(function(a,b){return b.score-a.score;}).slice(0,15);
+  var mx=(ms[0]&&ms[0].score)||1;
+  var rc=['g','s','b'];
+  var note=el('tabNote');
+  if (tab==='all') { note.style.display='none'; }
+  else if (S.cachedAttacks.length>0) { note.style.display='block'; note.style.color='var(--green)'; note.textContent='\u2713 Real data from '+S.cachedAttacks.length.toLocaleString()+'-attack log for this phase window.'; }
+  else { note.style.display='block'; note.style.color=''; note.textContent='\u26A0 Estimated \u2014 run Auto-detect to load the full attack log for real per-phase breakdowns.'; }
+  var myEntries = Object.entries(fac.members||{});
+  el('myList').innerHTML=ms.length?ms.map(function(m,i){
+    var e = myEntries.filter(function(en){return en[1].name===m.name;})[0];
+    var mid = e ? e[0] : (m.id || null);
+    return '<div class="mrow">'+
+      '<div class="rnk '+(rc[i]||'')+'">'+(i+1)+'</div>'+
+      '<div class="mn">'+nameLink(mid, m.name)+'</div>'+
+      '<div class="bbar"><div class="bfill" style="width:'+Math.round(m.score/mx*100)+'%"></div></div>'+
+      '<div class="mh">'+m.attacks+'x</div>'+
+      '<div class="msc">'+Math.round(m.score)+'</div></div>';
+  }).join(''):'<div class="empty">No attack data for this phase</div>';
+}
+
+function renderOppList(fac) {
+  fac=fac||(S.warData&&S.warData.factions[S.oppFid]); if(!fac) return;
+  var oppEntries=Object.entries(fac.members||{});
+  var ms=oppEntries.map(function(en){ return Object.assign({}, en[1], {_id:en[0]}); })
+                   .filter(function(m){return m.attacks>0;})
+                   .sort(function(a,b){return b.score-a.score;}).slice(0,10);
+  var mx=(ms[0]&&ms[0].score)||1;
+  el('oppList').innerHTML=ms.length?ms.map(function(m,i){
+    return '<div class="mrow">'+
+      '<div class="rnk">'+(i+1)+'</div>'+
+      '<div class="mn">'+nameLink(m._id || m.id, m.name)+'</div>'+
+      '<div class="bbar"><div class="bfill e" style="width:'+Math.round(m.score/mx*100)+'%"></div></div>'+
+      '<div class="mh">'+m.attacks+'x</div>'+
+      '<div class="msc e">'+Math.round(m.score)+'</div></div>';
+  }).join(''):'<div class="empty">No data yet</div>';
+}
+
+// Mini bar chart (no external library)
+var chartData = null;
+function renderMiniChart(mf, of, ws, we) {
+  var dh=Math.max(1,Math.round((we-ws)/3600)), steps=Math.min(dh,12);
+  var mt=mf.score||0, ot=of.score||0, maxV=Math.max(mt,ot)||1;
+  var dark=document.documentElement.getAttribute('data-theme')==='dark';
+  var gc=dark?'#22c48a':'#1D9E75', rc2=dark?'#ff5c5c':'#E24B4A';
+  el('myChDot').style.background=gc; el('oppChDot').style.background=rc2;
+  chartData={mf:mf,of:of,ws:ws,we:we};
+  var bars='';
+  for (var i=0;i<=steps;i++) {
+    var h=Math.round(dh/steps*i), t=i/steps;
+    var mv=Math.round(mt*Math.pow(t,0.82)), ov=Math.round(ot*Math.pow(t,0.88));
+    var mh=Math.round(mv/maxV*100), oh=Math.round(ov/maxV*100);
+    bars+='<div class="mini-bar-wrap">'+
+      '<div class="mini-val" style="font-size:8px;color:var(--hint)">'+(mv>=1000?(mv/1000).toFixed(0)+'k':mv)+'</div>'+
+      '<div style="width:100%;display:flex;gap:1px;align-items:flex-end;flex:1">'+
+      '<div class="mini-bar" style="height:'+mh+'%;background:'+gc+';flex:1"></div>'+
+      '<div class="mini-bar" style="height:'+oh+'%;background:'+rc2+';flex:1"></div>'+
+      '</div>'+
+      '<div class="mini-label">H+'+h+'</div>'+
+      '</div>';
+  }
+  el('miniChart').innerHTML=bars;
+}
+function updateChartColors() {
+  if (chartData) renderMiniChart(chartData.mf,chartData.of,chartData.ws,chartData.we);
+}
+
+// Sortable table with Revives + Punch Bags columns
+function sortTable(col) {
+  if (S.tableSortCol===col) S.tableSortDir*=-1; else { S.tableSortCol=col; S.tableSortDir=-1; }
+  if (S.warData) renderTable(S.warData.factions[S.myFid]);
+}
+// Expose sortTable globally for onclick
+window.sortTable = sortTable;
+
+function renderTable(fac) {
+  fac=fac||(S.warData&&S.warData.factions[S.myFid]); if(!fac) return;
+  var ms=Object.values(fac.members||{});
+  var facEntries=Object.entries(fac.members||{});
+  var tot=fac.score||1;
+  var hasRev=Object.keys(S.cachedRevives).length>0;
+  var hasDef=Object.keys(S.cachedDefends).length>0;
+
+  function getMid(m) { var e=facEntries.filter(function(e2){return e2[1].name===m.name;})[0]; return e?e[0]:null; }
+
+  ms.sort(function(a,b) {
+    var va,vb,ma=getMid(a),mb=getMid(b);
+    if (S.tableSortCol==='name') { return S.tableSortDir*(a.name.toLowerCase()<b.name.toLowerCase()?-1:1); }
+    if (S.tableSortCol==='level') { va=a.level||0; vb=b.level||0; }
+    else if (S.tableSortCol==='attacks') { va=a.attacks||0; vb=b.attacks||0; }
+    else if (S.tableSortCol==='pct'||S.tableSortCol==='score') { va=a.score||0; vb=b.score||0; }
+    else if (S.tableSortCol==='avg') { va=a.attacks>0?a.score/a.attacks:0; vb=b.attacks>0?b.score/b.attacks:0; }
+    else if (S.tableSortCol==='revives') { va=ma?(S.cachedRevives[ma]||0):0; vb=mb?(S.cachedRevives[mb]||0):0; }
+    else if (S.tableSortCol==='reviveSetting') {
+      // ON (true) sorts above OFF (false); unset values sort last.
+      var ra=ma?S.cachedReviveSettings[ma]:undefined;
+      var rb=mb?S.cachedReviveSettings[mb]:undefined;
+      va=(ra===true)?2:(ra===false?1:0);
+      vb=(rb===true)?2:(rb===false?1:0);
+    }
+    else if (S.tableSortCol==='defends') { va=ma?(S.cachedDefends[ma]||0):0; vb=mb?(S.cachedDefends[mb]||0):0; }
+    else { va=a.score||0; vb=b.score||0; }
+    return S.tableSortDir*(va-vb);
+  });
+
+  function thCls(col) { return S.tableSortCol===col?(S.tableSortDir===-1?'desc':'asc'):''; }
+  function th(col,label,cls) {
+    return '<th onclick="sortTable(\''+col+'\')" class="'+(cls||'')+' '+thCls(col)+'">'+label+'</th>';
+  }
+
+  var hasReviveSetting = S.isLive && Object.keys(S.cachedReviveSettings).length>0;
+  var revH=hasRev?th('revives','Revives','r'):'';
+  var rsH =hasReviveSetting?th('reviveSetting','Revive','c'):'';
+  var defH=hasDef?th('defends','&#x1F4A5; Punch Bags','r'):'';
+
+  var thead='<thead><tr>'+
+    '<th class="nc r">#</th>'+th('name','Member')+th('level','Lvl','r')+
+    th('attacks','Attacks','r')+th('score','Score','r')+
+    th('pct','% total','r')+th('avg','Avg/hit','r')+
+    revH+rsH+defH+'<th class="nc" style="min-width:90px">Contribution</th>'+
+    '</tr></thead>';
+
+  var tbody='<tbody>'+ms.map(function(m,i) {
+    var mid=getMid(m), z=m.attacks===0;
+    var pct=(m.score/tot*100).toFixed(1), avg=m.attacks>0?(m.score/m.attacks).toFixed(1):'\u2014';
+    var bw=Math.round(m.score/tot*100);
+    var revN=mid&&S.cachedRevives[mid]?S.cachedRevives[mid]:0;
+    var defN=mid&&S.cachedDefends[mid]?S.cachedDefends[mid]:0;
+    var revCell=hasRev?'<td class="r">'+(revN>0?'<strong style="color:var(--blue)">'+revN+'</strong>':'<span class="zz">0</span>')+'</td>':'';
+    // Revive on/off: green dot if ON, red dot if OFF, em-dash if unknown
+    var rsCell='';
+    if (hasReviveSetting) {
+      var rs=mid?S.cachedReviveSettings[mid]:undefined;
+      if (rs===true) {
+        rsCell='<td class="c" title="Revives enabled"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(34,197,94,0.5)"></span></td>';
+      } else if (rs===false) {
+        rsCell='<td class="c" title="Revives disabled"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 6px rgba(239,68,68,0.5)"></span></td>';
+      } else {
+        rsCell='<td class="c" style="color:var(--hint)">\u2014</td>';
+      }
+    }
+    var defCell=hasDef?'<td class="r">'+(defN>0?'<strong style="color:var(--amber)">'+defN+'</strong>':'<span class="zz">0</span>')+'</td>':'';
+    return '<tr>'+
+      '<td class="r" style="font-size:10px;color:var(--hint)">'+(i+1)+'</td>'+
+      '<td style="'+(z?'color:var(--hint)':'')+'">'+nameLink(mid, m.name)+'</td>'+
+      '<td class="r" style="color:var(--hint)">'+(m.level||'\u2014')+'</td>'+
+      '<td class="r">'+(z?'<span class="zz">0</span>':m.attacks)+'</td>'+
+      '<td class="r" style="color:'+(m.score>0?'var(--green)':'var(--hint)')+';font-weight:'+(m.score>0?'600':'400')+'">'+Math.round(m.score)+'</td>'+
+      '<td class="r" style="color:var(--muted)">'+(m.attacks>0?pct+'%':'\u2014')+'</td>'+
+      '<td class="r" style="color:var(--muted)">'+avg+'</td>'+
+      revCell+rsCell+defCell+
+      '<td><div class="cbar"><div class="cin" style="width:'+bw+'%"></div></div></td>'+
+      '</tr>';
+  }).join('')+'</tbody>';
+
+  el('fullTbl').innerHTML=thead+tbody;
+  var cn=el('colNote');
+  if (!hasRev||!hasDef) {
+    cn.style.display='block';
+    cn.textContent='\u26A0 Revives and Punch Bags columns appear after running Auto-detect (fetches the full attack and revive log).';
+  } else { cn.style.display='none'; }
+}
+
+})();
+
+// ── Login / Auth — mirrors Torn.html exactly ──────────────────────────
+// KeyStore: base64-encodes the key with a prefix so it is never plain-text.
+var KeyStore = {
+  _pfx: 'twt1_',
+  encode: function(key) {
+    try { return this._pfx + btoa(unescape(encodeURIComponent(key))); } catch(_) { return key; }
+  },
+  decode: function(stored) {
+    if (!stored) return '';
+    try {
+      if (stored.indexOf(this._pfx) === 0)
+        return decodeURIComponent(escape(atob(stored.slice(this._pfx.length))));
+      return stored; // legacy plain-text
+    } catch(_) { return stored; }
+  }
+};
+
+// TwtConfig: storage key constant
+var TwtConfig = { STORAGE_KEY: 'twt_api_key' };
+
+// TwtState: populated SYNCHRONOUSLY at script parse time — exactly like
+// State._data in Torn.html line 1023-1024. By the time any function runs,
+// apiKey is already populated from localStorage.
+var TwtState = {
+  apiKey: (function() {
+    try { return KeyStore.decode(localStorage.getItem(TwtConfig.STORAGE_KEY)) || ''; }
+    catch(_) { return ''; }
+  })(),
+  name: (function() {
+    try { return localStorage.getItem('twt_user_name') || ''; }
+    catch(_) { return ''; }
+  })()
+};
+
+// TwtApp: mirrors App.init / restoreApiKey / saveApiKey / logOut from Torn.html
+var TwtApp = {
+  init: function() {
+    this.restoreApiKey();
+  },
+
+  restoreApiKey: function() {
+    var self = this;
+    if (!TwtState.apiKey) {
+      self.showLoginModal();
+      return;
+    }
+    // Key exists — set it into the hidden input and auto-login
+    el('apiKey').value = TwtState.apiKey;
+    self._showLoggedIn(TwtState.name || 'Player');
+    fetchWars();
+  },
+
+  saveApiKey: async function() {
+    var self = this;
+    var k = el('loginKey').value.trim();
+    var btn = el('loginBtn'), errBox = el('loginErr');
+    if (!k) { errBox.textContent = 'Please paste your API key first.'; errBox.style.display = 'block'; return; }
+    btn.innerHTML = '<span class="spin"></span>Verifying...'; btn.disabled = true;
+    errBox.style.display = 'none';
+    try {
+      var results = await Promise.all([
+        fetch('https://api.torn.com/v2/user/basic?key=' + k).then(function(r) { return r.json(); }),
+        fetch('https://api.torn.com/v2/faction/basic?key=' + k).then(function(r) { return r.json(); })
+      ]);
+      var userJ = results[0], facJ = results[1];
+      if (userJ.error) {
+        var code = String(userJ.error.code || '');
+        errBox.textContent = code === '2' ? 'Invalid API key.' : code === '7' ? 'Key lacks required access.' : (userJ.error.error || 'API error.');
+        errBox.style.display = 'block'; return;
+      }
+      // v2 user/basic can return { name, ... } or { profile: { name, ... } }
+      var name = userJ.name || (userJ.profile && userJ.profile.name) || (facJ && facJ.name) || 'Player';
+      // Save exactly as Torn.html does: encoded key + separate name
+      try { localStorage.setItem(TwtConfig.STORAGE_KEY, KeyStore.encode(k)); } catch(_) {}
+      try { localStorage.setItem('twt_user_name', name); } catch(_) {}
+      TwtState.apiKey = k;
+      TwtState.name = name;
+      el('apiKey').value = k;
+      self._showLoggedIn(name);
+      self.hideLoginModal();
+      fetchWars();
+    } catch(e) {
+      errBox.textContent = 'Connection failed: ' + e.message; errBox.style.display = 'block';
+    } finally {
+      btn.innerHTML = 'Connect &#8599;'; btn.disabled = false;
+    }
+  },
+
+  logOut: function() {
+    try { localStorage.removeItem(TwtConfig.STORAGE_KEY); } catch(_) {}
+    try { localStorage.removeItem('twt_user_name'); } catch(_) {}
+    TwtState.apiKey = '';
+    TwtState.name = '';
+    el('apiKey').value = '';
+    el('greetName').textContent = '';
+    el('greeting').style.display = 'none';
+    el('logoutBtn').style.display = 'none';
+    el('warArea').style.display = 'none';
+    el('dash').style.display = 'none';
+    el('statusBar').style.display = 'none';
+    el('warBanner').className = 'war-banner';
+    el('loginKey').value = '';
+    el('loginErr').style.display = 'none';
+    this.showLoginModal();
+  },
+
+  _showLoggedIn: function(name) {
+    el('greetName').textContent = name;
+    el('greeting').style.display = 'inline-flex';
+    el('logoutBtn').style.display = 'inline-block';
+  },
+
+  showLoginModal: function() {
+    el('loginOverlay').style.display = 'flex';
+    el('appWrap').classList.add('app-blur');
+    setTimeout(function() { el('loginKey').focus(); }, 100);
+  },
+
+  hideLoginModal: function() {
+    el('loginOverlay').style.display = 'none';
+    el('appWrap').classList.remove('app-blur');
+  }
+};
+
+// Wire up buttons
+el('loginBtn').addEventListener('click', function() { TwtApp.saveApiKey(); });
+el('loginKey').addEventListener('keydown', function(e) { if (e.key === 'Enter') TwtApp.saveApiKey(); });
+el('logoutBtn').addEventListener('click', function() { TwtApp.logOut(); });
+
+// Init — exactly like Torn.html: DOMContentLoaded → App.init()
+window.addEventListener('DOMContentLoaded', function() {
+  TwtApp.init();
+});
+</script>
+</div>
+</body>
+</html>

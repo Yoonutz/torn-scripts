@@ -1,0 +1,27 @@
+# ── secrets — never commit ──────────────────────────────
+.env
+.env.*
+*.env
+!*.env.example
+.dev.vars
+
+# per-user editor/tool config (can contain tokens)
+.vscode/
+mcp.json
+.claude/
+.vs/
+
+# ── dependency + build caches ───────────────────────────
+node_modules/
+dist/
+.wrangler/
+.tmp/
+*.log
+
+# ── local machine junk ──────────────────────────────────
+*conflicted copy*
+.git.disabled/
+
+# ── nested repos that live on their own remotes ─────────
+Workbook/covenant-reader/
+MCP/
