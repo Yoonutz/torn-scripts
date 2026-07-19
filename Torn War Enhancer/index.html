@@ -60,7 +60,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <h1>⚔️ War Enforcer <span class="v">console</span></h1>
+    <h1>⚔️ War Enforcer <span class="v" id="verTag">console</span></h1>
     <div class="conn">
       <span class="dot" id="connDot"></span>
       <span id="connTxt">connecting…</span>
@@ -122,6 +122,7 @@
 (function(){
   "use strict";
   // ───── connection (same public values as the userscript) ─────
+  var CONSOLE_VERSION = "1.22";   // keep in step with the userscript @version on releases
   var SUPABASE_URL = "https://mmoaqgkhfxmbgvirsgxw.supabase.co";
   var ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tb2FxZ2toZnhtYmd2aXJzZ3h3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NTkzODQsImV4cCI6MjA5NjQzNTM4NH0.axLRQuuDx3uHHR6kK4hZugPPllBz2gawxINOA7yPPJM";
@@ -130,6 +131,7 @@
   var REASON_TEXT = { faction_target:"Faction cap", member_score:"Score cap", attack_limit:"Hit cap" };
 
   var $ = function(id){ return document.getElementById(id); };
+  document.getElementById("verTag").textContent = "console v" + CONSOLE_VERSION;
   function hdr(){ return { apikey: ANON_KEY, Authorization: "Bearer " + ANON_KEY }; }
 
   function rest(path){
@@ -231,9 +233,14 @@
     var st = STATE || {};
     if(!me){ box.innerHTML = '<div class="r mut">No data for ID '+esc(myid)+' yet.</div>'; return; }
     var reasons = (me.blocked && Array.isArray(me.reasons)) ? me.reasons.map(function(c){return REASON_TEXT[c]||c;}).join(", ") : "";
+    var outScore = Number(me.outside_score)||0, outAtk = Number(me.outside_attacks)||0;
+    var splitRow = (outScore > 0 || outAtk > 0)
+      ? '<div class="r"><span class="k">Outside hits</span><span class="val mut">+'+outScore.toFixed(2)+' respect ('+outAtk+' hits) · total '+((Number(me.score)||0)+outScore).toFixed(2)+"</span></div>"
+      : "";
     box.innerHTML =
       capRow("My score", me.score, st.per_member_score_target) +
       capRow("My hits", me.attacks, st.max_attacks_per_member) +
+      splitRow +
       '<div class="r"><span class="k">Status</span>'+
         (me.blocked ? '<span class="pill b">BLOCKED'+(reasons?" · "+esc(reasons):"")+"</span>" : '<span class="pill a">OK</span>')+
       "</div>";
@@ -250,7 +257,7 @@
         setConn(true, "connected");
         var myid = ($("myid").value||"").replace(/\D/g,"");
         if(STATE && STATE.war_id && STATE.active && myid){
-          return rest("member_progress?war_id=eq."+STATE.war_id+"&member_id=eq."+myid+"&select=member_id,score,attacks,blocked,reasons")
+          return rest("member_progress?war_id=eq."+STATE.war_id+"&member_id=eq."+myid+"&select=member_id,score,attacks,blocked,reasons,outside_score,outside_attacks")
             .then(function(mp){ ME = (Array.isArray(mp)?mp[0]:null) || null; });
         }
         ME = null;

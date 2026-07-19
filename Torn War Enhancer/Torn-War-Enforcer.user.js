@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn War Enforcer
 // @namespace    http://tampermonkey.net/
-// @version      1.21
+// @version      1.22
 // @description  Blocks attacks when faction war caps are reached — on every page, including the attack screen; hover/tap to see why; admins edit rules in-game.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -40,7 +40,7 @@
  
   const ATTACK_SELECTOR = 'a[href*="sid=attack"]';
   let BLOCK = false, REASONS = [], MYID = '';
-  let MYSCORE = null, MYATK = null;
+  let MYSCORE = null, MYATK = null, MYOUTSCORE = null, MYOUTATK = null;
   let ENEMY_TS_BY_UID = {}, IDLE_TARGET_MIN = 10;
   let ENEMY_IDS = new Set(), ENEMY_ST_BY_UID = {};   // enemy roster + backend status (gates enforcement off-tab)
   let LAST_STATE = null;
@@ -632,6 +632,11 @@
     if (MYID) {
       body += row('My score', MYSCORE, state.per_member_score_target);
       body += row('My hits', MYATK, state.max_attacks_per_member);
+      // caps use war score; outside hits still earn faction respect — show the split
+      if (MYOUTSCORE != null && (MYOUTSCORE > 0 || MYOUTATK > 0)) {
+        const tot = (Number(MYSCORE) || 0) + MYOUTSCORE;
+        body += '<br><span style="color:#777">Outside: +' + MYOUTSCORE.toFixed(2) + ' respect (' + MYOUTATK + ' hits) · total ' + tot.toFixed(2) + '</span>';
+      }
     }
     const idleN = Number(state.idle_minutes_target ?? IDLE_TARGET_MIN ?? 0);
     if (ENFORCE_ACTIVITY_RULE) {
@@ -652,7 +657,7 @@
       const st = Array.isArray(rows) ? rows[0] : null;
       LAST_STATE = st;
  
-      MYSCORE = null; MYATK = null;
+      MYSCORE = null; MYATK = null; MYOUTSCORE = null; MYOUTATK = null;
       ENEMY_TS_BY_UID = {}; ENEMY_ST_BY_UID = {}; ENEMY_IDS = new Set();
       IDLE_TARGET_MIN = Number(st && st.idle_minutes_target) || 10;
       const codes = new Set();
@@ -660,9 +665,13 @@
         if (st.faction_blocked) codes.add('faction_target');
         if (MYID) {
           try {
-            const mp = await gmGet('/rest/v1/member_progress?select=blocked,reasons,score,attacks&war_id=eq.' + st.war_id + '&member_id=eq.' + MYID);
+            const mp = await gmGet('/rest/v1/member_progress?select=blocked,reasons,score,attacks,outside_score,outside_attacks&war_id=eq.' + st.war_id + '&member_id=eq.' + MYID);
             const me = Array.isArray(mp) ? mp[0] : null;
-            if (me) { MYSCORE = Number(me.score || 0); MYATK = Number(me.attacks || 0); if (me.blocked && Array.isArray(me.reasons)) me.reasons.forEach((c) => codes.add(c)); }
+            if (me) {
+              MYSCORE = Number(me.score || 0); MYATK = Number(me.attacks || 0);
+              MYOUTSCORE = Number(me.outside_score || 0); MYOUTATK = Number(me.outside_attacks || 0);
+              if (me.blocked && Array.isArray(me.reasons)) me.reasons.forEach((c) => codes.add(c));
+            }
           } catch (_) {}
         }
         // enemy roster: needed for enforcement gating everywhere, not just the activity rule

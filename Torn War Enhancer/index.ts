@@ -135,14 +135,13 @@ async function tallyAttacks(warId: number, myFid: number, oppId: number, from: n
   for (const w of slice) {                            // sequential = gentle on rate limit (usually 1 window)
     for (const a of await fetchAttackWindow(w.from, w.to)) {
       if (a.attacker_fac !== myFid) continue;         // only OUR members' attacks
-      // WAR HITS ONLY — outside hits earn faction respect but score 0 in the
-      // ranked war, so they must not count toward caps. is_ranked_war when the
-      // feed has it; defender-faction match as the fallback approximation.
+      // Ingest ALL hits, flagged: caps fire on war hits only (is_war), outside
+      // hits are tracked for the respect split. is_ranked_war when the feed has
+      // it; defender-faction match as the fallback approximation.
       const isWarHit = a.ranked !== undefined ? a.ranked : (oppId > 0 && a.defender_fac === oppId);
-      if (!isWarHit) continue;
       if (seen.has(a.code)) continue;
       seen.add(a.code);
-      rows.push({ code: a.code, war_id: warId, attacker_id: a.attacker_id, attacker_fac: a.attacker_fac, respect_gain: a.respect, ts: a.ts });
+      rows.push({ code: a.code, war_id: warId, attacker_id: a.attacker_id, attacker_fac: a.attacker_fac, respect_gain: a.respect, ts: a.ts, is_war: isWarHit });
     }
   }
   if (rows.length) await db.from("attacks").upsert(rows, { onConflict: "code", ignoreDuplicates: true });
