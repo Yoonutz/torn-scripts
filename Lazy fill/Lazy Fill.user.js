@@ -3,7 +3,7 @@
 // @namespace    lazy-fill-torn
 // @version      1.0.1
 // @description  Double-click any quantity or price input in Torn to fill it instantly: max buy in bazaars, buy/sell max in city shops and Big Al's, foreign travel max, trade fill, check-all boxes, and auto-undercut pricing for your own bazaar (Torn API v2).
-// @author       Yoonutz
+// @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/bazaar.php*
 // @match        https://www.torn.com/shops.php*
