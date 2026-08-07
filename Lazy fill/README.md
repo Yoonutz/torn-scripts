@@ -33,7 +33,7 @@ Everything else works without a key.
 1. Install a userscript manager ([Tampermonkey](https://www.tampermonkey.net/) or
    [Violentmonkey](https://violentmonkey.github.io/)).
 2. Install the script from
-   [Greasy Fork](https://greasyfork.org/en/users/lazy-fill) or directly from this folder's
+   [Greasy Fork](https://greasyfork.org/en/scripts/590287-lazy-fill) or directly from this folder's
    `Lazy Fill.user.js`.
 
 ## Compliance
