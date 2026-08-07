@@ -1,12 +1,22 @@
 # Lazy Fill
 
-Double-click any quantity or price input in [Torn](https://www.torn.com) and it fills itself.
-On Torn PDA, double-tap instead.
+Bazaar and city shop quantities start at the full stack instead of 1, so buying is just Buy then
+Accept. Every other quantity or price input in [Torn](https://www.torn.com) fills on double-click,
+or double-tap on Torn PDA.
 
 A modern replacement for the abandoned *Max Buy* and *TC Bazaar+ v2* userscripts, combined into
 one script and updated for Torn's current pages and API v2.
 
 ## What it does
+
+Automatic, no interaction needed:
+
+- **Someone's bazaar** - every quantity starts at the full stack instead of 1.
+- **City shops and Big Al's** - every buy box starts at 100.
+
+Nothing is ever clicked for you. You still press Buy and confirm.
+
+Everything else fills on demand:
 
 | Where | Double-click / double-tap | Result |
 | --- | --- | --- |
@@ -49,9 +59,23 @@ Everything except auto-pricing works without a key.
 
 ## Compliance
 
-Interacts only with pages you have manually loaded and are actively viewing, plus the official
-Torn API with your own key. No background requests to Torn pages, no automation of game actions:
-it fills inputs, you still click the button.
+Torn's Scripting Abuse rule permits software that relies on the API, or on a page you have
+manually loaded and are actively viewing, and forbids non-API requests that are not directly and
+manually initiated by you.
+
+Lazy Fill stays inside that. The quantities it pre-fills are read from what Torn already rendered
+on the page in front of you, so no extra request is made. It never clicks Buy, never confirms a
+purchase, never touches a page you are not looking at, and raises no alerts. The only network
+calls it makes are to the official API with your own key, for pricing.
+
+## Turning the automatic fills off
+
+Both are flags at the top of the script, if you would rather type the numbers yourself:
+
+```js
+autoFillCityShops: true,
+autoFillBazaar: true,
+```
 
 ## Credits
 

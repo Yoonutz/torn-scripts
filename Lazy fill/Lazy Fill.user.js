@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Lazy Fill
 // @namespace    lazy-fill-torn
-// @version      1.1.0
-// @description  Double-click (or double-tap on Torn PDA) any quantity or price input in Torn to fill it instantly: max buy in bazaars, buy/sell max in city shops and Big Al's, foreign travel max, trade fill, check-all boxes, and auto-undercut pricing for your own bazaar (Torn API v2).
+// @version      1.2.0
+// @description  Bazaar and city shop quantities start at max instead of 1, so buying is just Buy then Accept. Double-click (or double-tap on Torn PDA) any other quantity or price input to fill it: sell max, foreign travel max, trade fill, check-all boxes, and auto-undercut pricing for your own bazaar (Torn API v2).
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -15,6 +15,7 @@
   // ---------------------------------------------------------------- config
   const CONFIG = {
     autoFillCityShops: true, // pre-fill city shop buy inputs with 100 on page load
+    autoFillBazaar: true,    // pre-fill someone else's bazaar quantities with the full stack
     cityShopBuyAmount: 100,  // Torn's per-purchase cap in city shops
     undercutBy: 1,           // list price = lowest market price - undercutBy
     doubleTapMs: 400,        // max gap between two taps to count as a double-tap
@@ -350,6 +351,49 @@
       .forEach((input) => fillInput(input, CONFIG.cityShopBuyAmount));
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fillShop);
     else fillShop();
+  }
+
+  // ----------------------------------------------------- bazaar auto-fill
+  // Someone else's bazaar starts every quantity at 1. Pre-fill the whole
+  // stack so buying it is Buy then Accept, with no typing in between.
+  //
+  // The number comes from what Torn already rendered on the page you are
+  // looking at, so no extra request is made. Nothing is ever clicked for
+  // you: the buy and the confirm stay manual.
+  if (CONFIG.autoFillBazaar) {
+    const onOwnBazaar = () => location.hash.startsWith('#/add') || location.hash.startsWith('#/manage');
+
+    const availableFor = (input) => {
+      const max = parseInt(input.getAttribute('max'), 10);
+      if (Number.isFinite(max) && max > 0) return max;
+      const menu = input.closest('div[class*="buyMenu"]') || input.closest('[class*="item"]');
+      return digits(menu?.querySelector('span[class*="amount"]')?.innerText);
+    };
+
+    const fillBazaar = () => {
+      if (location.pathname !== '/bazaar.php' || onOwnBazaar()) return;
+      document.querySelectorAll('input[class*="buyAmountInput"], div[class*="buyMenu"] input')
+        .forEach((input) => {
+          if (input.dataset.lazyfilled) return;
+          // Never clobber a number the user typed themselves.
+          if (input.value !== '' && input.value !== '0' && input.value !== '1') return;
+          const amount = availableFor(input);
+          if (!amount || amount <= 1) return;
+          input.dataset.lazyfilled = '1';
+          fillInput(input, amount);
+        });
+    };
+
+    let queued = false;
+    const queueFill = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; fillBazaar(); });
+    };
+
+    new MutationObserver(queueFill).observe(document.documentElement, { subtree: true, childList: true });
+    window.addEventListener('hashchange', queueFill);
+    queueFill();
   }
 
   // Double-tap zoom on an input is never wanted here.
