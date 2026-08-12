@@ -4,7 +4,8 @@
 // @match       https://www.torn.com/companies.php*
 // @icon        https://www.google.com/s2/favicons?sz=64&domain=torn.com
 // @author      KamiRen [2805199] - https://www.torn.com/profiles.php?XID=2805199
-// @version     2.3
+// @version     2.4
+// @license     MIT
 // @grant       GM_xmlhttpRequest
 // @grant       GM_getValue
 // @grant       GM_setValue
@@ -298,7 +299,7 @@
       }
 
       .d .manage-company .employees .employee-list .paid-trains .paid-trains-value {
-        width: 50px;
+        width: 100%;
         height: 24px;
         display: flex;
         align-items: center;
@@ -458,12 +459,23 @@
     });
   }
 
+  // A "Train" that renders as plain text (no href, or marked disabled) means
+  // the employee cannot be trained right now - clicking it must not count down.
+  function isTrainLinkActive(btn) {
+    if (!btn || btn.tagName !== "A") return false;
+    if (!btn.hasAttribute("href")) return false;
+    if (btn.getAttribute("aria-disabled") === "true") return false;
+    if (/\b(disabled?|inactive)\b/i.test(btn.className)) return false;
+    return true;
+  }
+
   function bindTrainButtons() {
     document.querySelectorAll(SELECTORS.trainButtons).forEach((btn) => {
       if (btn.dataset.ptBound) return;
       btn.dataset.ptBound = "1";
 
       btn.addEventListener("click", () => {
+        if (!isTrainLinkActive(btn)) return;
         const emp = btn.closest('li[data-user]');
         if (!emp) return;
         decrementTrain(emp);
