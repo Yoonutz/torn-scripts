@@ -1,12 +1,13 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         Arson 2.0 items description
 // @namespace    http://tampermonkey.net/
-// @version      3.5.2
+// @version      3.5.3
 // @author       KamiRen [2805199]
-// @description  Item descriptor popup
+// @description  Items description popup
 // @match        https://www.torn.com/page.php?sid=crimes#/arson
 // @grant        none
 // @license      MIT
+// @downloadURL none
 // ==/UserScript==
 
 (function () {
@@ -28,7 +29,7 @@
         "Hydrogen":  { x: 0, y: 1923, w: 1200, h: 235 },
     };
 
-    const IS_MOBILE = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    const IS_MOBILE = !document.body.querySelector('.searchFormWrapper___LXcWp');
 
     function extractItemName(ariaLabel) {
         if (!ariaLabel) return null;

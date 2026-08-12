@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn OC Best-Fit Role Recommender
 // @namespace    Torn.OC-Best-Fit
-// @version      0.89.7
+// @version      0.89.10
 // @description  Recommends the best Organized Crime role to join, ranking all available faction OCs by a blended success score (your exact API CPR discounted by your faction's real historical success rate). Color-coded green/yellow/red.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -58,9 +58,11 @@
   const replaceCprOn = () => GM_getValue(REPLACE_CPR_STORE, false);
   const ID_STORE = "oc_bestfit_identity";
   const SELF_STORE = "oc_bestfit_selfid";
+  const FACACC_STORE = "oc_bestfit_facaccess";
+  const factionAccess = () => GM_getValue(FACACC_STORE, true);
   const SCORE_CACHE = "oc_bestfit_scorecache";
   const POS_STORE = "oc_bestfit_panelpos";
-  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.89.7";
+  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.89.10";
   const META_STORE = "oc_bestfit_meta";
   const DATAVER_STORE = "oc_bestfit_dataver";
   const DATA_VERSION = 3;
@@ -70,7 +72,7 @@
   const LOG_META = "oc_bestfit_logmeta";
   const STATKEY_STORE = "oc_bestfit_statkey";
   const LOG_INTERVAL_MS = 3 * 60 * 60 * 1e3;
-  const HIST_TTL_MS = 7 * 24 * 60 * 60 * 1e3;
+  const HIST_TTL_MS = 2 * 60 * 60 * 1e3;
   const HIST_PAGE_CAP = 60;
   const GREEN = 70;
   const YELLOW = 50;
@@ -114,6 +116,7 @@
       SCORE_PER_DIFF: 20
     };
     const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const mc = c => Object.assign({}, CFG, c || {});
     const decay = (ageDays, hl) => Math.pow(.5, Math.max(0, ageDays) / hl);
     const PRESET_LEAN = {
       evmoney: -1,
@@ -125,7 +128,7 @@
     };
 
     function compute(records, weights, recs, nowSec, cfg) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const W = weights || {},
         R = recs || {},
         by = {};
@@ -177,9 +180,9 @@
           if (c.status === "Successful") ev(s.user_id, "wins", cfg.W_WIN * ds, ts, meta);
           else if (c.status === "Failure") ev(s.user_id, "fails", cfg.W_FAIL * ds, ts, meta);
           const w = ow ? ow[norm(s.position)] : null;
-          if (w != null && w >= cfg.HIGH_WEIGHT) {
+          if (w != null && w >= cfg.HIGH_WEIGHT && s.cpr != null) {
             const req = roleMin(c.difficulty, w, maxW, cfg);
-            ev(s.user_id, (s.cpr || 0) < req ? "offences" : "good", ((s.cpr || 0) < req ? cfg.W_OFFENCE : cfg.W_GOODCRIT) * ds, ts, meta)
+            ev(s.user_id, s.cpr < req ? "offences" : "good", (s.cpr < req ? cfg.W_OFFENCE : cfg.W_GOODCRIT) * ds, ts, meta)
           }
           const rm = R[s.user_id];
           const key = norm(c.name) + "|" + norm(s.position);
@@ -214,7 +217,8 @@
           contrib: u.contrib,
           events: u.events.slice().sort((a, b) => b.ts - a.ts).slice(0, 12),
           score: score,
-          flagged: score < cfg.FLAG_BELOW
+          flagged: score < cfg.FLAG_BELOW,
+          hasData: true
         }
       }
       return {
@@ -230,11 +234,12 @@
       good: 0,
       follows: 0,
       score: (cfg || CFG).BASE,
-      flagged: false
+      flagged: false,
+      hasData: false
     };
 
     function recAdjust(metric, slot, viewerScore, cfg) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const f = (viewerScore || cfg.BASE) / cfg.BASE,
         diff = slot && slot.difficulty || 5;
       const mult = f >= 1 ? 1 + (f - 1) * (.2 + .5 * diff / 10) : Math.max(.4, 1 - (1 - f) * (diff / 10));
@@ -242,32 +247,32 @@
     }
 
     function roleMinFromBase(base, weight, maxWeight, cfg) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       if (weight == null || !maxWeight) return base;
       const rNorm = Math.max(0, Math.min(1, weight / maxWeight));
       return Math.max(0, Math.min(90, Math.round(base + cfg.TILT * (rNorm - .5) * 2)))
     }
 
     function roleMin(difficulty, weight, maxWeight, cfg) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const base = cfg.REQ[difficulty] != null ? cfg.REQ[difficulty] : 60;
       return roleMinFromBase(base, weight, maxWeight, cfg)
     }
 
     function diffScale(difficulty, cfg) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const d = Math.max(1, Math.min(10, difficulty || 5));
       return cfg.SCALE_LO + (cfg.SCALE_HI - cfg.SCALE_LO) * (10 - d) / 9
     }
 
     function scoreReq(difficulty, cfg) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const d = Math.max(1, Math.min(10, difficulty || 5));
       return Math.round(cfg.BASE - (10 - d) * cfg.SCORE_PER_DIFF)
     }
 
     function scoreDelta(difficulty, isCritical, qualified, recommended, cfg, presetLean) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const ds = diffScale(difficulty, cfg);
       const crit = isCritical ? qualified ? cfg.W_GOODCRIT : cfg.W_OFFENCE : 0;
       const followAlign = recommended ? cfg.W_FOLLOW + (presetLean || 0) * cfg.W_ALIGN : 0;
@@ -278,7 +283,7 @@
     }
 
     function scoreSeries(records, weights, recs, cfg, points, userId) {
-      cfg = Object.assign({}, CFG, cfg || {});
+      cfg = mc(cfg);
       const all = records || [];
       return (points || []).map(t => {
         const upto = all.filter(c => (c.executed_at || 0) <= t);
@@ -381,7 +386,7 @@
     const sy = v => H - pad - (v - lo) * (H - 2 * pad) / (hi - lo);
     const pts = series.map((p, i) => `${sx(i).toFixed(1)},${sy(p.score).toFixed(1)}`).join(" ");
     const fy = sy(flagBelow).toFixed(1);
-    const ns = "http://www.w3.org/2000/svg";
+    const ns = SVGNS;
     const svg = document.createElementNS(ns, "svg");
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", H);
@@ -432,7 +437,7 @@
       const col = lab === "base" ? T.text : v > 0 ? COLORS.green : v < 0 ? COLORS.red : T.sub;
       const chev = el("span", {
         className: "ocbf-chev",
-        textContent: "▸",
+        textContent: ">",
         style: `display:inline-block;width:9px;font-size:9px;color:${T.sub}`
       });
       const head = el("div", {
@@ -462,10 +467,10 @@
               style: "display:flex;justify-content:space-between;gap:12px"
             }, el("span", {
               style: `color:${T.sub}`,
-              textContent: `${e.name||"?"} · ${e.position||"?"}`
+              textContent: `${e.name||"?"} - ${e.position||"?"}`
             }), el("span", {
               style: `color:${ev>0?COLORS.green:ev<0?COLORS.red:T.sub};font-variant-numeric:tabular-nums;white-space:nowrap`,
-              textContent: `${ev>0?"+":""}${ev} · ${ago(e.ts)}`
+              textContent: `${ev>0?"+":""}${ev} - ${ago(e.ts)}`
             })))
           }
       } else bodyEl.append(el("div", {
@@ -475,10 +480,10 @@
       head.addEventListener("click", () => {
         const willOpen = bodyEl.style.display === "none";
         tbl.querySelectorAll(".ocbf-sc-body").forEach(b => b.style.display = "none");
-        tbl.querySelectorAll(".ocbf-chev").forEach(ch => ch.textContent = "▸");
+        tbl.querySelectorAll(".ocbf-chev").forEach(ch => ch.textContent = ">");
         if (willOpen) {
           bodyEl.style.display = "block";
-          chev.textContent = "▾"
+          chev.textContent = "v"
         }
       });
       tbl.append(head, bodyEl)
@@ -634,6 +639,7 @@
     GM_deleteValue(META_STORE);
     GM_deleteValue(ID_STORE);
     GM_deleteValue(SELF_STORE);
+    GM_deleteValue(FACACC_STORE);
     idbWipe()
   }
 
@@ -642,6 +648,7 @@
     GM_deleteValue(META_STORE);
     GM_deleteValue(ID_STORE);
     GM_deleteValue(SELF_STORE);
+    GM_deleteValue(FACACC_STORE);
     idbWipe();
     state.hist = null;
     state.scores = null;
@@ -715,7 +722,7 @@
         return
       }
       storeKey(v);
-      msg.textContent = "Saved - loading…";
+      msg.textContent = "Saved - loading...";
       msg.style.color = COLORS.green;
       load(true)
     };
@@ -782,7 +789,7 @@
         ct: btoa(String.fromCharCode.apply(null, ct))
       }
     } catch (e) {
-      console.warn("[OC Best-Fit] stat encrypt failed (stats omitted):", e.message);
+      console.warn("ocbfstat encrypt failed (stats omitted):", e.message);
       return null
     }
   }
@@ -798,7 +805,7 @@
       }, k, ct);
       return JSON.parse((new TextDecoder).decode(pt))
     } catch (e) {
-      console.warn("[OC Best-Fit] stat decrypt failed:", e.message);
+      console.warn("ocbfstat decrypt failed:", e.message);
       return null
     }
   }
@@ -821,7 +828,6 @@
         last: Date.now(),
         sig: sig
       });
-      console.info("[OC Best-Fit] CPR unchanged since last snapshot - skipped");
       return
     }
     let stats = {};
@@ -829,7 +835,7 @@
       const bs = await gmGet(`${API}/user/battlestats?key=${encodeURIComponent(key)}`);
       stats = bs.battlestats || {}
     } catch (e) {
-      console.warn("[OC Best-Fit] battlestats unavailable (snapshot continues):", e.message)
+      console.warn("ocbfbattlestats unavailable (snapshot continues):", e.message)
     }
     const statsEnc = await encStats({
       strength: stats.strength || 0,
@@ -849,10 +855,9 @@
       GM_setValue(LOG_META, {
         last: snap.ts,
         sig: sig
-      });
-      console.info("[OC Best-Fit] logged CPR snapshot (changed)", new Date(snap.ts).toLocaleString())
+      })
     } catch (e) {
-      console.warn("[OC Best-Fit] snapshot store failed:", e.message)
+      console.warn("ocbfsnapshot store failed:", e.message)
     }
     if (supaOn() && shareOn()) {
       try {
@@ -863,12 +868,9 @@
             ts: snap.ts,
             cprs: snap.cprs
           }
-        });
-        console.info("[OC Best-Fit] snapshot pushed to DB", {
-          entries: snap.cprs.length
         })
       } catch (e) {
-        console.warn("[OC Best-Fit] gateway snapshot push:", e.message)
+        console.warn("ocbfgateway snapshot push:", e.message)
       }
     }
   }
@@ -912,14 +914,6 @@
       const r = idbStore(db, "readonly").count();
       r.onsuccess = () => res(r.result);
       r.onerror = () => res(0)
-    })
-  }
-
-  function idbHas(db, id) {
-    return new Promise(res => {
-      const r = idbStore(db, "readonly").getKey(id);
-      r.onsuccess = () => res(r.result != null);
-      r.onerror = () => res(false)
     })
   }
 
@@ -991,15 +985,21 @@
       action: "push",
       key: key,
       crimes: shareable
-    }).catch(e => console.warn("[OC Best-Fit] gateway push crimes:", e.message))
+    }).catch(e => console.warn("ocbfgateway push crimes:", e.message))
   }
   async function syncHistory(db, key, onProgress) {
-    let url = `${API}/faction/crimes?cat=completed&limit=100&sort=desc&key=${encodeURIComponent(key)}`;
+    const firstRun = await idbCount(db) === 0;
+    const meta = GM_getValue(META_STORE, {
+      lastSync: 0
+    });
+    const existing = firstRun ? null : new Set((await idbGetAll(db)).map(r => r.id));
+    let base = `${API}/faction/crimes?cat=completed&filters=executed_at&sort=DESC&limit=100&comment=OCBestFit`;
+    if (!firstRun && meta.lastSync) base += `&from=${Math.floor(meta.lastSync / 1e3) - 7 * 86400}`;
+    let url = `${base}&key=${encodeURIComponent(key)}`;
     let pages = 0,
       added = 0,
       pageError = null,
       hitKnown = false;
-    const firstRun = await idbCount(db) === 0;
     while (url && pages < HIST_PAGE_CAP && !hitKnown) {
       let j;
       try {
@@ -1010,11 +1010,12 @@
       }
       const fresh = [];
       for (const c of j.crimes || []) {
-        if (!firstRun && await idbHas(db, c.id)) {
+        if (existing && existing.has(c.id)) {
           hitKnown = true;
           break
         }
-        fresh.push(compactCrime(c))
+        fresh.push(compactCrime(c));
+        if (existing) existing.add(c.id)
       }
       await idbPutAll(db, fresh);
       pushCrimes(fresh, key);
@@ -1121,7 +1122,7 @@
       }
       return m
     } catch (e) {
-      console.warn("[OC Best-Fit] community:", e.message);
+      console.warn("ocbfcommunity:", e.message);
       return null
     }
   }
@@ -1169,7 +1170,7 @@
         table = await supaAggregate(key);
         source = "supabase"
       } catch (e) {
-        console.warn("[OC Best-Fit] gateway read, using local:", e.message)
+        console.warn("ocbfgateway read, using local:", e.message)
       }
     }
     const records = await idbGetAll(db);
@@ -1289,6 +1290,7 @@
       const j = await gmGet(`${API}/key/info?key=${encodeURIComponent(key)}`);
       const id = j.info?.user?.id || j.user?.id || null;
       if (id) GM_setValue(SELF_STORE, id);
+      GM_setValue(FACACC_STORE, !!(j.info?.access?.faction));
       return id
     } catch {
       return null
@@ -1305,7 +1307,7 @@
       for (const x of r && r.rows || [])(R[x.user_id] || (R[x.user_id] = {}))[OCScore.norm(x.name) + "|" + OCScore.norm(x.position)] = x.direction || null;
       return R
     } catch (e) {
-      console.warn("[OC Best-Fit] recs:", e.message);
+      console.warn("ocbfrecs:", e.message);
       return {}
     }
   }
@@ -1320,14 +1322,36 @@
         position: rec.position,
         direction: state.direction
       }
-    }).catch(e => console.warn("[OC Best-Fit] pushrec:", e.message))
+    }).catch(e => console.warn("ocbfpushrec:", e.message))
+  }
+  async function cloudEvents(key, cfg) {
+    if (!supaOn()) return [];
+    try {
+      const r = await supaFn({
+        action: "player_events",
+        key: key,
+        half_life_days: cfg.HALF_LIFE_DAYS
+      });
+      return r && r.rows || []
+    } catch (e) {
+      console.warn("ocbfplayer_events:", e.message);
+      return []
+    }
+  }
+
+  function mergeRecords(local, cloud) {
+    const byId = new Map();
+    for (const c of cloud) byId.set(c.crime_id, c);
+    for (const c of local) byId.set(c.id, c);
+    return [...byId.values()]
   }
   async function computeScores(key) {
     const db = await idbOpen();
-    const records = await idbGetAll(db);
+    const local = await idbGetAll(db);
     const R = await getRecs(key);
     const cfg = effCfg();
     const weights = weightsLookup() || {};
+    const records = mergeRecords(local, await cloudEvents(key, cfg));
     state.scores = OCScore.compute(records, weights, R, Math.floor(Date.now() / 1e3), cfg).byUser;
     state.scoreInputs = {
       records: records,
@@ -1363,7 +1387,7 @@
         });
         if (r && r.rows && r.rows.length) return buildWeightMap(r.rows)
       } catch (e) {
-        console.warn("[OC Best-Fit] gateway weights, using live:", e.message)
+        console.warn("ocbfgateway weights, using live:", e.message)
       }
     }
     return window.__ocbfWeights || null
@@ -1384,7 +1408,7 @@
       action: "pushweights",
       key: key,
       weights: rows
-    }).catch(e => console.warn("[OC Best-Fit] gateway pushweights:", e.message))
+    }).catch(e => console.warn("ocbfgateway pushweights:", e.message))
   }
   const weightsLookup = () => state.weights || window.__ocbfWeights || null;
 
@@ -1432,7 +1456,7 @@
         badge.style.color = c;
         badge.style.borderColor = c
       }
-      badge.title = "Weighted average of every role’s CPR by role importance (Σ weight × CPR)."
+      badge.title = "Weighted average of every role's CPR by role importance (sum weight x CPR)."
     })
   }
 
@@ -1452,7 +1476,7 @@
         });
         if (r && r.rows) return r.rows
       } catch (e) {
-        console.warn("[OC Best-Fit] gateway snapshots, using local:", e.message)
+        console.warn("ocbfgateway snapshots, using local:", e.message)
       }
     }
     try {
@@ -1635,7 +1659,7 @@
     if (state.snaps === null) {
       body.append(el("div", {
         style: `color:${T.sub};padding:10px`,
-        textContent: "Loading trend…"
+        textContent: "Loading trend..."
       }));
       fetchSnapshots(getKey()).then(rows => {
         state.snaps = rows || [];
@@ -1693,7 +1717,7 @@
     if (data.length < 2) {
       body.append(el("div", {
         style: `color:${T.sub};padding:10px;line-height:1.5`,
-        textContent: `Only ${data.length} snapshot${data.length===1?"":"s"} for ${state.trendRole} in ${state.trendOc}. Need ≥2 to draw a trend. A new point is recorded only when your CPR for this role changes - i.e. after you train stats (CPR is fixed by your stats, so it won't move day-to-day otherwise).`
+        textContent: `Only ${data.length} snapshot${data.length===1?"":"s"} for ${state.trendRole} in ${state.trendOc}. Need >=2 to draw a trend. A new point is recorded only when your CPR for this role changes - i.e. after you train stats (CPR is fixed by your stats, so it won't move day-to-day otherwise).`
       }));
       return
     }
@@ -1757,7 +1781,7 @@
     } else if (!staticDone) {
       wrap.append(el("div", {
         style: `color:${T.sub}`,
-        textContent: "Loading help…"
+        textContent: "Loading help..."
       }));
       loadStatic().then(() => {
         if (state.view === "help") render()
@@ -1776,7 +1800,6 @@
     if (!panel) return;
     const body = $("#ocbf-body", panel);
     body.textContent = "";
-    if (state.view === "flags") state.view = "recommend";
     const scored = applyFilters(score(state.slots, state.hist));
     const ranked = rank(scored, state.direction, selfScore());
     const rec = recommend(ranked, state.direction);
@@ -1806,17 +1829,18 @@
         if (my.score >= OCScore.scoreReq(dd, cfgA)) maxD = dd;
         else if (nextD == null) nextD = dd
       }
-      const sCol = my.flagged ? COLORS.red : my.score >= cfgA.BASE ? COLORS.green : T.text;
-      const accTxt = nextD ? `OC access: up to D${maxD} · next D${nextD} at ${OCScore.scoreReq(nextD,cfgA)} (+${OCScore.scoreReq(nextD,cfgA)-my.score})` : "OC access: all OCs (D1-D10)";
+      const noData = my.hasData === false;
+      const sCol = noData ? T.sub : my.flagged ? COLORS.red : my.score >= cfgA.BASE ? COLORS.green : T.text;
+      const accTxt = noData ? (factionAccess() ? "No completed-OC history synced yet" : "Needs faction OC API access - regenerate key or ask your faction leader") : nextD ? `OC access: up to D${maxD} - next D${nextD} at ${OCScore.scoreReq(nextD,cfgA)} (+${OCScore.scoreReq(nextD,cfgA)-my.score})` : "OC access: all OCs (D1-D10)";
       const line = el("div", {
         style: "display:flex;align-items:baseline;gap:8px;padding:4px 2px;cursor:pointer",
-        title: "Open the Score tab for the full breakdown + history"
+        title: noData ? "Score appears once your completed OCs are available" : "Open the Score tab for the full breakdown + history"
       }, el("span", {
         style: `font-size:11px;color:${T.sub};text-transform:uppercase;letter-spacing:.5px`,
         textContent: "Your score"
       }), el("b", {
         style: `font-size:16px;color:${sCol}`,
-        textContent: my.score
+        textContent: noData ? "-" : my.score
       }), el("span", {
         style: `margin-left:auto;font-size:11px;color:${T.sub}`,
         textContent: accTxt
@@ -1827,7 +1851,7 @@
       });
       body.append(line)
     }
-    const details = r => `Success score ${r.blended}%  (chance the crime actually succeeds with you in it)\n` + `· in-game CPR ${r.cpr}%  (your single-checkpoint pass rate)\n` + `· ${r.community?"community estimate - little history here yet":"faction finishes this "+(r.successRate!=null?Math.round(r.successRate*100)+"%":"n/a")+" of the time"}\n` + `· expected money ${fmtMoney(r.moneyYou)} (your cut)  ·  expected respect ${r.respectCrime!=null?r.respectCrime:"-"} (faction)\n` + `· role weight ${r.weight!=null?r.weight+"%":"n/a"}  ·  impact ${r.impact!=null?r.impact:"-"}`;
+    const details = r => `Success score ${r.blended}%  (chance the crime actually succeeds with you in it)\n` + `- in-game CPR ${r.cpr}%  (your single-checkpoint pass rate)\n` + `- ${r.community?"community estimate - little history here yet":"faction finishes this "+(r.successRate!=null?Math.round(r.successRate*100)+"%":"n/a")+" of the time"}\n` + `- expected money ${fmtMoney(r.moneyYou)} (your cut)  -  expected respect ${r.respectCrime!=null?r.respectCrime:"-"} (faction)\n` + `- role weight ${r.weight!=null?r.weight+"%":"n/a"}  -  impact ${r.impact!=null?r.impact:"-"}`;
     if (rec) {
       const c = COLORS[blendedColor(rec.blended)];
       const card = el("div", {
@@ -1846,7 +1870,7 @@
         textContent: `${rec.name}`
       }), el("div", {
         style: `font-size:12px;color:${T.sub};margin-top:1px`,
-        textContent: `D${rec.difficulty} · as ${rec.position}`
+        textContent: `D${rec.difficulty} - as ${rec.position}`
       })), el("div", {
         style: `flex:0 0 auto;margin-left:auto;color:${T.sub};font-size:11px`,
         textContent: "tap"
@@ -1869,11 +1893,11 @@
       style: `color:${T.sub};font-size:11px;margin-top:10px;line-height:1.5`
     }, "Colors: ", el("span", {
       style: `color:${COLORS.green};font-weight:700`,
-      textContent: "≥70"
-    }), " · ", el("span", {
+      textContent: ">=70"
+    }), " - ", el("span", {
       style: `color:${COLORS.yellow};font-weight:700`,
       textContent: "50-69"
-    }), " · ", el("span", {
+    }), " - ", el("span", {
       style: `color:${COLORS.red};font-weight:700`,
       textContent: "<50"
     }), ". The Help tab explains every number."));
@@ -1921,8 +1945,8 @@
           const slotRoot = hdr.closest('[class*="wrapper"]') || hdr.parentElement;
           const txt = sr != null ? `${blended}${eff.community?"~":""}` : `${blended}*`;
           const colName = blendedColor(blended);
-          const title = `${name} (D${diff}) - ${hdr.querySelector(SEL.role)?.textContent?.trim()||""}\n` + `Success score ${blended}% - chance the crime actually succeeds with you in it.\n` + `· in-game CPR ${rawCPR}% (your single-checkpoint pass rate)\n` + `· ${eff.community?"community estimate (you have little history here yet)":"faction finishes this "+(sr!=null?Math.round(sr*100)+"%":"n/a")+" of the time"}`;
-          const shortTitle = `Success ${blended}%${eff.community?"~":""} · CPR ${rawCPR}% (tap for detail · Help tab explains)`;
+          const title = `${name} (D${diff}) - ${hdr.querySelector(SEL.role)?.textContent?.trim()||""}\n` + `Success score ${blended}% - chance the crime actually succeeds with you in it.\n` + `- in-game CPR ${rawCPR}% (your single-checkpoint pass rate)\n` + `- ${eff.community?"community estimate (you have little history here yet)":"faction finishes this "+(sr!=null?Math.round(sr*100)+"%":"n/a")+" of the time"}`;
+          const shortTitle = `Success ${blended}%${eff.community?"~":""} - CPR ${rawCPR}% (tap for detail - Help tab explains)`;
           let hdrNum = hdr.querySelector(".ocbf-cprhdr");
           if (replaceCpr) {
             if (cprEl.style.display !== "none") cprEl.style.display = "none";
@@ -2152,11 +2176,11 @@
   }
   async function exportDataModal() {
     const overlay = el("div", {
-      style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100001;display:flex;align-items:center;justify-content:center"
+      style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100001;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:24px 12px;box-sizing:border-box"
     });
     const box = el("div", {
       className: "ocbf-scroll",
-      style: `background:${T.bg};color:${T.text};width:92%;max-width:620px;max-height:85vh;overflow:auto;border:1px solid ${T.border};border-radius:6px;padding:18px;font-size:13px`
+      style: `background:${T.bg};color:${T.text};width:92%;max-width:620px;box-sizing:border-box;border:1px solid ${T.border};border-radius:6px;padding:18px;font-size:13px`
     });
     box.append(el("h2", {
       textContent: "Export your data",
@@ -2168,7 +2192,7 @@
     }));
     const ta = el("textarea", {
       readOnly: true,
-      value: "Gathering…",
+      value: "Gathering...",
       className: "ocbf-scroll",
       style: "width:100%;box-sizing:border-box;height:300px;background:var(--ocbf-ctl-bg);color:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.5);border-radius:6px;padding:8px;font-family:monospace;font-size:11px;white-space:pre"
     });
@@ -2233,11 +2257,11 @@
 
   function openSettings() {
     const wrap = el("div", {
-      style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center"
+      style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:24px 12px;box-sizing:border-box"
     });
     const box = el("div", {
       className: "ocbf-scroll",
-      style: `background:${T.bg};color:${T.text};max-width:420px;width:90%;max-height:88vh;overflow:auto;border:1px solid ${T.border};border-radius:6px;padding:18px;font-size:13px;line-height:1.5`
+      style: `background:${T.bg};color:${T.text};max-width:420px;width:90%;box-sizing:border-box;border:1px solid ${T.border};border-radius:6px;padding:18px;font-size:13px;line-height:1.5`
     });
     box.append(el("h2", {
       textContent: "Settings",
@@ -2305,7 +2329,7 @@
       textContent: "Show computed CPR in place of raw CPR"
     }), el("div", {
       style: `color:${T.sub};margin-top:2px`,
-      textContent: "Replaces Torn's raw single-checkpoint number in each slot header with our computed success score (raw CPR × faction success rate). Off = raw stays in the header and our computed value shows in the top-left tag."
+      textContent: "Replaces Torn's raw single-checkpoint number in each slot header with our computed success score (raw CPR x faction success rate). Off = raw stays in the header and our computed value shows in the top-left tag."
     })));
     box.append(rlab);
     const exportBtn = el("button", {
@@ -2320,7 +2344,7 @@
     });
     foot.append(el("span", {
       style: `color:${T.sub};font-size:11px`
-    }, `OC Best-Fit v${VERSION} · by `, el("a", {
+    }, `OC Best-Fit v${VERSION} - by `, el("a", {
       href: "https://www.torn.com/profiles.php?XID=2805199",
       target: "_blank",
       rel: "noopener",
@@ -2344,11 +2368,11 @@
   function aboutModal() {
     const wrap = el("div", {
       id: "ocbf-about",
-      style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center"
+      style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:24px 12px;box-sizing:border-box"
     });
     const box = el("div", {
       className: "ocbf-scroll",
-      style: `background:${T.bg};color:${T.text};width:92%;max-width:620px;max-height:85vh;overflow:auto;border:1px solid ${T.border};border-radius:5px;padding:18px;font-size:13px;line-height:1.5`
+      style: `background:${T.bg};color:${T.text};width:92%;max-width:620px;box-sizing:border-box;border:1px solid ${T.border};border-radius:5px;padding:18px;font-size:13px;line-height:1.5`
     });
     box.innerHTML = (ocStatic && ocStatic.aboutHtml) || `<p style="color:${T.sub};margin:0 0 10px">About info could not load - check your connection. <a href="https://greasyfork.org/scripts/583330" target="_blank" rel="noopener" style="color:#58a6ff">Script page</a></p><div style="text-align:right;margin-top:14px"><button id="ocbf-about-close" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:6px 14px;cursor:pointer">Close</button></div>`;
     wrap.append(box);
@@ -2447,7 +2471,7 @@
     if (document.getElementById("ocbf-style")) return;
     const st = document.createElement("style");
     st.id = "ocbf-style";
-    st.textContent = `#ocbf-panel{font:13px/1.45 Arial,Helvetica,sans-serif;user-select:none;scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1)}#ocbf-panel ::-webkit-scrollbar,#ocbf-panel::-webkit-scrollbar,.ocbf-scroll ::-webkit-scrollbar,.ocbf-scroll::-webkit-scrollbar{width:9px;height:9px}#ocbf-panel ::-webkit-scrollbar-track,#ocbf-panel::-webkit-scrollbar-track,.ocbf-scroll ::-webkit-scrollbar-track,.ocbf-scroll::-webkit-scrollbar-track{background:var(--ocbf-hi1);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb,#ocbf-panel::-webkit-scrollbar-thumb,.ocbf-scroll ::-webkit-scrollbar-thumb,.ocbf-scroll::-webkit-scrollbar-thumb{background:var(--ocbf-hi3);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb:hover,#ocbf-panel::-webkit-scrollbar-thumb:hover,.ocbf-scroll ::-webkit-scrollbar-thumb:hover,.ocbf-scroll::-webkit-scrollbar-thumb:hover{background:var(--ocbf-hi3)}.ocbf-scroll{scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1)}#ocbf-panel input[type=range]{-webkit-appearance:none;appearance:none;width:92px;height:16px;background:transparent;cursor:pointer;touch-action:none;margin:0;vertical-align:middle}#ocbf-panel input[type=range]:focus{outline:none}#ocbf-panel input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 2px rgba(0,0,0,.5)}#ocbf-panel input[type=range]::-moz-range-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-moz-range-thumb{width:14px;height:14px;border:1px solid rgba(0,0,0,.6);border-radius:50%;background:var(--ocbf-ctl-text)}#ocbf-panel table{width:100%;border-collapse:collapse;font-size:12px}#ocbf-panel th{position:sticky;top:34px;background:var(--ocbf-ctl-bg);text-align:left;padding:5px 6px;font-weight:700;color:${T.sub};white-space:nowrap;z-index:1}#ocbf-panel td{padding:4px 6px;border-top:1px solid ${T.divider}}#ocbf-panel table tr:nth-child(even){background:var(--ocbf-hi1)}#ocbf-panel table tbody:hover,#ocbf-panel table tr:hover{background:var(--ocbf-hi2)}.ocbf-ctl{background:var(--ocbf-ctl-bg);color:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.5);border-radius:4px;padding:0 8px;height:28px;cursor:pointer;font-size:12px}.ocbf-ctl:hover{background:var(--ocbf-hi2)}.ocbf-icon{width:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ocbf-seg{display:inline-flex;border:0.5px solid var(--ocbf-border);border-radius:8px;overflow:hidden;background:var(--ocbf-hi1)}.ocbf-segbtn{width:34px;height:30px;padding:0;border:none;border-right:0.5px solid var(--ocbf-border);background:transparent;color:var(--ocbf-ctl-text);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}.ocbf-segbtn:last-child{border-right:none}.ocbf-segbtn:hover{background:var(--ocbf-hi2);color:var(--ocbf-ctl-text)}.ocbf-segbtn:active{background:var(--ocbf-hi3)}#ocbf-dir{-webkit-appearance:none;appearance:none;background-color:var(--ocbf-ctl-bg);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23999999'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}#ocbf-dir option{background:#2e2f33;color:#eaeaea}#ocbf-dir option:checked{background:#1f6feb;color:#fff}#ocbf-panel .ocbf-lab{font-size:11px;color:var(--ocbf-ctl-text);display:flex;align-items:center;gap:4px}input.ocbf-num{min-height:28px;box-sizing:border-box} #ocbf-panel .ocbf-head{cursor:grab} #ocbf-panel.ocbf-dragging .ocbf-head{cursor:grabbing} .ocbf-x{width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--ocbf-titletext);opacity:.85;cursor:pointer;font-size:18px;line-height:1;border-radius:5px} .ocbf-x:hover{opacity:1;background:var(--ocbf-hi2)}@media (max-width:640px){.ocbf-ctl{height:38px;font-size:14px;padding:0 12px}.ocbf-icon{width:42px}.ocbf-segbtn{width:44px;height:38px}#ocbf-panel .ocbf-lab{font-size:13px}#ocbf-panel input[type=range]{height:38px}#ocbf-panel input[type=checkbox]{width:22px;height:22px}input.ocbf-num{min-height:40px;font-size:16px;width:100%!important}}`;
+    st.textContent = `#ocbf-panel{font:13px/1.45 Arial,Helvetica,sans-serif;user-select:none;scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1)}#ocbf-panel ::-webkit-scrollbar,#ocbf-panel::-webkit-scrollbar,.ocbf-scroll ::-webkit-scrollbar,.ocbf-scroll::-webkit-scrollbar{width:9px;height:9px}#ocbf-panel ::-webkit-scrollbar-track,#ocbf-panel::-webkit-scrollbar-track,.ocbf-scroll ::-webkit-scrollbar-track,.ocbf-scroll::-webkit-scrollbar-track{background:var(--ocbf-hi1);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb,#ocbf-panel::-webkit-scrollbar-thumb,.ocbf-scroll ::-webkit-scrollbar-thumb,.ocbf-scroll::-webkit-scrollbar-thumb{background:var(--ocbf-hi3);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb:hover,#ocbf-panel::-webkit-scrollbar-thumb:hover,.ocbf-scroll ::-webkit-scrollbar-thumb:hover,.ocbf-scroll::-webkit-scrollbar-thumb:hover{background:var(--ocbf-hi3)}.ocbf-scroll{scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1);touch-action:pan-y;-webkit-overflow-scrolling:touch}#ocbf-panel input[type=range]{-webkit-appearance:none;appearance:none;width:92px;height:16px;background:transparent;cursor:pointer;touch-action:none;margin:0;vertical-align:middle}#ocbf-panel input[type=range]:focus{outline:none}#ocbf-panel input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 2px rgba(0,0,0,.5)}#ocbf-panel input[type=range]::-moz-range-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-moz-range-thumb{width:14px;height:14px;border:1px solid rgba(0,0,0,.6);border-radius:50%;background:var(--ocbf-ctl-text)}#ocbf-panel table{width:100%;border-collapse:collapse;font-size:12px}#ocbf-panel th{position:sticky;top:34px;background:var(--ocbf-ctl-bg);text-align:left;padding:5px 6px;font-weight:700;color:${T.sub};white-space:nowrap;z-index:1}#ocbf-panel td{padding:4px 6px;border-top:1px solid ${T.divider}}#ocbf-panel table tr:nth-child(even){background:var(--ocbf-hi1)}#ocbf-panel table tbody:hover,#ocbf-panel table tr:hover{background:var(--ocbf-hi2)}.ocbf-ctl{background:var(--ocbf-ctl-bg);color:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.5);border-radius:4px;padding:0 8px;height:28px;cursor:pointer;font-size:12px}.ocbf-ctl:hover{background:var(--ocbf-hi2)}.ocbf-icon{width:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ocbf-seg{display:inline-flex;border:0.5px solid var(--ocbf-border);border-radius:8px;overflow:hidden;background:var(--ocbf-hi1)}.ocbf-segbtn{width:34px;height:30px;padding:0;border:none;border-right:0.5px solid var(--ocbf-border);background:transparent;color:var(--ocbf-ctl-text);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}.ocbf-segbtn:last-child{border-right:none}.ocbf-segbtn:hover{background:var(--ocbf-hi2);color:var(--ocbf-ctl-text)}.ocbf-segbtn:active{background:var(--ocbf-hi3)}#ocbf-dir{-webkit-appearance:none;appearance:none;background-color:var(--ocbf-ctl-bg);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23999999'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}#ocbf-dir option{background:#2e2f33;color:#eaeaea}#ocbf-dir option:checked{background:#1f6feb;color:#fff}#ocbf-panel .ocbf-lab{font-size:11px;color:var(--ocbf-ctl-text);display:flex;align-items:center;gap:4px}input.ocbf-num{min-height:28px;box-sizing:border-box} #ocbf-panel .ocbf-head{cursor:grab} #ocbf-panel.ocbf-dragging .ocbf-head{cursor:grabbing} .ocbf-x{width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--ocbf-titletext);opacity:.85;cursor:pointer;font-size:18px;line-height:1;border-radius:5px} .ocbf-x:hover{opacity:1;background:var(--ocbf-hi2)}@media (max-width:640px){.ocbf-ctl{height:38px;font-size:14px;padding:0 12px}.ocbf-icon{width:42px}.ocbf-segbtn{width:44px;height:38px}#ocbf-panel .ocbf-lab{font-size:13px}#ocbf-panel input[type=range]{height:38px}#ocbf-panel input[type=checkbox]{width:22px;height:22px}input.ocbf-num{min-height:40px;font-size:16px;width:100%!important}}`;
     (document.head || document.documentElement).append(st)
   }
 
@@ -2529,7 +2553,7 @@
     row2.append(floorWrap);
     const itemWrap = el("label", {
       className: "ocbf-lab",
-      title: "Some roles need an item you may not have. Tick to hide roles you can’t fill."
+      title: "Some roles need an item you may not have. Tick to hide roles you can't fill."
     });
     const itemChk = el("input", {
       type: "checkbox"
@@ -2574,7 +2598,7 @@
       className: "ocbf-scroll",
       style: "padding:10px;max-height:50vh;overflow-y:auto;overflow-x:hidden"
     }, el("div", {
-      textContent: "Loading…",
+      textContent: "Loading...",
       style: `color:${T.sub}`
     })));
     (document.body || document.documentElement).append(panel);
@@ -2595,9 +2619,8 @@
   function lockBg(on) {
     if (on) {
       if (scrollBlocker) return;
-      const panel = $("#ocbf-panel");
       scrollBlocker = e => {
-        if (panel && panel.contains(e.target)) return;
+        if (e.target.closest && e.target.closest("#ocbf-panel,.ocbf-scroll")) return;
         e.preventDefault()
       };
       document.addEventListener("touchmove", scrollBlocker, {
@@ -2888,7 +2911,7 @@
     if (force) GM_setValue(META_STORE, {
       lastSync: 0
     });
-    setBody("Fetching your CPR…");
+    setBody("Fetching your CPR...");
     try {
       state.slots = await fetchOpenSlots(key)
     } catch (e) {
@@ -2898,30 +2921,30 @@
     logSnapshot(key, state.slots);
     if (force) state.snaps = null;
     try {
-      setBody("Building faction success-rate table (first run can take a moment)…");
-      state.hist = await getHistory(key, (p, a) => setBody(`Syncing history… page ${p} (+${a} new)`));
+      setBody("Building faction success-rate table (first run can take a moment)...");
+      state.hist = await getHistory(key, (p, a) => setBody(`Syncing history... page ${p} (+${a} new)`));
       const t = state.hist;
-      state.histNote = `History OK (${t.source}): ${t.stored} local crimes · ${t.synced} new this sync · ${Object.keys(t.table).length} crime types · ${new Date(t.builtAt).toLocaleString()}.`
+      state.histNote = `History OK (${t.source}): ${t.stored} local crimes - ${t.synced} new this sync - ${Object.keys(t.table).length} crime types - ${new Date(t.builtAt).toLocaleString()}.`
     } catch (e) {
       state.hist = null;
       state.histNote = "Success% / expected money unavailable - " + e.message;
-      console.warn("[OC Best-Fit] history unavailable:", e.message)
+      console.warn("ocbfhistory unavailable:", e.message)
     }
     try {
       state.weights = await getWeights(key)
     } catch (e) {
-      console.warn("[OC Best-Fit] weights:", e.message)
+      console.warn("ocbfweights:", e.message)
     }
     try {
       state.community = await getCommunity(key)
     } catch (e) {
-      console.warn("[OC Best-Fit] community:", e.message)
+      console.warn("ocbfcommunity:", e.message)
     }
     pushWeights(key);
     try {
       await computeScores(key)
     } catch (e) {
-      console.warn("[OC Best-Fit] scores:", e.message)
+      console.warn("ocbfscores:", e.message)
     }
     try {
       const rk = rank(applyFilters(score(state.slots, state.hist)), state.direction, selfScore());
@@ -2959,12 +2982,12 @@
     try {
       buildPanel()
     } catch (e) {
-      console.warn("[OC Best-Fit] buildPanel:", e.message)
+      console.warn("ocbfbuildPanel:", e.message)
     }
     try {
       syncEntryButton()
     } catch (e) {
-      console.warn("[OC Best-Fit] syncEntryButton:", e.message)
+      console.warn("ocbfsyncEntryButton:", e.message)
     }
     try {
       let raf = 0;
@@ -2988,7 +3011,7 @@
         subtree: true
       })
     } catch (e) {
-      console.warn("[OC Best-Fit] observer:", e.message)
+      console.warn("ocbfobserver:", e.message)
     }
   }
 
@@ -3168,7 +3191,7 @@
       window.__ocbfWeights = weightData;
       scanWeights()
     } catch (err) {
-      console.error("[OC Weights] Failed to fetch weights:", err)
+      console.error("ocbf weights:", err)
     }
   }
 
@@ -3200,8 +3223,7 @@
     });
     observer.observe(document.body, {
       childList: true,
-      subtree: true,
-      characterData: true
+      subtree: true
     })
   }
   window.__ocbfActivate = () => {
@@ -3232,7 +3254,7 @@
     try {
       init()
     } catch (e) {
-      console.warn("[OC Best-Fit] requirements init:", e.message)
+      console.warn("ocbfrequirements init:", e.message)
     }
   }
   initWhenReady()

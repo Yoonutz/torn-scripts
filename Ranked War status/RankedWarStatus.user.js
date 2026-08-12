@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn — Ranked War Status
 // @namespace    torn.thecovenant.rws
-// @version      3.3.1
+// @version      3.3.2
 // @author       KamiRen [2805199]
 // @description  YATA-style ranked war target list on the war/rank tab: live hospital timers, auto-refresh, attack links
 // @author       The Covenant
@@ -13,6 +13,7 @@
 // @grant        GM_registerMenuCommand
 // @connect      api.torn.com
 // @license      MIT
+// @downloadURL none
 // ==/UserScript==
 
 (function () {
