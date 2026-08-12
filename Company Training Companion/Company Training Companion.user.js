@@ -4,7 +4,7 @@
 // @match       https://www.torn.com/companies.php*
 // @icon        https://www.google.com/s2/favicons?sz=64&domain=torn.com
 // @author      KamiRen [2805199] - https://www.torn.com/profiles.php?XID=2805199
-// @version     2.4
+// @version     2.5
 // @license     MIT
 // @grant       GM_xmlhttpRequest
 // @grant       GM_getValue
@@ -317,16 +317,19 @@
         font-weight: bold;
       }
 
-      .d .manage-company .company-tabs > li a { width: 207.5px !important; }
-      .d .company-wrap .company-stats-list > li { width: 294px !important; }
+      /* Torn's content column is 784px; the Paid column adds 42px (30 content
+         + 10 padding + 2 borders). Everything widened below is scaled to +42:
+         container 976->1018, tabs (784+42)/4 - 12, stats (826/3) - 2. */
+      .d .manage-company .company-tabs > li a { width: 194.5px !important; }
+      .d .company-wrap .company-stats-list > li { width: 273.33px !important; }
     `;
     document.head.appendChild(style);
   }
 
   function resizeLayout() {
     const main = document.querySelector("#mainContainer");
-    if (main && main.style.width !== "1070px") {
-      main.style.width = "1070px";
+    if (main && main.style.width !== "1018px") {
+      main.style.width = "1018px";
     }
   }
 
