@@ -4,7 +4,7 @@
 // @match       https://www.torn.com/factions.php?step=your#/tab=crimes*
 // @icon        https://www.google.com/s2/favicons?sz=64&domain=torn.com
 // @author      KamiRen [2805199] - https://www.torn.com/profiles.php?XID=2805199
-// @version     1.9.2
+// @version     1.11.0
 // @grant       GM_xmlhttpRequest
 // @grant       GM_getValue
 // @grant       GM_setValue
