@@ -25,3 +25,6 @@ dist/
 # ── nested repos that live on their own remotes ─────────
 Workbook/covenant-reader/
 MCP/
+
+# Claude auto memory, machine-local
+.claude/memory/
