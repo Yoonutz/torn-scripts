@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn OC Best-Fit Role Recommender
 // @namespace    Torn.OC-Best-Fit
-// @version      0.89.10
+// @version      0.90.0
 // @description  Recommends the best Organized Crime role to join, ranking all available faction OCs by a blended success score (your exact API CPR discounted by your faction's real historical success rate). Color-coded green/yellow/red.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -62,10 +62,10 @@
   const factionAccess = () => GM_getValue(FACACC_STORE, true);
   const SCORE_CACHE = "oc_bestfit_scorecache";
   const POS_STORE = "oc_bestfit_panelpos";
-  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.89.10";
+  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.90.0";
   const META_STORE = "oc_bestfit_meta";
   const DATAVER_STORE = "oc_bestfit_dataver";
-  const DATA_VERSION = 3;
+  const DATA_VERSION = 4;
   const IDB_DB = "oc_bestfit";
   const IDB_STORE = "crimes";
   const IDB_LOG = "cprlog";
@@ -73,6 +73,7 @@
   const STATKEY_STORE = "oc_bestfit_statkey";
   const LOG_INTERVAL_MS = 3 * 60 * 60 * 1e3;
   const HIST_TTL_MS = 2 * 60 * 60 * 1e3;
+  const HIST_RETRY_MS = 5 * 60 * 1e3;
   const HIST_PAGE_CAP = 60;
   const GREEN = 70;
   const YELLOW = 50;
@@ -992,9 +993,12 @@
     const meta = GM_getValue(META_STORE, {
       lastSync: 0
     });
-    const existing = firstRun ? null : new Set((await idbGetAll(db)).map(r => r.id));
+    const stored = firstRun ? [] : await idbGetAll(db);
+    const existing = firstRun ? null : new Set(stored.map(r => r.id));
+    let newestStored = 0;
+    for (const r of stored) if ((r.executed_at || 0) > newestStored) newestStored = r.executed_at;
     let base = `${API}/faction/crimes?cat=completed&filters=executed_at&sort=DESC&limit=100&comment=OCBestFit`;
-    if (!firstRun && meta.lastSync) base += `&from=${Math.floor(meta.lastSync / 1e3) - 7 * 86400}`;
+    if (!firstRun && newestStored) base += `&from=${newestStored - 7 * 86400}`;
     let url = `${base}&key=${encodeURIComponent(key)}`;
     let pages = 0,
       added = 0,
@@ -1009,14 +1013,18 @@
         break
       }
       const fresh = [];
+      let known = 0,
+        seen = 0;
       for (const c of j.crimes || []) {
+        seen++;
         if (existing && existing.has(c.id)) {
-          hitKnown = true;
-          break
+          known++;
+          continue
         }
         fresh.push(compactCrime(c));
         if (existing) existing.add(c.id)
       }
+      if (existing && seen && known === seen) hitKnown = true;
       await idbPutAll(db, fresh);
       pushCrimes(fresh, key);
       added += fresh.length;
@@ -1156,11 +1164,16 @@
       lastSync: 0
     });
     const stale = Date.now() - (meta.lastSync || 0) >= HIST_TTL_MS;
+    const retryReady = Date.now() - (meta.lastFail || 0) >= HIST_RETRY_MS;
     let sync = null;
-    if (stale || await idbCount(db) === 0) {
+    if ((stale || await idbCount(db) === 0) && retryReady) {
       sync = await syncHistory(db, key, onProgress);
-      GM_setValue(META_STORE, {
-        lastSync: Date.now()
+      GM_setValue(META_STORE, sync.pageError ? {
+        lastSync: meta.lastSync || 0,
+        lastFail: Date.now()
+      } : {
+        lastSync: Date.now(),
+        lastFail: 0
       })
     }
     let table = null,
