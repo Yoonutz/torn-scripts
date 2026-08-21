@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn OC Best-Fit Role Recommender
 // @namespace    Torn.OC-Best-Fit
-// @version      0.90.0
+// @version      0.91.0
 // @description  Recommends the best Organized Crime role to join, ranking all available faction OCs by a blended success score (your exact API CPR discounted by your faction's real historical success rate). Color-coded green/yellow/red.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -62,7 +62,7 @@
   const factionAccess = () => GM_getValue(FACACC_STORE, true);
   const SCORE_CACHE = "oc_bestfit_scorecache";
   const POS_STORE = "oc_bestfit_panelpos";
-  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.90.0";
+  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.91.0";
   const META_STORE = "oc_bestfit_meta";
   const DATAVER_STORE = "oc_bestfit_dataver";
   const DATA_VERSION = 4;
@@ -944,14 +944,6 @@
     })
   }
 
-  function idbClearStore(db, name) {
-    return new Promise(res => {
-      const r = db.transaction(name, "readwrite").objectStore(name).clear();
-      r.onsuccess = () => res();
-      r.onerror = () => res()
-    })
-  }
-
   function compactCrime(c) {
     const r = c.rewards || {};
     return {
@@ -997,26 +989,29 @@
     const existing = firstRun ? null : new Set(stored.map(r => r.id));
     let newestStored = 0;
     for (const r of stored) if ((r.executed_at || 0) > newestStored) newestStored = r.executed_at;
-    let base = `${API}/faction/crimes?cat=completed&filters=executed_at&sort=DESC&limit=100&comment=OCBestFit`;
-    if (!firstRun && newestStored) base += `&from=${newestStored - 7 * 86400}`;
-    let url = `${base}&key=${encodeURIComponent(key)}`;
+    const cutoff = firstRun || !newestStored ? 0 : newestStored - 7 * 86400;
+    const base = `${API}/faction/crimes?cat=completed&filters=executed_at&sort=DESC&limit=100&comment=OCBestFit`;
     let pages = 0,
       added = 0,
+      offset = 0,
       pageError = null,
-      hitKnown = false;
-    while (url && pages < HIST_PAGE_CAP && !hitKnown) {
+      done = false;
+    while (!done && pages < HIST_PAGE_CAP) {
       let j;
       try {
-        j = await gmGet(url)
+        j = await gmGet(`${base}&offset=${offset}&key=${encodeURIComponent(key)}`)
       } catch (e) {
         pageError = e.message;
         break
       }
+      const batch = j.crimes || [];
+      if (!batch.length) break;
       const fresh = [];
       let known = 0,
-        seen = 0;
-      for (const c of j.crimes || []) {
-        seen++;
+        oldest = Infinity;
+      for (const c of batch) {
+        const ts = c.executed_at || 0;
+        if (ts && ts < oldest) oldest = ts;
         if (existing && existing.has(c.id)) {
           known++;
           continue
@@ -1024,16 +1019,14 @@
         fresh.push(compactCrime(c));
         if (existing) existing.add(c.id)
       }
-      if (existing && seen && known === seen) hitKnown = true;
       await idbPutAll(db, fresh);
       pushCrimes(fresh, key);
       added += fresh.length;
       pages++;
+      offset += batch.length;
       if (onProgress) onProgress(pages, added);
-      if (hitKnown) break;
-      let next = j._metadata?.links?.next || null;
-      if (next && !/[?&]key=/.test(next)) next += (next.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(key);
-      url = next
+      if (batch.length < 100) done = true;
+      else if (known === batch.length && cutoff && oldest !== Infinity && oldest <= cutoff) done = true
     }
     return {
       pages: pages,
@@ -1154,7 +1147,6 @@
   async function getHistory(key, onProgress) {
     const db = await idbOpen();
     if (GM_getValue(DATAVER_STORE, 1) < DATA_VERSION) {
-      await idbClearStore(db, IDB_STORE);
       GM_setValue(META_STORE, {
         lastSync: 0
       });
@@ -1916,8 +1908,9 @@
     }), ". The Help tab explains every number."));
     if (state.histNote) {
       const ok = state.hist != null;
+      const stale = ok && state.hist.pageError;
       body.append(el("div", {
-        style: `font-size:10px;margin-top:6px;color:${ok?"#3fb950":"#e5534b"}`,
+        style: `font-size:10px;margin-top:6px;color:${ok?stale?COLORS.yellow:"#3fb950":"#e5534b"}`,
         textContent: state.histNote
       }))
     }
@@ -2937,7 +2930,7 @@
       setBody("Building faction success-rate table (first run can take a moment)...");
       state.hist = await getHistory(key, (p, a) => setBody(`Syncing history... page ${p} (+${a} new)`));
       const t = state.hist;
-      state.histNote = `History OK (${t.source}): ${t.stored} local crimes - ${t.synced} new this sync - ${Object.keys(t.table).length} crime types - ${new Date(t.builtAt).toLocaleString()}.`
+      state.histNote = t.pageError ? `History STALE - sync failed (${t.pageError}). Showing ${t.stored} crimes last synced ${new Date(t.builtAt).toLocaleString()}.` : `History OK (${t.source}): ${t.stored} local crimes - ${t.synced} new this sync - ${Object.keys(t.table).length} crime types - ${new Date(t.builtAt).toLocaleString()}.`
     } catch (e) {
       state.hist = null;
       state.histNote = "Success% / expected money unavailable - " + e.message;
