@@ -72,3 +72,39 @@ export const skill = {
     return { date: cur.date, baseline: baseline ? baseline.date : null, snapshots: snapshots.length, reused, report };
   },
 };
+
+// CLI mode, same E-script contract as the siblings: node runner.mjs [--dry-run]
+// Uses the repo-root key, keeps snapshots in memory, writes nothing, prints the report.
+const isCli = typeof process !== "undefined" && Array.isArray(process.argv) && /runner\.mjs$/.test(process.argv[1] || "");
+if (isCli) {
+  const envModule = "./env" + ".mjs";
+  const { requireKey } = await import(envModule);
+  const key = requireKey();
+  const mem = {};
+  const db = {
+    async index() {
+      return Object.keys(mem).sort();
+    },
+    async get(name) {
+      return mem[name] || null;
+    },
+    async put(name, value) {
+      mem[name] = value;
+    },
+  };
+  const tornGet = async (path) => {
+    const res = await fetch("https://api.torn.com/v2/" + path, { headers: { Authorization: "ApiKey " + key } });
+    const body = await res.json().catch(() => ({}));
+    if (body.error) throw new Error(path + " -> " + body.error.code + " " + body.error.error);
+    if (!res.ok) throw new Error(path + " -> HTTP " + res.status);
+    return body;
+  };
+  try {
+    const out = await skill.run({ key, tornGet, db, force: true });
+    process.stdout.write(out.report);
+    console.error("runner: " + out.date + " | snapshots " + out.snapshots + " | nothing written (dry by design)");
+  } catch (e) {
+    console.error("runner failed: " + e.message);
+    process.exit(1);
+  }
+}
