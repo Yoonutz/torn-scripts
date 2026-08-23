@@ -12,8 +12,10 @@ Invoke via the Skill tool when the task matches. Scripts run from the repo root;
 
 ## Command Center buttons
 
-Any skill becomes a button in the Operational Command Center userscript by exposing
-`scripts/runner.mjs` that exports `skill = { id, label, description, icon?, run(ctx) }`. The logic
-must be browser-grade JavaScript (fetch only, no `fs`, no Node modules). Pushing to `main` deploys
-the runner through GitHub Actions and the button appears on the next open; no other change is
-needed. Contract and history: `docs/superpowers/specs/2026-08-23-operational-command-center-design.md`.
+Skills keep the standard DOE format (SKILL.md contract, `scripts/`, tests). A skill additionally
+shows up as a button in the Operational Command Center when its `scripts/` folder carries an
+E-layer script named `runner.mjs` exporting `skill = { id, label, description, icon?, run(ctx) }`.
+That one script is imported by the Cloudflare runner, so it (and what it imports) must be fetch-only
+JavaScript with no `fs` or Node modules; the other scripts stay ordinary CLIs. Pushing to `main`
+deploys the runner through GitHub Actions and the button appears on the next open. Contract and
+history: `docs/superpowers/specs/2026-08-23-operational-command-center-design.md`.
