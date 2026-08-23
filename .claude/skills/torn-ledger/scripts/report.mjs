@@ -6,7 +6,7 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { SNAPSHOT_DIR, REPORT_DIR } from "./env.mjs";
-import { compare, render, pickBaseline } from "./lib.mjs";
+import { compare, render, pickBaseline, deriveSnapshot } from "./lib.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -21,7 +21,8 @@ if (!existsSync(SNAPSHOT_DIR)) {
 }
 const snapshots = readdirSync(SNAPSHOT_DIR)
   .filter((f) => f.endsWith(".json"))
-  .map((f) => JSON.parse(readFileSync(resolve(SNAPSHOT_DIR, f), "utf8")).snapshot)
+  .map((f) => JSON.parse(readFileSync(resolve(SNAPSHOT_DIR, f), "utf8")))
+  .map((j) => (j.raw ? deriveSnapshot(j.raw) : j.snapshot))
   .sort((a, b) => a.taken_at - b.taken_at);
 if (!snapshots.length) {
   console.error("no snapshots yet; run collect.mjs first");

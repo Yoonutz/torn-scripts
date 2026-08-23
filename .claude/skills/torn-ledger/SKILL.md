@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Glob
 
 ## Goal
 
-Produce the weekly Torn income report in the agreed fixed shape: income per day (networth, company, bank, bazaar, stock payouts), inventory block, leak list, two actions, trend since baseline. Success: the report comes out of `report.mjs` unchanged, compared against a snapshot at least 6 days old, and every leak line carries a number. The agent never computes or restyles numbers by hand.
+Produce the weekly Torn income report in the agreed fixed shape: income per day (networth, company, bank, stock payouts), inventory block, leak list, two actions, trend since baseline. Success: the report comes out of `report.mjs` unchanged, compared against a snapshot at least 6 days old, and every leak line carries a number. The agent never computes or restyles numbers by hand.
 
 ## Inputs
 
@@ -56,6 +56,13 @@ All commands run from the repo root.
 
 The ONLY deliverable is the markdown report printed by `report.mjs` (also saved under `data/reports/`). Snapshots under `data/snapshots/` are the history; never delete them.
 
+## Stock rules (fixed in `lib.mjs`)
+
+- Increment n of a dividend stock needs (2^n - 1) benefit blocks: 1 block = 1x, 3 blocks = 2x, 7 blocks = 3x. Selling below that floor drops the increment; collecting a payout never does.
+- The floor is dynamic: each run reads the active increment per stock from the API and locks exactly the shares that increment needs. Buy a third increment and the floor rises; sell down to one and it falls. No leak may suggest selling locked shares. Shares above the floor show as "free above floor".
+- Passive benefits (TCI bank bonus, WSU, TGP, TCP, IIL, TCM, IST, YAZ) have nothing to collect. The API marks them `available` once active after 7 days; the ledger never lists them as payouts ready.
+- Stocks held below one benefit block have no increment to protect; they stay in the "below payout threshold" leak.
+
 ## Edge Cases
 
 - First run ever: report says "First snapshot, nothing to compare yet". Expected; deltas start on the second snapshot.
@@ -63,8 +70,9 @@ The ONLY deliverable is the markdown report printed by `report.mjs` (also saved 
 - Baseline younger than 6 days: `pickBaseline` falls back to the oldest snapshot and the header shows the real gap in days. Say so when delivering.
 - `collect failed: <endpoint> -> <code> <message>`: Torn API refused one call. Code 2 = bad key, 5 = rate limit (wait 60 s, rerun), 8 = IP block. Nothing is written on failure.
 - `TORN_API_KEY_FULL is not set`: the key lives in the repo-root `.env.local`; the script loads it itself, no need for `--env-file`.
-- Torn API v2 does not expose item-by-item inventory. Inventory is value-only; bazaar income comes from the lifetime `bazaar.profit` counter, so a weekly delta is exact.
+- Torn API v2 does not expose item-by-item inventory. Inventory is value-only. Bazaar is deliberately excluded from the report and leaks; Kami does not use it.
 - `company/news` only returns recent fund moves. Company net per day is `(funds delta + withdrawals - deposits) / days` inside the snapshot window, so gaps longer than the news retention undercount withdrawals. Keep runs weekly.
+- `report.mjs` re-derives every snapshot from its stored `raw` payload, so a rule change in `lib.mjs` applies to history too.
 - Leak list shows at most 7 bullets; the rest are folded into one "Plus N smaller" line. Leak order is fixed by payoff in `lib.mjs`, not by amount.
 
 ## Environment
