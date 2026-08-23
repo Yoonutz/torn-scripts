@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn OC Best-Fit Role Recommender
 // @namespace    Torn.OC-Best-Fit
-// @version      0.92.0
+// @version      1.1.0
 // @description  Recommends the best Organized Crime role to join, ranking all available faction OCs by a blended success score (your exact API CPR discounted by your faction's real historical success rate). Color-coded green/yellow/red.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -63,7 +63,7 @@
   const factionAccess = () => GM_getValue(FACACC_STORE, true);
   const SCORE_CACHE = "oc_bestfit_scorecache";
   const POS_STORE = "oc_bestfit_panelpos";
-  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.92.0";
+  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "1.1.0";
   const META_STORE = "oc_bestfit_meta";
   const DATAVER_STORE = "oc_bestfit_dataver";
   const DATA_VERSION = 4;
