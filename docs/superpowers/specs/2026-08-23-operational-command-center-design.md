@@ -51,8 +51,9 @@ available behind a "Show exact script output" toggle, because free models someti
 - Worker bundles `lib.mjs` from the skill folder (one source of truth), pulls the nine Torn
   endpoints, stores snapshots in KV (`ledger:<date>` plus `ledger:index`), reuses a snapshot
   younger than 10 minutes, and renders with `compare` + `render`.
-- Secrets on the Worker only: `TORN_API_KEY`, `OPENROUTER_API_KEY`, `OCC_TOKEN`. The script sends
-  `OCC_TOKEN` as a bearer; it is pasted once in Setup next to the OpenRouter key.
+- No Worker secrets (0.4.1): the caller sends their own Torn API key as the credential; the
+  Worker uses it for the Torn calls, never stores it, and keeps snapshots under a hash of the key.
+  The key is pasted once in Setup as "Torn API token"; Torn PDA fills it in automatically.
 - If the model answers without calling the tool, the script runs the tool itself and asks once
   more; if the model still gives nothing, the raw report is shown.
 - Worker history is separate from the desktop weekly run; both use identical logic.

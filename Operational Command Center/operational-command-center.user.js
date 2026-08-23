@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.4.0
+// @version      0.4.1
 // @description  One floating dashboard inside Torn. Each sidebar button hands its skill file to a free OpenRouter model; the model runs the skill's script on a private Cloudflare runner and delivers the result in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -16,12 +16,13 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.4.0';
+  const VERSION = '0.4.1';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
   const KEY_ANS = 'occ.ans.';
-  const KEY_RUNNER = 'occ.runner_token';
+  const KEY_TORN = 'occ.torn_key';
+  const PDA_KEY = '###' + 'PDA-APIKEY' + '###';
   const RUNNER = 'https://occ-runner.yoonutz.workers.dev';
   const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
   const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -297,13 +298,19 @@
     throw new Error('Free models busy, try again in a minute.\n' + errors.join('\n'));
   }
 
+  function tornKey() {
+    const k = store.get(KEY_TORN, '');
+    if (k) return k;
+    return PDA_KEY.indexOf('PDA-APIKEY') === -1 ? PDA_KEY : '';
+  }
+
   async function runTool(s, args) {
-    const token = store.get(KEY_RUNNER, '');
-    if (!token) throw new Error('No runner token. Open Setup (gear) and paste it.');
+    const token = tornKey();
+    if (!token) throw new Error('No Torn API token. Open Setup (gear) and paste it.');
     const url = RUNNER + s.tool.path + (args && args.force ? '&force=1' : '');
-    const r = await http({ url, headers: { Authorization: 'Bearer ' + token } });
+    const r = await http({ url, headers: { Authorization: 'ApiKey ' + token } });
     const json = parseJson(r.text);
-    if (r.status === 401) throw new Error('Runner rejected the token (401).');
+    if (r.status === 401) throw new Error(json.error || 'Torn rejected the API token (401).');
     if (r.status < 200 || r.status >= 300 || json.error) throw new Error('Runner: ' + (json.error || 'HTTP ' + r.status));
     return json;
   }
@@ -428,8 +435,8 @@
       showSettings('Paste an OpenRouter key first, then press ' + s.label + ' again.');
       return;
     }
-    if (s.tool && !store.get(KEY_RUNNER, '')) {
-      showSettings('Paste the runner token first, then press ' + s.label + ' again.');
+    if (s.tool && !tornKey()) {
+      showSettings('Paste your Torn API token first, then press ' + s.label + ' again.');
       return;
     }
     if (inflight[id]) return;
@@ -497,7 +504,7 @@
     keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in this browser only.', empty: 'No key yet. Free models only; the key never leaves this browser.' });
     wrap.appendChild(c1);
     const c2 = el('div', 'occ-card');
-    keyField(c2, { key: KEY_RUNNER, title: 'Runner token', placeholder: 'token from the runner setup', saved: 'Token saved in this browser only.', empty: 'No token yet. The runner executes skill scripts with live data; only this token can call it.' });
+    keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in this browser only; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
     wrap.appendChild(c2);
     const c3 = el('div', 'occ-card');
     c3.appendChild(el('h3', '', 'Answers'));
@@ -511,7 +518,7 @@
     wrap.appendChild(c3);
     const info = el('div', 'occ-card');
     info.appendChild(el('h3', '', 'How it works'));
-    info.appendChild(el('div', 'occ-muted', 'A button fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill scripts with live Torn data, then the model delivers the result here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '.'));
+    info.appendChild(el('div', 'occ-muted', 'A button fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill scripts with your Torn API token, then the model delivers the result here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '.'));
     wrap.appendChild(info);
     show(wrap);
   }
