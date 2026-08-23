@@ -6,7 +6,7 @@
 //   ctx.db       { index(), get(name), put(name, value) } scoped to this skill and key
 //   ctx.force    true when the caller asked to re-collect
 // Must stay pure browser-grade JavaScript: no fs, no Node modules, only fetch.
-import { deriveSnapshot, compare, render, pickBaseline } from "./lib.mjs";
+import { deriveSnapshot, compare, render, pickBaseline, fmtMoney } from "./lib.mjs";
 
 const REUSE_MS = 10 * 60 * 1000;
 
@@ -69,7 +69,12 @@ export const skill = {
     const baseline = pickBaseline(snapshots, cur);
     const history = snapshots.filter((s) => s.taken_at <= cur.taken_at && (!baseline || s.taken_at >= baseline.taken_at));
     const report = render(compare(baseline, cur), history);
-    return { date: cur.date, baseline: baseline ? baseline.date : null, snapshots: snapshots.length, reused, report };
+    const stats = [
+      { k: "Networth", v: fmtMoney(cur.networth.total) },
+      { k: "Bank /day", v: fmtMoney(cur.bank.per_day), hot: true },
+      { k: "Company /day", v: fmtMoney(Math.round(cur.company.weekly_income / 7)) },
+    ];
+    return { date: cur.date, baseline: baseline ? baseline.date : null, snapshots: snapshots.length, reused, report, stats };
   },
 };
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.5.0
+// @version      0.6.0
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.5.0';
+  const VERSION = '0.6.0';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -55,65 +55,100 @@
   };
 
   const CSS = `
-    .occ-launch{position:fixed;right:16px;bottom:88px;z-index:99990;width:52px;height:52px;border-radius:50%;border:1px solid #3c3c3c;background:#1f1f1f;color:#e6e6e6;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.55);font:600 11px/1 Arial,sans-serif;letter-spacing:.5px;-webkit-tap-highlight-color:transparent;user-select:none}
+    #occ-root,#occ-root *{box-sizing:border-box}
+    :where(#occ-root) button{font-family:Verdana,Arial,sans-serif;line-height:1.2;margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+    :where(#occ-root) button:focus-visible{box-shadow:0 0 0 2px rgba(242,193,78,.5)}
+    :where(#occ-root) p,:where(#occ-root) ul,:where(#occ-root) ol,:where(#occ-root) h3,:where(#occ-root) pre{margin:0;padding:0;font-family:inherit}
+    .occ-launch{position:fixed;right:16px;bottom:88px;z-index:99990;width:52px;height:52px;border-radius:50%;border:1px solid #3a3a3a;background:#1f1f1f;color:#f2c14e;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.55);user-select:none}
     .occ-launch.occ-hide{display:none}
     .occ-launch:active{transform:scale(.95)}
-    .occ-inline{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:6px;padding:0;border:0;border-radius:4px;background:transparent;color:#7cb342;cursor:pointer;vertical-align:middle;-webkit-tap-highlight-color:transparent}
+    .occ-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .occ-inline{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:6px;border-radius:4px;background:transparent;color:#f2c14e;vertical-align:middle}
     .occ-inline svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
     .occ-inline:active{transform:scale(.9)}
-    .occ-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .occ-win{position:fixed;inset:0;z-index:99991;display:none;grid-template-rows:48px 1fr;grid-template-columns:56px 1fr;grid-template-areas:"head head" "side main";background:#181818;color:#e6e6e6;font:14px/1.4 Arial,sans-serif;overflow:hidden;text-align:left}
+    .occ-win{position:fixed;inset:0;z-index:99991;display:none;grid-template-rows:44px auto 1fr 54px;grid-template-areas:"head" "stats" "main" "tabs";background:#191919;color:#d9d9d9;font:13px/1.5 Verdana,Arial,sans-serif;overflow:hidden;text-align:left;color-scheme:dark}
     .occ-win.occ-on{display:grid}
-    .occ-head{grid-area:head;display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;background:#222;border-bottom:1px solid #333}
-    .occ-title{font-weight:700;font-size:15px;white-space:nowrap}
-    .occ-ver{font-size:11px;color:#8a8a8a}
-    .occ-sub{flex:1;font-size:12px;color:#9fd37c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
-    .occ-x{width:36px;height:36px;border-radius:8px;border:1px solid #3c3c3c;background:#2a2a2a;color:#e6e6e6;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;-webkit-tap-highlight-color:transparent}
-    .occ-x:active{background:#383838}
-    .occ-side{grid-area:side;display:flex;flex-direction:column;gap:6px;padding:8px 5px;background:#202020;border-right:1px solid #333;overflow:hidden auto;box-sizing:border-box}
-    .occ-btn{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid #3c3c3c;background:#2a2a2a;color:#bdbdbd;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-size:9px;letter-spacing:.3px;text-transform:uppercase;-webkit-tap-highlight-color:transparent;user-select:none}
-    .occ-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .occ-btn.occ-act{background:#2f4a1f;border-color:#5f9a3a;color:#d6f2c2}
-    .occ-btn.occ-gear{margin-top:auto}
-    .occ-btn:active{transform:scale(.95)}
-    .occ-main{grid-area:main;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
-    .occ-main::-webkit-scrollbar,.occ-side::-webkit-scrollbar{width:6px}
-    .occ-main::-webkit-scrollbar-thumb,.occ-side::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
-    .occ-card{background:#222;border:1px solid #333;border-radius:10px;padding:12px;margin-bottom:10px}
-    .occ-card h3{margin:0 0 8px;font-size:13px;color:#9fd37c;text-transform:uppercase;letter-spacing:.5px}
-    .occ-muted{color:#8a8a8a;font-size:12px}
-    .occ-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8a8a8a;text-align:center;gap:6px}
-    .occ-err{background:#3a1f1f;border-color:#7a3a3a;color:#f2c2c2}
-    .occ-spin{display:inline-block;width:14px;height:14px;border:2px solid #555;border-top-color:#9fd37c;border-radius:50%;animation:occspin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+    .occ-head{grid-area:head;display:flex;align-items:center;gap:8px;padding:0 8px 0 14px;border-bottom:1px solid #2f2f2f;min-width:0}
+    .occ-title{font-weight:700;font-size:14px;color:#fff;white-space:nowrap}
+    .occ-ver{font:10px Consolas,Menlo,monospace;color:#6e6e6e}
+    .occ-sub{flex:1;min-width:0;font:11px Consolas,Menlo,monospace;color:#f2c14e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+    .occ-x{width:32px;height:32px;flex:none;border:1px solid #3a3a3a;border-radius:6px;background:#1f1f1f;color:#d9d9d9;display:flex;align-items:center;justify-content:center;font-size:16px}
+    .occ-x:active{background:#2a2a2a}
+    .occ-stats{grid-area:stats;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 12px 4px;min-width:0}
+    .occ-stats:empty{display:none;padding:0}
+    .occ-stat{background:#1f1f1f;border:1px solid #2f2f2f;border-radius:8px;padding:7px 9px;min-width:0}
+    .occ-stat .k{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#8c8c8c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .occ-stat .v{font:700 15px/1.3 Consolas,Menlo,monospace;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .occ-stat .v small{font-size:9px;color:#8c8c8c;font-weight:400}
+    .occ-stat.occ-hot{border-color:#4c5f3a}
+    .occ-stat.occ-hot .v{color:#b9e39c}
+    .occ-main{grid-area:main;overflow:hidden auto;padding:10px 12px 70px;min-width:0;position:relative;-webkit-overflow-scrolling:touch;overflow-wrap:anywhere;scrollbar-width:thin;scrollbar-color:#3a3a3a transparent}
+    .occ-main::-webkit-scrollbar{width:8px}
+    .occ-main::-webkit-scrollbar-track{background:transparent}
+    .occ-main::-webkit-scrollbar-thumb{background:#333;border-radius:4px;border:2px solid #191919}
+    .occ-main::-webkit-scrollbar-thumb:hover{background:#454545}
+    .occ-main>*{max-width:100%}
+    .occ-meta{display:flex;align-items:center;gap:8px;margin:2px 0 10px;font:10.5px Consolas,Menlo,monospace;color:#8c8c8c;min-width:0}
+    .occ-meta .occ-m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .occ-meta .occ-dot{color:#7fbf5f}
+    .occ-fab{position:fixed;z-index:99992;right:14px;bottom:68px;width:42px;height:42px;border-radius:50%;background:#f2c14e;color:#191919;display:none;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+    .occ-win.occ-on ~ .occ-fab{display:flex}
+    .occ-fab:active{transform:scale(.93)}
+    .occ-fab.occ-busy{opacity:.45;pointer-events:none}
+    .occ-fab svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+    .occ-acc{border:1px solid #2f2f2f;border-radius:8px;margin-bottom:9px;overflow:hidden;background:#1c1c1c}
+    .occ-acc-bar{width:100%;display:flex;align-items:center;gap:8px;padding:9px 11px;background:#1f1f1f;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#f2c14e;text-align:left}
+    .occ-acc-bar .occ-n{margin-left:auto;flex:none;background:#2a2a2a;color:#d9d9d9;border-radius:999px;font:600 9.5px Consolas,monospace;padding:2px 8px;letter-spacing:0}
+    .occ-acc-bar .occ-car{flex:none;color:#6e6e6e;font-size:9px;transition:transform .15s}
+    .occ-acc.occ-shut .occ-acc-bar .occ-car{transform:rotate(-90deg)}
+    .occ-acc-body{padding:9px 11px;border-top:1px solid #2a2a2a}
+    .occ-acc.occ-shut .occ-acc-body{display:none}
+    .occ-card{background:#1f1f1f;border:1px solid #2f2f2f;border-radius:8px;padding:11px;margin-bottom:9px;min-width:0;max-width:100%}
+    .occ-card h3{margin:0 0 7px;font-size:11px;color:#f2c14e;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+    .occ-muted{color:#8c8c8c;font-size:11.5px}
+    .occ-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8c8c8c;text-align:center;gap:6px}
+    .occ-err{background:#2a1c1c;border-color:#5a3030;color:#e8b4b4}
+    .occ-err h3{color:#e05f5f}
+    .occ-spin{display:inline-block;width:13px;height:13px;border:2px solid #3a3a3a;border-top-color:#f2c14e;border-radius:50%;animation:occspin .8s linear infinite;vertical-align:-2px;margin-right:8px}
     @keyframes occspin{to{transform:rotate(360deg)}}
-    .occ-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-    .occ-bar .occ-muted{flex:1;min-width:120px}
-    .occ-act-btn{height:32px;padding:0 12px;border-radius:8px;border:1px solid #5f9a3a;background:#2f4a1f;color:#d6f2c2;font:600 12px Arial,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent}
-    .occ-act-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .occ-act-btn.occ-alt{border-color:#3c3c3c;background:#2a2a2a;color:#bdbdbd}
+    .occ-bar{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap;min-width:0}
+    .occ-act-btn{height:30px;padding:0 12px;border-radius:6px;flex:none;white-space:nowrap;border:1px solid #f2c14e;background:transparent;color:#f2c14e;font:600 11px Verdana,Arial,sans-serif;display:inline-flex;align-items:center;gap:6px}
+    .occ-act-btn.occ-alt{border-color:#3a3a3a;color:#a8a8a8}
     .occ-act-btn:active{transform:scale(.97)}
-    .occ-field{display:block;width:100%;box-sizing:border-box;height:38px;padding:0 10px;margin:6px 0 10px;border:1px solid #3c3c3c;border-radius:8px;background:#151515;color:#e6e6e6;font:13px/1 monospace;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
-    .occ-field:focus{border-color:#5f9a3a;box-shadow:0 0 0 2px rgba(95,154,58,.25)}
-    .occ-md{font-size:13px;line-height:1.5;word-break:break-word}
-    .occ-md h1,.occ-md h2,.occ-md h3,.occ-md h4{margin:12px 0 6px;color:#9fd37c;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
-    .occ-md h1{font-size:15px}
-    .occ-md p{margin:6px 0}
-    .occ-md ul,.occ-md ol{margin:6px 0;padding-left:20px}
-    .occ-md li{margin:2px 0}
-    .occ-md code{background:#151515;border:1px solid #333;border-radius:4px;padding:1px 4px;font:12px monospace}
-    .occ-md pre{background:#151515;border:1px solid #333;border-radius:8px;padding:8px;overflow-x:auto;font:12px/1.4 monospace;white-space:pre}
-    .occ-md pre code{border:0;padding:0;background:transparent}
-    .occ-md strong{color:#fff}
-    .occ-md hr{border:0;border-top:1px solid #333;margin:10px 0}
+    .occ-act-btn svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .occ-field{display:block;width:100%;height:36px;padding:0 10px;margin:7px 0 2px;border:1px solid #3a3a3a;border-radius:6px;background:#161616;color:#d9d9d9;font:12px/1 Consolas,Menlo,monospace;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
+    .occ-field:focus{border-color:#f2c14e;box-shadow:0 0 0 2px rgba(242,193,78,.2)}
+    .occ-tabs{grid-area:tabs;display:flex;border-top:1px solid #2f2f2f;background:#161616}
+    .occ-tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 9px;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#8c8c8c;user-select:none}
+    .occ-tab svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .occ-tab span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .occ-tab.occ-act{color:#f2c14e}
+    .occ-tab:active{transform:scale(.96)}
+    .occ-md{font-size:12.5px;line-height:1.55;overflow-wrap:anywhere;word-break:break-word;min-width:0}
+    .occ-md>:first-child{margin-top:0}
+    .occ-md>:last-child{margin-bottom:0}
+    .occ-md h1,.occ-md h2,.occ-md h3,.occ-md h4{margin:12px 0 5px;color:#f2c14e;font-size:11px;font-weight:700;line-height:1.3;text-transform:uppercase;letter-spacing:.08em}
+    .occ-md p{margin:7px 0}
+    .occ-md ul{margin:7px 0;padding-left:18px;list-style:disc outside}
+    .occ-md ol{margin:7px 0;padding-left:20px;list-style:decimal outside}
+    .occ-md li{display:list-item;margin:4px 0;padding-left:2px}
+    .occ-md li::marker{color:#f2c14e}
+    .occ-md code{background:#161616;border:1px solid #2a2a2a;border-radius:4px;padding:1px 4px;font:11.5px/1.4 Consolas,Menlo,monospace;color:#e6d9b8;overflow-wrap:anywhere}
+    .occ-md pre{background:#161616;border:1px solid #2a2a2a;border-radius:6px;padding:8px 10px;margin:7px 0;max-width:100%;overflow:hidden;font:11.5px/1.55 Consolas,Menlo,monospace;color:#e6d9b8;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
+    @media (max-width:420px){.occ-md pre{font-size:10.5px}}
+    .occ-md pre code{border:0;padding:0;background:transparent;color:inherit}
+    .occ-md strong{color:#fff;font-weight:700}
+    .occ-md em{color:#bdbdbd}
+    .occ-md hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
     @media (min-width:768px){
       .occ-launch{bottom:24px;right:24px}
-      .occ-win{inset:auto 24px 88px auto;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #3c3c3c;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+      .occ-win{inset:auto 24px 88px auto;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #2f2f2f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+      .occ-fab{right:38px;bottom:158px}
     }
   `;
 
   const ICON = {
     dash: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
-    ledger: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
     gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
     refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
   };
@@ -216,6 +251,32 @@
     return out.join('');
   }
 
+  function mdSections(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    const sections = [];
+    let title = null;
+    let buf = [];
+    let fence = false;
+    const push = () => {
+      const body = buf.join('\n').trim();
+      if (body || title) sections.push({ title, body });
+      buf = [];
+    };
+    for (const line of lines) {
+      if (/^```/.test(line)) fence = !fence;
+      const m = !fence && line.match(/^#{1,4}\s+(.*)$/);
+      const b = !fence && line.match(/^(\*\*[^*].*\*\*|[A-Z][A-Za-z0-9 ./-]{2,40}):?\s*$/) && /:$/.test(line.trim());
+      if (m || b) {
+        push();
+        title = m ? m[1] : line.trim().replace(/^\*\*|\*\*$/g, '').replace(/:$/, '');
+        continue;
+      }
+      buf.push(line);
+    }
+    push();
+    return sections;
+  }
+
   function http(opt) {
     const method = opt.method || 'GET';
     const headers = opt.headers || {};
@@ -272,7 +333,7 @@
 
   async function chat(messages, tools) {
     const key = store.get(KEY_OR, '');
-    if (!key) throw new Error('No OpenRouter key. Open Setup (gear) and paste one.');
+    if (!key) throw new Error('No OpenRouter key. Open Setup and paste one.');
     const errors = [];
     for (let i = 0; i < ATTEMPTS; i++) {
       try {
@@ -307,7 +368,7 @@
 
   async function runTool(s, args) {
     const token = tornKey();
-    if (!token) throw new Error('No Torn API token. Open Setup (gear) and paste it.');
+    if (!token) throw new Error('No Torn API token. Open Setup and paste it.');
     const url = RUNNER + s.tool.path + (args && args.force ? 'force=1' : '');
     const r = await http({ url, headers: { Authorization: 'ApiKey ' + token } });
     const json = parseJson(r.text);
@@ -358,7 +419,7 @@
     return {
       id: r.id,
       label: r.label,
-      icon: r.icon || '<span style="font:700 16px Arial">' + esc(String(r.label || '?').charAt(0)) + '</span>',
+      icon: r.icon || '<span style="font:700 15px Verdana">' + esc(String(r.label || '?').charAt(0)) + '</span>',
       md: r.md,
       tool: { name: 'run_script', path: '/run/' + r.id + '?', description: r.description || "Runs this skill's script on the runner and returns its printed output." },
     };
@@ -371,25 +432,38 @@
       if (r.status !== 200 || !Array.isArray(json.skills)) return false;
       store.set(KEY_SKILLS, json.skills);
       skills = json.skills.map(fromRunner);
-      renderSidebar();
+      renderTabs();
       return true;
     } catch (e) {
       return false;
     }
   }
 
-  let win, main, sub, launch, side;
+  let win, main, sub, launch, tabs, statsRow, fab;
   const btns = {};
   const inflight = {};
 
   function setActive(id) {
     Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
+    fab.style.display = id && id !== 'settings' && win.classList.contains('occ-on') ? 'flex' : 'none';
   }
 
   function show(node) {
     main.innerHTML = '';
     main.appendChild(node);
     main.scrollTop = 0;
+  }
+
+  function setStats(list) {
+    statsRow.innerHTML = '';
+    if (!Array.isArray(list) || !list.length) return;
+    statsRow.style.gridTemplateColumns = 'repeat(' + Math.min(list.length, 3) + ',1fr)';
+    list.slice(0, 3).forEach((x) => {
+      const c = el('div', 'occ-stat' + (x.hot ? ' occ-hot' : ''));
+      c.appendChild(el('div', 'k', esc(x.k)));
+      c.appendChild(el('div', 'v', esc(x.v) + (x.unit ? '<small>' + esc(x.unit) + '</small>' : '')));
+      statsRow.appendChild(c);
+    });
   }
 
   function errCard(title, msg) {
@@ -399,35 +473,39 @@
     return c;
   }
 
+  function accordion(title, node, opts) {
+    const acc = el('div', 'occ-acc' + (opts && opts.shut ? ' occ-shut' : ''));
+    const bar = el('button', 'occ-acc-bar');
+    bar.type = 'button';
+    bar.innerHTML = esc(title) + (opts && opts.badge ? '<span class="occ-n">' + esc(opts.badge) + '</span>' : '<span class="occ-n" style="display:none"></span>') + '<span class="occ-car">▼</span>';
+    bar.addEventListener('click', () => acc.classList.toggle('occ-shut'));
+    const body = el('div', 'occ-acc-body');
+    body.appendChild(node);
+    acc.appendChild(bar);
+    acc.appendChild(body);
+    return acc;
+  }
+
   function answerView(s, a) {
     const wrap = el('div');
-    const bar = el('div', 'occ-bar');
     const when = new Date(a.at);
-    bar.appendChild(el('span', 'occ-muted', esc(a.model) + ' - ' + when.toLocaleDateString() + ' ' + when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
-    const again = el('button', 'occ-act-btn', ICON.refresh + 'Run again');
-    again.type = 'button';
-    again.addEventListener('click', () => runSkill(s.id, true));
-    bar.appendChild(again);
-    wrap.appendChild(bar);
-    const card = el('div', 'occ-card');
-    card.appendChild(el('div', 'occ-md', mdToHtml(a.text)));
-    wrap.appendChild(card);
+    const shortModel = String(a.model || '').split('/').pop().replace(/:free$/, '');
+    const today = new Date().toDateString() === when.toDateString();
+    const stamp = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (today ? '' : ', ' + when.toLocaleDateString());
+    const meta = el('div', 'occ-meta', '<span class="occ-dot">●</span><span class="occ-m">' + esc(shortModel) + ' · ' + esc(stamp) + '</span>');
+    meta.title = a.model + ' - ' + when.toLocaleString();
+    wrap.appendChild(meta);
+    setStats(a.stats);
+    const sections = mdSections(a.text);
+    if (!sections.length) sections.push({ title: null, body: a.text });
+    sections.forEach((sec, i) => {
+      const node = el('div', 'occ-md', mdToHtml(sec.body));
+      const bullets = node.querySelectorAll('li').length;
+      const title = sec.title || (i === 0 ? 'Summary' : 'More');
+      wrap.appendChild(accordion(title, node, { badge: bullets > 2 ? String(bullets) : null }));
+    });
     if (a.report && a.report.trim() !== a.text.trim()) {
-      const rawCard = el('div', 'occ-card');
-      const tog = el('button', 'occ-act-btn occ-alt', 'Show exact script output');
-      tog.type = 'button';
-      const body = el('div', 'occ-md');
-      body.style.display = 'none';
-      body.style.marginTop = '10px';
-      body.appendChild(el('div', '', mdToHtml(a.report)));
-      tog.addEventListener('click', () => {
-        const on = body.style.display === 'none';
-        body.style.display = on ? '' : 'none';
-        tog.textContent = on ? 'Hide exact script output' : 'Show exact script output';
-      });
-      rawCard.appendChild(tog);
-      rawCard.appendChild(body);
-      wrap.appendChild(rawCard);
+      wrap.appendChild(accordion('Exact script output', el('div', 'occ-md', mdToHtml(a.report)), { shut: true }));
     }
     return wrap;
   }
@@ -438,7 +516,7 @@
     store.set(KEY_SKILL, id);
     main.dataset.ran = '1';
     setActive(id);
-    sub.textContent = s.label;
+    sub.textContent = s.label.toLowerCase();
     const cached = store.get(KEY_ANS + id, null);
     if (cached && !force) {
       show(answerView(s, cached));
@@ -454,6 +532,8 @@
     }
     if (inflight[id]) return;
     inflight[id] = true;
+    fab.classList.add('occ-busy');
+    setStats(null);
     const status = el('div', 'occ-card', '<span class="occ-spin"></span>Fetching the skill file...');
     show(status);
     const onStatus = (t) => {
@@ -462,13 +542,14 @@
     try {
       const md = await fetchText(s.md);
       const a = await agent(s, md, onStatus);
-      const rec = { text: a.text, model: a.model, at: Date.now(), report: a.raw ? a.raw.report : null, date: a.raw ? a.raw.date : null };
+      const rec = { text: a.text, model: a.model, at: Date.now(), report: a.raw ? a.raw.report : null, date: a.raw ? a.raw.date : null, stats: a.raw ? a.raw.stats : null };
       store.set(KEY_ANS + id, rec);
       if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
     } catch (e) {
       if (store.get(KEY_SKILL, null) === id) show(errCard(s.label + ' failed', String((e && e.message) || e)));
     } finally {
       inflight[id] = false;
+      fab.classList.remove('occ-busy');
     }
   }
 
@@ -510,7 +591,8 @@
     store.set(KEY_SKILL, 'settings');
     main.dataset.ran = '1';
     setActive('settings');
-    sub.textContent = 'Setup';
+    sub.textContent = 'setup';
+    setStats(null);
     const wrap = el('div');
     if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
     const c1 = el('div', 'occ-card');
@@ -521,38 +603,40 @@
     wrap.appendChild(c2);
     const c3 = el('div', 'occ-card');
     c3.appendChild(el('h3', '', 'Answers'));
+    const row = el('div', 'occ-bar');
     const wipe = el('button', 'occ-act-btn occ-alt', 'Clear cached answers');
     wipe.type = 'button';
     wipe.addEventListener('click', () => {
       skills.forEach((s) => store.del(KEY_ANS + s.id));
       wipe.textContent = 'Cleared';
     });
-    c3.appendChild(wipe);
+    row.appendChild(wipe);
+    c3.appendChild(row);
     wrap.appendChild(c3);
     const info = el('div', 'occ-card');
     info.appendChild(el('h3', '', 'How it works'));
-    info.appendChild(el('div', 'occ-muted', 'Buttons are the skills in the repo, listed by the runner. A button fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill script with your Torn API token, then the model delivers the result here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '.'));
+    info.appendChild(el('div', 'occ-muted', 'Tabs are the skills in the repo, listed by the runner. A tab fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill script with your Torn API token, then delivers the result here. Router: ' + MODEL + '.'));
     wrap.appendChild(info);
     show(wrap);
   }
 
-  function renderSidebar() {
-    if (!side) return;
-    side.innerHTML = '';
+  function renderTabs() {
+    if (!tabs) return;
+    tabs.innerHTML = '';
     Object.keys(btns).forEach((k) => delete btns[k]);
     skills.forEach((s) => {
-      const b = el('button', 'occ-btn', s.icon + '<span>' + esc(s.label) + '</span>');
+      const b = el('button', 'occ-tab', s.icon + '<span>' + esc(s.label) + '</span>');
       b.type = 'button';
       b.title = s.label;
       b.addEventListener('click', () => runSkill(s.id));
       btns[s.id] = b;
-      side.appendChild(b);
+      tabs.appendChild(b);
     });
-    const gear = el('button', 'occ-btn occ-gear', ICON.gear + '<span>Setup</span>');
+    const gear = el('button', 'occ-tab', ICON.gear + '<span>Setup</span>');
     gear.type = 'button';
     gear.addEventListener('click', () => showSettings());
     btns.settings = gear;
-    side.appendChild(gear);
+    tabs.appendChild(gear);
     const active = store.get(KEY_SKILL, null);
     if (active && btns[active] && main && main.dataset.ran) btns[active].classList.add('occ-act');
   }
@@ -560,10 +644,11 @@
   function setOpen(on) {
     win.classList.toggle('occ-on', on);
     store.set(KEY_OPEN, on);
+    const cur = store.get(KEY_SKILL, null);
+    fab.style.display = on && cur && cur !== 'settings' ? 'flex' : 'none';
     if (on && !main.dataset.ran) {
-      const last = store.get(KEY_SKILL, null);
-      if (last === 'settings') showSettings();
-      else if (last && skills.some((s) => s.id === last)) runSkill(last);
+      if (cur === 'settings') showSettings();
+      else if (cur && skills.some((s) => s.id === cur)) runSkill(cur);
     }
   }
 
@@ -631,15 +716,28 @@
     head.appendChild(x);
     win.appendChild(head);
 
-    side = el('div', 'occ-side');
-    renderSidebar();
-    win.appendChild(side);
+    statsRow = el('div', 'occ-stats');
+    win.appendChild(statsRow);
 
     main = el('div', 'occ-main');
-    main.appendChild(el('div', 'occ-empty', '<div>Pick a skill on the left.</div><div class="occ-muted">' + (skills.length ? skills.length + ' available' : 'loading skills...') + '</div>'));
+    main.appendChild(el('div', 'occ-empty', '<div>Pick a skill below.</div><div class="occ-muted">' + (skills.length ? skills.length + ' available' : 'loading skills...') + '</div>'));
     win.appendChild(main);
+
+    tabs = el('div', 'occ-tabs');
+    win.appendChild(tabs);
     root.appendChild(win);
 
+    fab = el('button', 'occ-fab', ICON.refresh);
+    fab.type = 'button';
+    fab.title = 'Run again with fresh data';
+    fab.style.display = 'none';
+    fab.addEventListener('click', () => {
+      const cur = store.get(KEY_SKILL, null);
+      if (cur && cur !== 'settings') runSkill(cur, true);
+    });
+    root.appendChild(fab);
+
+    renderTabs();
     document.body.appendChild(root);
     if (store.get(KEY_OPEN, false)) setOpen(true);
     watchName();
