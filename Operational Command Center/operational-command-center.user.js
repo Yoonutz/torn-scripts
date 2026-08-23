@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.6.0
+// @version      0.6.1
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -504,9 +504,6 @@
       const title = sec.title || (i === 0 ? 'Summary' : 'More');
       wrap.appendChild(accordion(title, node, { badge: bullets > 2 ? String(bullets) : null }));
     });
-    if (a.report && a.report.trim() !== a.text.trim()) {
-      wrap.appendChild(accordion('Exact script output', el('div', 'occ-md', mdToHtml(a.report)), { shut: true }));
-    }
     return wrap;
   }
 
@@ -542,7 +539,7 @@
     try {
       const md = await fetchText(s.md);
       const a = await agent(s, md, onStatus);
-      const rec = { text: a.text, model: a.model, at: Date.now(), report: a.raw ? a.raw.report : null, date: a.raw ? a.raw.date : null, stats: a.raw ? a.raw.stats : null };
+      const rec = { text: a.text, model: a.model, at: Date.now(), stats: a.raw ? a.raw.stats : null };
       store.set(KEY_ANS + id, rec);
       if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
     } catch (e) {

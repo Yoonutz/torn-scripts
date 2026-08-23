@@ -78,3 +78,9 @@ extra change.
   `CLOUDFLARE_API_TOKEN`. Workers Builds was the first choice but its repo link is dashboard-only;
   the Action gives the same result without a click.
 - Net effect: new skill = SKILL.md + runner.mjs + push. Edited skill = push.
+
+## Update 0.6.1 - raw output fold removed (2026-08-24)
+
+Kami's call: the "Exact script output" fold duplicated the model's answer and kept a second copy
+of the report in every cached answer. The fold and the stored copy are gone; the model's sections
+are the only rendering. The raw report still comes back from `/run/<id>` for anyone who needs it.
