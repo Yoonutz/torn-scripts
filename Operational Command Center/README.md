@@ -4,6 +4,10 @@ How a skill in this repo becomes a working button in the Torn UI, with zero
 manual deploy steps. Design history:
 [the design spec](../docs/superpowers/specs/2026-08-23-operational-command-center-design.md).
 
+Where the ledger skill appears below it is a worked example, never the
+template. The contract is only: SKILL.md, the `skill` export shape, and the
+`ctx` interface. Everything else is per-skill freedom.
+
 ## The pipeline at a glance
 
 ```
@@ -32,10 +36,11 @@ One extra E-layer script makes the skill a Command Center button:
 `scripts/runner.mjs` exporting
 
 ```js
+// Values below are placeholders - pick your own. Only the SHAPE is the contract.
 export const skill = {
-  id: "ledger", // route: /run/<id>
-  label: "Ledger", // button text
-  description: "...", // tool description the model sees
+  id: "<skill-id>", // route: /run/<skill-id>; short, lowercase, unique
+  label: "<Button text>", // shown on the tab bar
+  description: "...", // tool description the model sees; say what run() returns
   icon: "<svg .../>", // optional; letter badge otherwise
   async run(ctx) {
     // return { report, stats?, ...anything }
@@ -62,6 +67,10 @@ Rules:
 - Keep it CLI-capable too (guard with a `process.argv` check) so the skill
   still runs standalone; import env helpers dynamically so the Worker bundle
   stays clean.
+- What `run()` does inside is entirely the skill's business: any Torn
+  endpoints, any KV layout, any report shape. Nothing about the ledger skill
+  (snapshots, baselines, nine endpoints) is part of the contract - do not
+  copy its internals into an unrelated skill.
 
 ## 3. Push to main
 
@@ -84,9 +93,11 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
 - `GET /skills` - public list: id, label, description, icon, SKILL.md URL.
   The userscript builds its bottom tab bar from this on every open.
 - `GET /run/<id>` with header `Authorization: ApiKey <torn key>` - executes
-  `skill.run(ctx)`. The Torn key is the only credential; snapshots live in KV
-  under `<id>:<key-hash>:<name>` and a snapshot younger than 10 minutes is
-  reused unless `?force=1`.
+  `skill.run(ctx)`. The Torn key is the only credential. `ctx.db` writes land
+  in KV under `<id>:<key-hash>:<name>`, so skills never see each other's data
+  or another player's. Whether anything is cached or reused (the ledger reuses
+  a snapshot younger than 10 minutes) is each skill's own choice; `?force=1`
+  arrives as `ctx.force` for the skill to honor.
 
 ## 5. What happens on button press
 
@@ -107,9 +118,9 @@ is shown as-is.
 
 ## 6. Styling flows through
 
-Report style lives in the skill's own library (for the ledger: `lib.mjs`
-`render`). The Worker bundles that same file, so a style edit plus push
-changes the Torn UI output too. Caveat: body text passes through a free
+Report style lives in whatever module the skill renders its markdown with
+(the ledger keeps it in its `lib.mjs`). The Worker bundles the same files the
+CLI uses, so a style edit plus push changes the Torn UI output too. Caveat: body text passes through a free
 model, which can occasionally mangle a line; `stats` cards bypass the model
 and always carry 1:1.
 
