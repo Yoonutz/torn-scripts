@@ -1,21 +1,31 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.2.0
-// @description  One floating dashboard inside Torn. A sidebar of skill buttons, each one runs a tool and shows its result in the content pane. Mobile first, works in Torn PDA.
+// @version      0.3.0
+// @description  One floating dashboard inside Torn. A sidebar of skill buttons; each one sends its skill file and script to a free OpenRouter model and shows the answer in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
 // @grant        none
+// @connect      openrouter.ai
+// @connect      raw.githubusercontent.com
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const VERSION = '0.2.0';
+  const VERSION = '0.3.0';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
+  const KEY_OR = 'occ.or_key';
+  const KEY_ANS = 'occ.ans.';
+  const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
+  const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
+  const MODEL = 'openrouter/free';
+  const FALLBACK = ['z-ai/glm-5.2:free', 'cohere/north-mini-code:free', 'google/gemma-4-26b-a4b-it:free'];
+  const ATTEMPTS = 3;
+  const TIMEOUT_MS = 90000;
 
   const store = {
     get(k, d) {
@@ -31,6 +41,11 @@
         localStorage.setItem(k, JSON.stringify(v));
       } catch (e) {}
     },
+    del(k) {
+      try {
+        localStorage.removeItem(k);
+      } catch (e) {}
+    },
   };
 
   const CSS = `
@@ -41,7 +56,7 @@
     .occ-inline svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
     .occ-inline:active{transform:scale(.9)}
     .occ-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .occ-win{position:fixed;inset:0;z-index:99991;display:none;grid-template-rows:48px 1fr;grid-template-columns:56px 1fr;grid-template-areas:"head head" "side main";background:#181818;color:#e6e6e6;font:14px/1.4 Arial,sans-serif;overflow:hidden}
+    .occ-win{position:fixed;inset:0;z-index:99991;display:none;grid-template-rows:48px 1fr;grid-template-columns:56px 1fr;grid-template-areas:"head head" "side main";background:#181818;color:#e6e6e6;font:14px/1.4 Arial,sans-serif;overflow:hidden;text-align:left}
     .occ-win.occ-on{display:grid}
     .occ-head{grid-area:head;display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;background:#222;border-bottom:1px solid #333}
     .occ-title{font-weight:700;font-size:15px;white-space:nowrap}
@@ -50,27 +65,40 @@
     .occ-x{width:36px;height:36px;border-radius:8px;border:1px solid #3c3c3c;background:#2a2a2a;color:#e6e6e6;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;-webkit-tap-highlight-color:transparent}
     .occ-x:active{background:#383838}
     .occ-side{grid-area:side;display:flex;flex-direction:column;gap:6px;padding:8px 5px;background:#202020;border-right:1px solid #333;overflow:hidden auto;box-sizing:border-box}
-    .occ-btn{width:44px;height:44px;border-radius:10px;border:1px solid #3c3c3c;background:#2a2a2a;color:#bdbdbd;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-size:9px;letter-spacing:.3px;text-transform:uppercase;-webkit-tap-highlight-color:transparent;user-select:none}
+    .occ-btn{width:44px;height:44px;flex:none;border-radius:10px;border:1px solid #3c3c3c;background:#2a2a2a;color:#bdbdbd;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-size:9px;letter-spacing:.3px;text-transform:uppercase;-webkit-tap-highlight-color:transparent;user-select:none}
     .occ-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
     .occ-btn.occ-act{background:#2f4a1f;border-color:#5f9a3a;color:#d6f2c2}
+    .occ-btn.occ-gear{margin-top:auto}
     .occ-btn:active{transform:scale(.95)}
     .occ-main{grid-area:main;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
     .occ-main::-webkit-scrollbar,.occ-side::-webkit-scrollbar{width:6px}
     .occ-main::-webkit-scrollbar-thumb,.occ-side::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
     .occ-card{background:#222;border:1px solid #333;border-radius:10px;padding:12px;margin-bottom:10px}
     .occ-card h3{margin:0 0 8px;font-size:13px;color:#9fd37c;text-transform:uppercase;letter-spacing:.5px}
-    .occ-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px}
-    .occ-row .occ-l{width:96px;color:#bdbdbd;flex:none}
-    .occ-row .occ-b{flex:1;height:8px;background:#2e2e2e;border-radius:4px;overflow:hidden}
-    .occ-row .occ-b i{display:block;height:100%;background:#7cb342;border-radius:4px}
-    .occ-row .occ-v{width:84px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
-    .occ-list{margin:0;padding:0 0 0 18px}
-    .occ-list li{padding:2px 0}
     .occ-muted{color:#8a8a8a;font-size:12px}
     .occ-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8a8a8a;text-align:center;gap:6px}
     .occ-err{background:#3a1f1f;border-color:#7a3a3a;color:#f2c2c2}
     .occ-spin{display:inline-block;width:14px;height:14px;border:2px solid #555;border-top-color:#9fd37c;border-radius:50%;animation:occspin .8s linear infinite;vertical-align:-2px;margin-right:8px}
     @keyframes occspin{to{transform:rotate(360deg)}}
+    .occ-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+    .occ-bar .occ-muted{flex:1;min-width:120px}
+    .occ-act-btn{height:32px;padding:0 12px;border-radius:8px;border:1px solid #5f9a3a;background:#2f4a1f;color:#d6f2c2;font:600 12px Arial,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent}
+    .occ-act-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .occ-act-btn.occ-alt{border-color:#3c3c3c;background:#2a2a2a;color:#bdbdbd}
+    .occ-act-btn:active{transform:scale(.97)}
+    .occ-field{display:block;width:100%;box-sizing:border-box;height:38px;padding:0 10px;margin:6px 0 10px;border:1px solid #3c3c3c;border-radius:8px;background:#151515;color:#e6e6e6;font:13px/1 monospace;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
+    .occ-field:focus{border-color:#5f9a3a;box-shadow:0 0 0 2px rgba(95,154,58,.25)}
+    .occ-md{font-size:13px;line-height:1.5;word-break:break-word}
+    .occ-md h1,.occ-md h2,.occ-md h3,.occ-md h4{margin:12px 0 6px;color:#9fd37c;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+    .occ-md h1{font-size:15px}
+    .occ-md p{margin:6px 0}
+    .occ-md ul,.occ-md ol{margin:6px 0;padding-left:20px}
+    .occ-md li{margin:2px 0}
+    .occ-md code{background:#151515;border:1px solid #333;border-radius:4px;padding:1px 4px;font:12px monospace}
+    .occ-md pre{background:#151515;border:1px solid #333;border-radius:8px;padding:8px;overflow-x:auto;font:12px/1.4 monospace;white-space:pre}
+    .occ-md pre code{border:0;padding:0;background:transparent}
+    .occ-md strong{color:#fff}
+    .occ-md hr{border:0;border-top:1px solid #333;margin:10px 0}
     @media (min-width:768px){
       .occ-launch{bottom:24px;right:24px}
       .occ-win{inset:auto 24px 88px auto;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #3c3c3c;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
@@ -80,6 +108,8 @@
   const ICON = {
     dash: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
     ledger: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
+    gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
   };
 
   function el(tag, cls, html) {
@@ -89,80 +119,138 @@
     return n;
   }
 
-  function fmt(n) {
-    if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-    if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-    if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(0) + 'K';
-    return String(n);
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function barRow(label, value, max, suffix) {
-    const r = el('div', 'occ-row');
-    r.appendChild(el('span', 'occ-l', label));
-    const b = el('div', 'occ-b');
-    const f = el('i');
-    f.style.width = Math.max(2, Math.round((value / max) * 100)) + '%';
-    b.appendChild(f);
-    r.appendChild(b);
-    r.appendChild(el('span', 'occ-v', fmt(value) + (suffix || '')));
-    return r;
+  function inline(s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
   }
 
-  const ledgerMock = {
-    date: '2026-08-23',
-    income: [
-      ['Company', 2870000],
-      ['Bank', 3850000],
-    ],
-    networth: 14990000000,
-    inventory: 359980000,
-    stocks: { ready: 0, locked: 16, below: 401300000 },
-    leaks: [
-      'Bank matures in 2 days; reinvest same hour, idle day costs 3.85M.',
-      '1 company slot empty (11/12).',
-      '2 employees carrying inactivity penalty.',
-      '1 employee under 100 effectiveness.',
-      '401.30M in stocks below payout threshold (SYS, LOS).',
-      'Unpaid fees 4.93M.',
-      'Faction balance 345.96M earns nothing.',
-    ],
-    actions: ['Reinvest bank deposit on maturity day.', 'Fill empty company slot.'],
-  };
+  function mdToHtml(text) {
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    const out = [];
+    let list = null;
+    let para = [];
+    let fence = null;
+    const flushPara = () => {
+      if (para.length) out.push('<p>' + inline(para.join(' ')) + '</p>');
+      para = [];
+    };
+    const closeList = () => {
+      if (list) out.push('</' + list + '>');
+      list = null;
+    };
+    for (const raw of lines) {
+      if (fence !== null) {
+        if (/^```/.test(raw)) {
+          out.push('<pre><code>' + esc(fence.join('\n')) + '</code></pre>');
+          fence = null;
+        } else fence.push(raw);
+        continue;
+      }
+      const line = raw.replace(/\s+$/, '');
+      if (/^```/.test(line)) {
+        flushPara();
+        closeList();
+        fence = [];
+        continue;
+      }
+      if (!line.trim()) {
+        flushPara();
+        closeList();
+        continue;
+      }
+      let m;
+      if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+        flushPara();
+        closeList();
+        out.push('<h' + m[1].length + '>' + inline(m[2]) + '</h' + m[1].length + '>');
+        continue;
+      }
+      if (/^(-{3,}|\*{3,})$/.test(line.trim())) {
+        flushPara();
+        closeList();
+        out.push('<hr>');
+        continue;
+      }
+      if ((m = line.match(/^\s*[-*+]\s+(.*)$/))) {
+        flushPara();
+        if (list !== 'ul') {
+          closeList();
+          list = 'ul';
+          out.push('<ul>');
+        }
+        out.push('<li>' + inline(m[1]) + '</li>');
+        continue;
+      }
+      if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+        flushPara();
+        if (list !== 'ol') {
+          closeList();
+          list = 'ol';
+          out.push('<ol>');
+        }
+        out.push('<li>' + inline(m[1]) + '</li>');
+        continue;
+      }
+      if (list && /^\s{2,}/.test(raw)) {
+        out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, ' ' + inline(line.trim()) + '</li>');
+        continue;
+      }
+      closeList();
+      para.push(line.trim());
+    }
+    if (fence !== null) out.push('<pre><code>' + esc(fence.join('\n')) + '</code></pre>');
+    flushPara();
+    closeList();
+    return out.join('');
+  }
 
-  function renderLedger(d) {
-    const wrap = el('div');
-    const head = el('div', 'occ-card');
-    head.appendChild(el('h3', '', 'Torn Ledger - ' + d.date));
-    head.appendChild(el('div', 'occ-muted', 'Mock data. Networth ' + fmt(d.networth) + '. First snapshot, no trend yet.'));
-    wrap.appendChild(head);
+  async function fetchText(url) {
+    const r = await fetch(url, { cache: 'no-cache' });
+    if (!r.ok) throw new Error('GET ' + url.split('/').pop() + ' -> HTTP ' + r.status);
+    return r.text();
+  }
 
-    const inc = el('div', 'occ-card');
-    inc.appendChild(el('h3', '', 'Income per day'));
-    const max = Math.max.apply(null, d.income.map((x) => x[1]));
-    d.income.forEach((x) => inc.appendChild(barRow(x[0], x[1], max, '/day')));
-    inc.appendChild(el('div', 'occ-muted', 'Stock payouts ' + d.stocks.ready + ' ready, ' + d.stocks.locked + ' floors locked.'));
-    wrap.appendChild(inc);
-
-    const inv = el('div', 'occ-card');
-    inv.appendChild(el('h3', '', 'Inventory'));
-    inv.appendChild(barRow('Inventory', d.inventory, d.inventory));
-    inv.appendChild(barRow('Below floor', d.stocks.below, d.inventory));
-    wrap.appendChild(inv);
-
-    const lk = el('div', 'occ-card');
-    lk.appendChild(el('h3', '', 'Leaks'));
-    const ul = el('ul', 'occ-list');
-    d.leaks.forEach((t) => ul.appendChild(el('li', '', t)));
-    lk.appendChild(ul);
-    wrap.appendChild(lk);
-
-    const ac = el('div', 'occ-card');
-    ac.appendChild(el('h3', '', 'Do this week'));
-    const ol = el('ol', 'occ-list');
-    d.actions.forEach((t) => ol.appendChild(el('li', '', t)));
-    ac.appendChild(ol);
-    wrap.appendChild(ac);
-    return wrap;
+  async function ask(system, user) {
+    const key = store.get(KEY_OR, '');
+    if (!key) throw new Error('No OpenRouter key. Open Setup (gear) and paste one.');
+    const errors = [];
+    for (let i = 0; i < ATTEMPTS; i++) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+      try {
+        const res = await fetch(OR_URL, {
+          method: 'POST',
+          signal: ctl.signal,
+          headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Title': 'Operational Command Center' },
+          body: JSON.stringify({
+            model: MODEL,
+            models: FALLBACK,
+            temperature: 0.2,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.status === 401) throw new Error('OpenRouter rejected the key (401).');
+        const text = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
+        if (res.ok && text && text.trim()) return { text: text.trim(), model: json.model || MODEL };
+        errors.push('try ' + (i + 1) + ': ' + res.status + ' ' + ((json.error && json.error.message) || 'empty reply'));
+      } catch (e) {
+        if (/401/.test(String(e.message))) throw e;
+        errors.push('try ' + (i + 1) + ': ' + (e.name === 'AbortError' ? 'timeout' : e.message));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new Error('Free models busy, try again in a minute.\n' + errors.join('\n'));
   }
 
   const skills = [
@@ -170,43 +258,148 @@
       id: 'ledger',
       label: 'Ledger',
       icon: ICON.ledger,
-      run() {
-        return new Promise((res) => setTimeout(() => res(renderLedger(ledgerMock)), 400));
-      },
+      md: RAW + '.claude/skills/torn-ledger/SKILL.md',
+      script: RAW + '.claude/skills/torn-ledger/scripts/lib.mjs',
+      ask:
+        'You have NO live Torn data in this request, only the skill file and its logic script. ' +
+        'Using both, write under 250 words: what this skill reports, every leak kind it detects with the rule behind each, ' +
+        'and the stock floor rules. Never invent numbers. Markdown with short headings and bullets, plain hyphens only.',
     },
   ];
 
-  let win, main, sub, btns = {};
+  let win, main, sub, launch;
+  const btns = {};
 
-  async function runSkill(id) {
+  function setActive(id) {
+    Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
+  }
+
+  function show(node) {
+    main.innerHTML = '';
+    main.appendChild(node);
+    main.scrollTop = 0;
+  }
+
+  function errCard(title, msg) {
+    const c = el('div', 'occ-card occ-err');
+    c.appendChild(el('h3', '', esc(title)));
+    c.appendChild(el('div', '', esc(msg).replace(/\n/g, '<br>')));
+    return c;
+  }
+
+  function answerView(s, a) {
+    const wrap = el('div');
+    const bar = el('div', 'occ-bar');
+    const when = new Date(a.at);
+    bar.appendChild(el('span', 'occ-muted', esc(a.model) + ' - ' + when.toLocaleDateString() + ' ' + when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
+    const again = el('button', 'occ-act-btn', ICON.refresh + 'Run again');
+    again.type = 'button';
+    again.addEventListener('click', () => runSkill(s.id, true));
+    bar.appendChild(again);
+    wrap.appendChild(bar);
+    const card = el('div', 'occ-card');
+    card.appendChild(el('div', 'occ-md', mdToHtml(a.text)));
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  async function runSkill(id, force) {
     const s = skills.find((x) => x.id === id);
     if (!s) return;
     store.set(KEY_SKILL, id);
-    main.dataset.ran = "1";
-    Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
+    main.dataset.ran = '1';
+    setActive(id);
     sub.textContent = s.label;
-    main.innerHTML = '';
-    main.appendChild(el('div', 'occ-card', '<span class="occ-spin"></span>Running ' + s.label + '...'));
-    try {
-      const node = await s.run();
-      main.innerHTML = '';
-      main.appendChild(node);
-    } catch (e) {
-      main.innerHTML = '';
-      main.appendChild(el('div', 'occ-card occ-err', '<h3>' + s.label + ' failed</h3>' + String((e && e.message) || e)));
+    const cached = store.get(KEY_ANS + id, null);
+    if (cached && !force) {
+      show(answerView(s, cached));
+      return;
     }
+    if (!store.get(KEY_OR, '')) {
+      showSettings('Paste an OpenRouter key first, then press ' + s.label + ' again.');
+      return;
+    }
+    const status = el('div', 'occ-card', '<span class="occ-spin"></span>Fetching skill files...');
+    show(status);
+    try {
+      const [md, script] = await Promise.all([fetchText(s.md), fetchText(s.script)]);
+      status.innerHTML = '<span class="occ-spin"></span>Asking a free model (can take a minute or two)...';
+      const scriptName = s.script.split('/').pop();
+      const user = s.ask + '\n\nScript file ' + scriptName + ':\n\n```js\n' + script + '\n```';
+      const a = await ask(md, user);
+      const rec = { text: a.text, model: a.model, at: Date.now() };
+      store.set(KEY_ANS + id, rec);
+      if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
+    } catch (e) {
+      if (store.get(KEY_SKILL, null) === id) show(errCard(s.label + ' failed', String((e && e.message) || e)));
+    }
+  }
+
+  function showSettings(note) {
+    store.set(KEY_SKILL, 'settings');
+    main.dataset.ran = '1';
+    setActive('settings');
+    sub.textContent = 'Setup';
+    const wrap = el('div');
+    if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
+    const card = el('div', 'occ-card');
+    card.appendChild(el('h3', '', 'OpenRouter key'));
+    const noKey = 'No key yet. Free models only; the key never leaves this browser.';
+    const hasKey = 'Key saved in this browser only.';
+    const has = !!store.get(KEY_OR, '');
+    const st = el('div', 'occ-muted', has ? hasKey : noKey);
+    card.appendChild(st);
+    const input = el('input', 'occ-field');
+    input.type = 'password';
+    input.placeholder = has ? 'Paste a new key to replace' : 'sk-or-v1-...';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    card.appendChild(input);
+    const row = el('div', 'occ-bar');
+    const save = el('button', 'occ-act-btn', 'Save');
+    save.type = 'button';
+    save.addEventListener('click', () => {
+      const v = input.value.trim();
+      if (!v) return;
+      store.set(KEY_OR, v);
+      input.value = '';
+      st.textContent = hasKey;
+      input.placeholder = 'Paste a new key to replace';
+    });
+    const clear = el('button', 'occ-act-btn occ-alt', 'Forget key');
+    clear.type = 'button';
+    clear.addEventListener('click', () => {
+      store.del(KEY_OR);
+      st.textContent = noKey;
+      input.placeholder = 'sk-or-v1-...';
+    });
+    const wipe = el('button', 'occ-act-btn occ-alt', 'Clear answers');
+    wipe.type = 'button';
+    wipe.addEventListener('click', () => {
+      skills.forEach((s) => store.del(KEY_ANS + s.id));
+      wipe.textContent = 'Cleared';
+    });
+    row.appendChild(save);
+    row.appendChild(clear);
+    row.appendChild(wipe);
+    card.appendChild(row);
+    wrap.appendChild(card);
+    const info = el('div', 'occ-card');
+    info.appendChild(el('h3', '', 'How it works'));
+    info.appendChild(el('div', 'occ-muted', 'Each button fetches its skill file and script from GitHub, sends both to the free model router, and shows the answer here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '. Up to ' + ATTEMPTS + ' attempts per run.'));
+    wrap.appendChild(info);
+    show(wrap);
   }
 
   function setOpen(on) {
     win.classList.toggle('occ-on', on);
     store.set(KEY_OPEN, on);
-    if (on) {
+    if (on && !main.dataset.ran) {
       const last = store.get(KEY_SKILL, null);
-      if (last && skills.some((s) => s.id === last) && !main.dataset.ran) runSkill(last);
+      if (last === 'settings') showSettings();
+      else if (last && skills.some((s) => s.id === last)) runSkill(last);
     }
   }
-
-  let launch;
 
   function nameAnchor() {
     return document.querySelector('[class*="user-information"] a[href*="profiles.php"]') || document.querySelector('[class*="menu-value"] a[href*="profiles.php"]');
@@ -225,13 +418,17 @@
   }
 
   function watchName() {
-    document.addEventListener('click', (e) => {
-      const t = e.target && e.target.closest ? e.target.closest('.occ-inline') : null;
-      if (!t) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setOpen(!win.classList.contains('occ-on'));
-    }, true);
+    document.addEventListener(
+      'click',
+      (e) => {
+        const t = e.target && e.target.closest ? e.target.closest('.occ-inline') : null;
+        if (!t) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(!win.classList.contains('occ-on'));
+      },
+      true
+    );
     let tries = 0;
     const tick = () => {
       if (mountInline() || ++tries > 40) return;
@@ -248,8 +445,7 @@
     if (document.getElementById('occ-root')) return;
     const root = el('div');
     root.id = 'occ-root';
-    const style = el('style', '', CSS);
-    root.appendChild(style);
+    root.appendChild(el('style', '', CSS));
 
     launch = el('button', 'occ-launch', ICON.dash);
     launch.type = 'button';
@@ -271,12 +467,17 @@
 
     const side = el('div', 'occ-side');
     skills.forEach((s) => {
-      const b = el('button', 'occ-btn', s.icon + '<span>' + s.label + '</span>');
+      const b = el('button', 'occ-btn', s.icon + '<span>' + esc(s.label) + '</span>');
       b.type = 'button';
       b.addEventListener('click', () => runSkill(s.id));
       btns[s.id] = b;
       side.appendChild(b);
     });
+    const gear = el('button', 'occ-btn occ-gear', ICON.gear + '<span>Setup</span>');
+    gear.type = 'button';
+    gear.addEventListener('click', () => showSettings());
+    btns.settings = gear;
+    side.appendChild(gear);
     win.appendChild(side);
 
     main = el('div', 'occ-main');
