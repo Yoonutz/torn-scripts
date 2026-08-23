@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.1.0
+// @version      0.2.0
 // @description  One floating dashboard inside Torn. A sidebar of skill buttons, each one runs a tool and shows its result in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -13,7 +13,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.1.0';
+  const VERSION = '0.2.0';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
 
@@ -35,7 +35,11 @@
 
   const CSS = `
     .occ-launch{position:fixed;right:16px;bottom:88px;z-index:99990;width:52px;height:52px;border-radius:50%;border:1px solid #3c3c3c;background:#1f1f1f;color:#e6e6e6;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.55);font:600 11px/1 Arial,sans-serif;letter-spacing:.5px;-webkit-tap-highlight-color:transparent;user-select:none}
+    .occ-launch.occ-hide{display:none}
     .occ-launch:active{transform:scale(.95)}
+    .occ-inline{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:6px;padding:0;border:0;border-radius:4px;background:transparent;color:#7cb342;cursor:pointer;vertical-align:middle;-webkit-tap-highlight-color:transparent}
+    .occ-inline svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+    .occ-inline:active{transform:scale(.9)}
     .occ-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
     .occ-win{position:fixed;inset:0;z-index:99991;display:none;grid-template-rows:48px 1fr;grid-template-columns:56px 1fr;grid-template-areas:"head head" "side main";background:#181818;color:#e6e6e6;font:14px/1.4 Arial,sans-serif;overflow:hidden}
     .occ-win.occ-on{display:grid}
@@ -202,6 +206,44 @@
     }
   }
 
+  let launch;
+
+  function nameAnchor() {
+    return document.querySelector('[class*="user-information"] a[href*="profiles.php"]') || document.querySelector('[class*="menu-value"] a[href*="profiles.php"]');
+  }
+
+  function mountInline() {
+    const a = nameAnchor();
+    if (!a || !a.parentNode) return false;
+    if (a.parentNode.querySelector('.occ-inline')) return true;
+    const b = el('button', 'occ-inline', ICON.dash);
+    b.type = 'button';
+    b.title = 'Operational Command Center';
+    a.insertAdjacentElement('afterend', b);
+    launch.classList.add('occ-hide');
+    return true;
+  }
+
+  function watchName() {
+    document.addEventListener('click', (e) => {
+      const t = e.target && e.target.closest ? e.target.closest('.occ-inline') : null;
+      if (!t) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(!win.classList.contains('occ-on'));
+    }, true);
+    let tries = 0;
+    const tick = () => {
+      if (mountInline() || ++tries > 40) return;
+      setTimeout(tick, 500);
+    };
+    tick();
+    const mo = new MutationObserver(() => {
+      if (!document.querySelector('.occ-inline')) mountInline();
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
   function build() {
     if (document.getElementById('occ-root')) return;
     const root = el('div');
@@ -209,7 +251,7 @@
     const style = el('style', '', CSS);
     root.appendChild(style);
 
-    const launch = el('button', 'occ-launch', ICON.dash);
+    launch = el('button', 'occ-launch', ICON.dash);
     launch.type = 'button';
     launch.title = 'Operational Command Center';
     launch.addEventListener('click', () => setOpen(!win.classList.contains('occ-on')));
@@ -244,6 +286,7 @@
 
     document.body.appendChild(root);
     if (store.get(KEY_OPEN, false)) setOpen(true);
+    watchName();
   }
 
   if (document.body) build();
