@@ -95,9 +95,10 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
 - `GET /run/<id>` with header `Authorization: ApiKey <torn key>` - executes
   `skill.run(ctx)`. The Torn key is the only credential. `ctx.db` writes land
   in KV under `<id>:<key-hash>:<name>`, so skills never see each other's data
-  or another player's. Whether anything is cached or reused (the ledger reuses
-  a snapshot younger than 10 minutes) is each skill's own choice; `?force=1`
-  arrives as `ctx.force` for the skill to honor.
+  or another player's. Whether anything is stored at all is each skill's own
+  choice - the ledger stores nothing and treats every run as fresh; `?force=1`
+  arrives as `ctx.force` for the skill to honor. House rule for live personal
+  data: analyze and discard, never persist it server-side.
 
 ## 5. What happens on button press
 

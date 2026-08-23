@@ -6,9 +6,13 @@
 //   ctx.db       { index(), get(name), put(name, value) } scoped to this skill and key
 //   ctx.force    true when the caller asked to re-collect
 // Must stay pure browser-grade JavaScript: no fs, no Node modules, only fetch.
-import { deriveSnapshot, compare, render, pickBaseline, fmtMoney } from "./lib.mjs";
-
-const REUSE_MS = 10 * 60 * 1000;
+//
+// This runner is deliberately STATELESS (Kami's call, 2026-08-24): live financial data is
+// collected, analyzed, returned, and discarded in the same request. Nothing is written to
+// ctx.db, so no snapshot ever persists outside his own machine. The cost is accepted: the
+// Command Center report has no baseline, so it never shows deltas. Weekly trend reporting
+// stays on the desktop ledger, whose history lives only in the local repo.
+import { deriveSnapshot, compare, render, fmtMoney } from "./lib.mjs";
 
 export const ENDPOINTS = {
   money: "user/money",
@@ -30,73 +34,31 @@ export async function collect(tornGet) {
   return raw;
 }
 
-async function listSnapshots(db) {
-  const idx = await db.index();
-  const rows = await Promise.all(idx.map((d) => db.get(d)));
-  return rows
-    .filter(Boolean)
-    .map((j) => deriveSnapshot(j.raw))
-    .sort((a, b) => a.taken_at - b.taken_at);
-}
-
-async function todayFresh(db) {
-  const idx = await db.index();
-  if (!idx.length) return null;
-  const last = await db.get(idx[idx.length - 1]);
-  if (!last || !last.stored_at || Date.now() - last.stored_at > REUSE_MS) return null;
-  return last;
-}
-
 export const skill = {
   id: "ledger",
   label: "Ledger",
-  description: "Runs this skill's scripts (collect, then report) with live Torn data and returns the printed markdown report plus date, baseline date and snapshot count.",
+  description: "Collects live Torn data, runs this skill's report script on it and returns the printed markdown report. Stateless: every run is a fresh collection, nothing is stored.",
   icon: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
   async run(ctx) {
-    let reused = false;
-    const fresh = ctx.force ? null : await todayFresh(ctx.db);
-    let current;
-    if (fresh) {
-      current = deriveSnapshot(fresh.raw);
-      reused = true;
-    } else {
-      const raw = await collect(ctx.tornGet);
-      current = deriveSnapshot(raw);
-      await ctx.db.put(current.date, { raw, stored_at: Date.now() });
-    }
-    const snapshots = await listSnapshots(ctx.db);
-    const cur = snapshots.find((s) => s.date === current.date) || current;
-    const baseline = pickBaseline(snapshots, cur);
-    const history = snapshots.filter((s) => s.taken_at <= cur.taken_at && (!baseline || s.taken_at >= baseline.taken_at));
-    const report = render(compare(baseline, cur), history);
+    const raw = await collect(ctx.tornGet);
+    const cur = deriveSnapshot(raw);
+    const report = render(compare(null, cur), [cur]);
     const stats = [
       { k: "Networth", v: fmtMoney(cur.networth.total) },
       { k: "Bank /day", v: fmtMoney(cur.bank.per_day), hot: true },
       { k: "Company /day", v: fmtMoney(Math.round(cur.company.weekly_income / 7)) },
     ];
-    return { date: cur.date, baseline: baseline ? baseline.date : null, snapshots: snapshots.length, reused, report, stats };
+    return { date: cur.date, baseline: null, snapshots: 0, reused: false, report, stats };
   },
 };
 
-// CLI mode, same E-script contract as the siblings: node runner.mjs [--dry-run]
-// Uses the repo-root key, keeps snapshots in memory, writes nothing, prints the report.
+// CLI mode, same E-script contract as the siblings: node runner.mjs
+// Uses the repo-root key, writes nothing, prints the report.
 const isCli = typeof process !== "undefined" && Array.isArray(process.argv) && /runner\.mjs$/.test(process.argv[1] || "");
 if (isCli) {
   const envModule = "./env" + ".mjs";
   const { requireKey } = await import(envModule);
   const key = requireKey();
-  const mem = {};
-  const db = {
-    async index() {
-      return Object.keys(mem).sort();
-    },
-    async get(name) {
-      return mem[name] || null;
-    },
-    async put(name, value) {
-      mem[name] = value;
-    },
-  };
   const tornGet = async (path) => {
     const res = await fetch("https://api.torn.com/v2/" + path, { headers: { Authorization: "ApiKey " + key } });
     const body = await res.json().catch(() => ({}));
@@ -105,9 +67,9 @@ if (isCli) {
     return body;
   };
   try {
-    const out = await skill.run({ key, tornGet, db, force: true });
+    const out = await skill.run({ key, tornGet, db: null, force: true });
     process.stdout.write(out.report);
-    console.error("runner: " + out.date + " | snapshots " + out.snapshots + " | nothing written (dry by design)");
+    console.error("runner: " + out.date + " | stateless, nothing written");
   } catch (e) {
     console.error("runner failed: " + e.message);
     process.exit(1);

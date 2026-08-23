@@ -84,3 +84,11 @@ extra change.
 Kami's call: the "Exact script output" fold duplicated the model's answer and kept a second copy
 of the report in every cached answer. The fold and the stored copy are gone; the model's sections
 are the only rendering. The raw report still comes back from `/run/<id>` for anyone who needs it.
+
+## Update - runner goes stateless (2026-08-24)
+
+Kami's rule: live financial data never persists server-side. The ledger runner now collects,
+analyzes, returns and discards in one request - no KV writes, no snapshot reuse, existing KV
+snapshots wiped. Accepted cost: the Torn UI report has no baseline, so deltas only exist in the
+desktop weekly ledger, whose history stays on his machine. `ctx.db` remains in the contract for
+skills whose data is not sensitive.
