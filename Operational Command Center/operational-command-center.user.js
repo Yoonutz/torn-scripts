@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.3.0
+// @version      0.3.1
 // @description  One floating dashboard inside Torn. A sidebar of skill buttons; each one sends its skill file and script to a free OpenRouter model and shows the answer in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
 // @connect      openrouter.ai
 // @connect      raw.githubusercontent.com
 // @run-at       document-idle
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.3.0';
+  const VERSION = '0.3.1';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -210,10 +210,50 @@
     return out.join('');
   }
 
+  function http(opt) {
+    const method = opt.method || 'GET';
+    const headers = opt.headers || {};
+    const timeout = opt.timeout || TIMEOUT_MS;
+    if (typeof GM_xmlhttpRequest === 'function') {
+      return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method,
+          url: opt.url,
+          headers,
+          data: opt.body,
+          timeout,
+          onload: (r) => resolve({ status: r.status, text: r.responseText || '' }),
+          onerror: () => reject(new Error('Network error (' + host(opt.url) + ')')),
+          ontimeout: () => reject(new Error('Timeout (' + host(opt.url) + ')')),
+        });
+      });
+    }
+    const pda = method === 'POST' ? window.PDA_httpPost : window.PDA_httpGet;
+    if (typeof pda === 'function') {
+      const args = method === 'POST' ? [opt.url, headers, opt.body] : [opt.url, headers];
+      return Promise.resolve(pda.apply(window, args)).then((r) => ({
+        status: (r && (r.status || r.statusCode)) || 200,
+        text: (r && (r.responseText || r.body || r.text)) || (typeof r === 'string' ? r : ''),
+      }));
+    }
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeout);
+    return fetch(opt.url, { method, headers, body: opt.body, signal: ctl.signal, cache: 'no-cache' })
+      .then(async (r) => ({ status: r.status, text: await r.text() }))
+      .catch((e) => {
+        throw new Error((e.name === 'AbortError' ? 'Timeout' : 'Blocked by the page (' + e.message + ')') + ' (' + host(opt.url) + ')');
+      })
+      .finally(() => clearTimeout(timer));
+  }
+
+  function host(url) {
+    return String(url).replace(/^https?:\/\//, '').split('/')[0];
+  }
+
   async function fetchText(url) {
-    const r = await fetch(url, { cache: 'no-cache' });
-    if (!r.ok) throw new Error('GET ' + url.split('/').pop() + ' -> HTTP ' + r.status);
-    return r.text();
+    const r = await http({ url });
+    if (r.status < 200 || r.status >= 300) throw new Error('GET ' + url.split('/').pop() + ' -> HTTP ' + r.status);
+    return r.text;
   }
 
   async function ask(system, user) {
@@ -221,12 +261,10 @@
     if (!key) throw new Error('No OpenRouter key. Open Setup (gear) and paste one.');
     const errors = [];
     for (let i = 0; i < ATTEMPTS; i++) {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
       try {
-        const res = await fetch(OR_URL, {
+        const res = await http({
           method: 'POST',
-          signal: ctl.signal,
+          url: OR_URL,
           headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Title': 'Operational Command Center' },
           body: JSON.stringify({
             model: MODEL,
@@ -238,16 +276,17 @@
             ],
           }),
         });
-        const json = await res.json().catch(() => ({}));
+        let json = {};
+        try {
+          json = JSON.parse(res.text);
+        } catch (e) {}
         if (res.status === 401) throw new Error('OpenRouter rejected the key (401).');
         const text = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-        if (res.ok && text && text.trim()) return { text: text.trim(), model: json.model || MODEL };
+        if (res.status >= 200 && res.status < 300 && text && text.trim()) return { text: text.trim(), model: json.model || MODEL };
         errors.push('try ' + (i + 1) + ': ' + res.status + ' ' + ((json.error && json.error.message) || 'empty reply'));
       } catch (e) {
         if (/401/.test(String(e.message))) throw e;
-        errors.push('try ' + (i + 1) + ': ' + (e.name === 'AbortError' ? 'timeout' : e.message));
-      } finally {
-        clearTimeout(timer);
+        errors.push('try ' + (i + 1) + ': ' + e.message);
       }
     }
     throw new Error('Free models busy, try again in a minute.\n' + errors.join('\n'));
@@ -269,6 +308,7 @@
 
   let win, main, sub, launch;
   const btns = {};
+  const inflight = {};
 
   function setActive(id) {
     Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
@@ -319,6 +359,8 @@
       showSettings('Paste an OpenRouter key first, then press ' + s.label + ' again.');
       return;
     }
+    if (inflight[id]) return;
+    inflight[id] = true;
     const status = el('div', 'occ-card', '<span class="occ-spin"></span>Fetching skill files...');
     show(status);
     try {
@@ -332,6 +374,8 @@
       if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
     } catch (e) {
       if (store.get(KEY_SKILL, null) === id) show(errCard(s.label + ' failed', String((e && e.message) || e)));
+    } finally {
+      inflight[id] = false;
     }
   }
 
