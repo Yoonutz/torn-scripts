@@ -8,7 +8,9 @@
 # per-user editor/tool config (can contain tokens)
 .vscode/
 mcp.json
-.claude/
+**/.claude/*
+!/.claude/skills/
+/.claude/skills/*/data/
 .vs/
 
 # ── dependency + build caches ───────────────────────────
