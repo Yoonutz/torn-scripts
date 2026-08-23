@@ -1,30 +1,34 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.3.1
-// @description  One floating dashboard inside Torn. A sidebar of skill buttons; each one sends its skill file and script to a free OpenRouter model and shows the answer in the content pane. Mobile first, works in Torn PDA.
+// @version      0.4.0
+// @description  One floating dashboard inside Torn. Each sidebar button hands its skill file to a free OpenRouter model; the model runs the skill's script on a private Cloudflare runner and delivers the result in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      openrouter.ai
 // @connect      raw.githubusercontent.com
+// @connect      occ-runner.yoonutz.workers.dev
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const VERSION = '0.3.1';
+  const VERSION = '0.4.0';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
   const KEY_ANS = 'occ.ans.';
+  const KEY_RUNNER = 'occ.runner_token';
+  const RUNNER = 'https://occ-runner.yoonutz.workers.dev';
   const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
   const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
   const MODEL = 'openrouter/free';
   const FALLBACK = ['z-ai/glm-5.2:free', 'cohere/north-mini-code:free', 'google/gemma-4-26b-a4b-it:free'];
   const ATTEMPTS = 3;
+  const MAX_STEPS = 4;
   const TIMEOUT_MS = 90000;
 
   const store = {
@@ -256,33 +260,34 @@
     return r.text;
   }
 
-  async function ask(system, user) {
+  function parseJson(text) {
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      return {};
+    }
+  }
+
+  async function chat(messages, tools) {
     const key = store.get(KEY_OR, '');
     if (!key) throw new Error('No OpenRouter key. Open Setup (gear) and paste one.');
     const errors = [];
     for (let i = 0; i < ATTEMPTS; i++) {
       try {
+        const body = { model: MODEL, models: FALLBACK, temperature: 0.1, messages };
+        if (tools) body.tools = tools;
         const res = await http({
           method: 'POST',
           url: OR_URL,
           headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Title': 'Operational Command Center' },
-          body: JSON.stringify({
-            model: MODEL,
-            models: FALLBACK,
-            temperature: 0.2,
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user', content: user },
-            ],
-          }),
+          body: JSON.stringify(body),
         });
-        let json = {};
-        try {
-          json = JSON.parse(res.text);
-        } catch (e) {}
+        const json = parseJson(res.text);
         if (res.status === 401) throw new Error('OpenRouter rejected the key (401).');
-        const text = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-        if (res.status >= 200 && res.status < 300 && text && text.trim()) return { text: text.trim(), model: json.model || MODEL };
+        const msg = json && json.choices && json.choices[0] && json.choices[0].message;
+        const hasTool = msg && msg.tool_calls && msg.tool_calls.length;
+        const hasText = msg && msg.content && String(msg.content).trim();
+        if (res.status >= 200 && res.status < 300 && msg && (hasTool || hasText)) return { msg, model: json.model || MODEL };
         errors.push('try ' + (i + 1) + ': ' + res.status + ' ' + ((json.error && json.error.message) || 'empty reply'));
       } catch (e) {
         if (/401/.test(String(e.message))) throw e;
@@ -292,17 +297,64 @@
     throw new Error('Free models busy, try again in a minute.\n' + errors.join('\n'));
   }
 
+  async function runTool(s, args) {
+    const token = store.get(KEY_RUNNER, '');
+    if (!token) throw new Error('No runner token. Open Setup (gear) and paste it.');
+    const url = RUNNER + s.tool.path + (args && args.force ? '&force=1' : '');
+    const r = await http({ url, headers: { Authorization: 'Bearer ' + token } });
+    const json = parseJson(r.text);
+    if (r.status === 401) throw new Error('Runner rejected the token (401).');
+    if (r.status < 200 || r.status >= 300 || json.error) throw new Error('Runner: ' + (json.error || 'HTTP ' + r.status));
+    return json;
+  }
+
+  async function agent(s, md, onStatus) {
+    const tools = [{ type: 'function', function: { name: s.tool.name, description: s.tool.description, parameters: { type: 'object', properties: { force: { type: 'boolean', description: 'Re-collect live data even if a fresh snapshot exists' } } } } }];
+    const messages = [
+      { role: 'system', content: md },
+      { role: 'user', content: "Run this skill now and deliver its output exactly as the skill's delivery rule says. Use the " + s.tool.name + ' tool to execute the scripts; you cannot run anything yourself. Plain hyphens only.' },
+    ];
+    let raw = null;
+    let model = null;
+    for (let step = 0; step < MAX_STEPS; step++) {
+      onStatus(step === 0 ? 'Sending the skill to a free model...' : 'Model is writing the answer...');
+      const r = await chat(messages, tools);
+      model = r.model;
+      messages.push(r.msg);
+      const calls = r.msg.tool_calls || [];
+      if (calls.length) {
+        onStatus('Model is running the script on the runner...');
+        for (const tc of calls) {
+          const args = parseJson(tc.function && tc.function.arguments);
+          const out = await runTool(s, args);
+          raw = out;
+          messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ report: out.report, date: out.date, baseline: out.baseline, snapshots: out.snapshots, reused: out.reused }) });
+        }
+        continue;
+      }
+      if (!raw) {
+        onStatus('Model skipped the tool; running the script directly...');
+        raw = await runTool(s, {});
+        messages.push({ role: 'user', content: 'Here is the output of ' + s.tool.name + ', run for you just now. Deliver it per the skill rules.\n\n' + raw.report });
+        continue;
+      }
+      return { text: String(r.msg.content).trim(), model, raw };
+    }
+    if (raw) return { text: raw.report, model: 'runner (model gave no answer)', raw };
+    throw new Error('The model never produced an answer.');
+  }
+
   const skills = [
     {
       id: 'ledger',
       label: 'Ledger',
       icon: ICON.ledger,
       md: RAW + '.claude/skills/torn-ledger/SKILL.md',
-      script: RAW + '.claude/skills/torn-ledger/scripts/lib.mjs',
-      ask:
-        'You have NO live Torn data in this request, only the skill file and its logic script. ' +
-        'Using both, write under 250 words: what this skill reports, every leak kind it detects with the rule behind each, ' +
-        'and the stock floor rules. Never invent numbers. Markdown with short headings and bullets, plain hyphens only.',
+      tool: {
+        name: 'run_script',
+        path: '/run/ledger?ai=0',
+        description: "Runs this skill's scripts (collect, then report) on the private runner with live Torn data and returns the printed markdown report plus date, baseline date and snapshot count.",
+      },
     },
   ];
 
@@ -340,6 +392,23 @@
     const card = el('div', 'occ-card');
     card.appendChild(el('div', 'occ-md', mdToHtml(a.text)));
     wrap.appendChild(card);
+    if (a.report && a.report.trim() !== a.text.trim()) {
+      const rawCard = el('div', 'occ-card');
+      const tog = el('button', 'occ-act-btn occ-alt', 'Show exact script output');
+      tog.type = 'button';
+      const body = el('div', 'occ-md');
+      body.style.display = 'none';
+      body.style.marginTop = '10px';
+      body.appendChild(el('div', '', mdToHtml(a.report)));
+      tog.addEventListener('click', () => {
+        const on = body.style.display === 'none';
+        body.style.display = on ? '' : 'none';
+        tog.textContent = on ? 'Hide exact script output' : 'Show exact script output';
+      });
+      rawCard.appendChild(tog);
+      rawCard.appendChild(body);
+      wrap.appendChild(rawCard);
+    }
     return wrap;
   }
 
@@ -359,17 +428,21 @@
       showSettings('Paste an OpenRouter key first, then press ' + s.label + ' again.');
       return;
     }
+    if (s.tool && !store.get(KEY_RUNNER, '')) {
+      showSettings('Paste the runner token first, then press ' + s.label + ' again.');
+      return;
+    }
     if (inflight[id]) return;
     inflight[id] = true;
-    const status = el('div', 'occ-card', '<span class="occ-spin"></span>Fetching skill files...');
+    const status = el('div', 'occ-card', '<span class="occ-spin"></span>Fetching the skill file...');
     show(status);
+    const onStatus = (t) => {
+      status.innerHTML = '<span class="occ-spin"></span>' + esc(t);
+    };
     try {
-      const [md, script] = await Promise.all([fetchText(s.md), fetchText(s.script)]);
-      status.innerHTML = '<span class="occ-spin"></span>Asking a free model (can take a minute or two)...';
-      const scriptName = s.script.split('/').pop();
-      const user = s.ask + '\n\nScript file ' + scriptName + ':\n\n```js\n' + script + '\n```';
-      const a = await ask(md, user);
-      const rec = { text: a.text, model: a.model, at: Date.now() };
+      const md = await fetchText(s.md);
+      const a = await agent(s, md, onStatus);
+      const rec = { text: a.text, model: a.model, at: Date.now(), report: a.raw ? a.raw.report : null, date: a.raw ? a.raw.date : null };
       store.set(KEY_ANS + id, rec);
       if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
     } catch (e) {
@@ -379,23 +452,14 @@
     }
   }
 
-  function showSettings(note) {
-    store.set(KEY_SKILL, 'settings');
-    main.dataset.ran = '1';
-    setActive('settings');
-    sub.textContent = 'Setup';
-    const wrap = el('div');
-    if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
-    const card = el('div', 'occ-card');
-    card.appendChild(el('h3', '', 'OpenRouter key'));
-    const noKey = 'No key yet. Free models only; the key never leaves this browser.';
-    const hasKey = 'Key saved in this browser only.';
-    const has = !!store.get(KEY_OR, '');
-    const st = el('div', 'occ-muted', has ? hasKey : noKey);
+  function keyField(card, opts) {
+    card.appendChild(el('h3', '', opts.title));
+    const has = !!store.get(opts.key, '');
+    const st = el('div', 'occ-muted', has ? opts.saved : opts.empty);
     card.appendChild(st);
     const input = el('input', 'occ-field');
     input.type = 'password';
-    input.placeholder = has ? 'Paste a new key to replace' : 'sk-or-v1-...';
+    input.placeholder = has ? 'Paste a new value to replace' : opts.placeholder;
     input.autocomplete = 'off';
     input.spellcheck = false;
     card.appendChild(input);
@@ -405,32 +469,49 @@
     save.addEventListener('click', () => {
       const v = input.value.trim();
       if (!v) return;
-      store.set(KEY_OR, v);
+      store.set(opts.key, v);
       input.value = '';
-      st.textContent = hasKey;
-      input.placeholder = 'Paste a new key to replace';
+      st.textContent = opts.saved;
+      input.placeholder = 'Paste a new value to replace';
     });
-    const clear = el('button', 'occ-act-btn occ-alt', 'Forget key');
+    const clear = el('button', 'occ-act-btn occ-alt', 'Forget');
     clear.type = 'button';
     clear.addEventListener('click', () => {
-      store.del(KEY_OR);
-      st.textContent = noKey;
-      input.placeholder = 'sk-or-v1-...';
+      store.del(opts.key);
+      st.textContent = opts.empty;
+      input.placeholder = opts.placeholder;
     });
-    const wipe = el('button', 'occ-act-btn occ-alt', 'Clear answers');
+    row.appendChild(save);
+    row.appendChild(clear);
+    card.appendChild(row);
+  }
+
+  function showSettings(note) {
+    store.set(KEY_SKILL, 'settings');
+    main.dataset.ran = '1';
+    setActive('settings');
+    sub.textContent = 'Setup';
+    const wrap = el('div');
+    if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
+    const c1 = el('div', 'occ-card');
+    keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in this browser only.', empty: 'No key yet. Free models only; the key never leaves this browser.' });
+    wrap.appendChild(c1);
+    const c2 = el('div', 'occ-card');
+    keyField(c2, { key: KEY_RUNNER, title: 'Runner token', placeholder: 'token from the runner setup', saved: 'Token saved in this browser only.', empty: 'No token yet. The runner executes skill scripts with live data; only this token can call it.' });
+    wrap.appendChild(c2);
+    const c3 = el('div', 'occ-card');
+    c3.appendChild(el('h3', '', 'Answers'));
+    const wipe = el('button', 'occ-act-btn occ-alt', 'Clear cached answers');
     wipe.type = 'button';
     wipe.addEventListener('click', () => {
       skills.forEach((s) => store.del(KEY_ANS + s.id));
       wipe.textContent = 'Cleared';
     });
-    row.appendChild(save);
-    row.appendChild(clear);
-    row.appendChild(wipe);
-    card.appendChild(row);
-    wrap.appendChild(card);
+    c3.appendChild(wipe);
+    wrap.appendChild(c3);
     const info = el('div', 'occ-card');
     info.appendChild(el('h3', '', 'How it works'));
-    info.appendChild(el('div', 'occ-muted', 'Each button fetches its skill file and script from GitHub, sends both to the free model router, and shows the answer here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '. Up to ' + ATTEMPTS + ' attempts per run.'));
+    info.appendChild(el('div', 'occ-muted', 'A button fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill scripts with live Torn data, then the model delivers the result here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '.'));
     wrap.appendChild(info);
     show(wrap);
   }

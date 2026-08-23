@@ -39,3 +39,20 @@ Live data, real skill execution, dragging, theming options, settings page.
 Visual check in the shared headless Chrome on torn.com at 375x812 mobile and 1280x800 desktop:
 launcher visible, window opens, Ledger button renders the mock card, close works, no native
 widgets. Publish check against the Greasy Fork code endpoint after the webhook sync.
+
+## Update 0.4.0 - real data through a runner (same day)
+
+Approved flow: button press sends the skill's SKILL.md to the free model router; the model calls a
+`run_script` tool; the script executes that tool against a private Cloudflare Worker
+(`occ-runner`, folder `Operational Command Center/worker/`); the tool result goes back to the
+model, which delivers the answer per the skill's delivery rule. The exact script output stays
+available behind a "Show exact script output" toggle, because free models sometimes mangle a line.
+
+- Worker bundles `lib.mjs` from the skill folder (one source of truth), pulls the nine Torn
+  endpoints, stores snapshots in KV (`ledger:<date>` plus `ledger:index`), reuses a snapshot
+  younger than 10 minutes, and renders with `compare` + `render`.
+- Secrets on the Worker only: `TORN_API_KEY`, `OPENROUTER_API_KEY`, `OCC_TOKEN`. The script sends
+  `OCC_TOKEN` as a bearer; it is pasted once in Setup next to the OpenRouter key.
+- If the model answers without calling the tool, the script runs the tool itself and asks once
+  more; if the model still gives nothing, the raw report is shown.
+- Worker history is separate from the desktop weekly run; both use identical logic.

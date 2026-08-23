@@ -1,0 +1,10 @@
+name = "occ-runner"
+main = "src/index.mjs"
+compatibility_date = "2026-08-01"
+
+[[kv_namespaces]]
+binding = "SNAPSHOTS"
+id = "bcdd4092e01f4ca4b4ff8cdf55b19759"
+
+[observability]
+enabled = true
