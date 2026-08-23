@@ -57,3 +57,24 @@ available behind a "Show exact script output" toggle, because free models someti
 - If the model answers without calling the tool, the script runs the tool itself and asks once
   more; if the model still gives nothing, the raw report is shown.
 - Worker history is separate from the desktop weekly run; both use identical logic.
+
+## Update 0.5.0 - skills are discovered, deploys are automatic (same day)
+
+Goal stated by Kami: edit or add a skill in the repo and have it work wherever it is used, with no
+extra change.
+
+- A skill joins the Command Center by exposing `scripts/runner.mjs` exporting
+  `skill = { id, label, description, icon?, run(ctx) }`. `ctx` gives the caller's Torn key, a
+  `tornGet(path)` client, a per-skill per-key KV store, and `force`.
+- `build-registry.mjs` scans `.claude/skills/*/scripts/runner.mjs` and generates
+  `src/registry.mjs`; wrangler's `[build]` hook runs it before every deploy. The generated file
+  is git-ignored.
+- Worker routes: `GET /skills` (public list with id, label, description, icon, SKILL.md URL) and
+  `GET /run/<id>` with the Torn key. KV keys are `<id>:<keyhash>:<name>`.
+- The userscript builds its sidebar from `/skills` on every open, caches the list for offline use,
+  and no longer hardcodes any skill. Buttons without an icon get a letter badge.
+- GitHub Actions workflow `occ-runner.yml` deploys the Worker on every push to main that touches
+  the worker folder or `.claude/skills/`, using `cloudflare/wrangler-action@v4` and the repo secret
+  `CLOUDFLARE_API_TOKEN`. Workers Builds was the first choice but its repo link is dashboard-only;
+  the Action gives the same result without a click.
+- Net effect: new skill = SKILL.md + runner.mjs + push. Edited skill = push.

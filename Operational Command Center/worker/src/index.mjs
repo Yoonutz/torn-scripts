@@ -1,23 +1,14 @@
 // occ-runner: executes repo skills for the Operational Command Center userscript.
-// Route: GET /run/ledger[?force=1]  Authorization: ApiKey <Torn API key>
-// The caller's Torn key is the credential: it is used for the Torn calls and never stored.
-// Snapshots live in KV under a hash of the key, so every key has its own history.
-import { deriveSnapshot, compare, render, pickBaseline } from "../../../.claude/skills/torn-ledger/scripts/lib.mjs";
+// Routes:
+//   GET /skills                 public list of skills (id, label, description, icon, md URL)
+//   GET /run/<id>[?force=1]     Authorization: ApiKey <Torn API key>
+// The caller's Torn key is the credential: used for the Torn calls, never stored.
+// Snapshots live in KV under <skill>:<hash of key>:<name>, so every key has its own history.
+// Skills come from src/registry.mjs, generated at build time from .claude/skills/*/scripts/runner.mjs.
+import { SKILLS, SOURCES } from "./registry.mjs";
 
 const TORN = "https://api.torn.com/v2/";
-const REUSE_MS = 10 * 60 * 1000;
-
-const ENDPOINTS = {
-  money: "user/money",
-  networth: "user?selections=networth",
-  stocks: "user/stocks",
-  torn_stocks: "torn/stocks",
-  investments: "user/personalstats?cat=investments",
-  trading: "user/personalstats?cat=trading",
-  company_profile: "company/profile",
-  company_news: "company/news?cat=funds&sort=DESC",
-  company_employees: "company/employees",
-};
+const RAW = "https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,20 +38,14 @@ class TornError extends Error {
   }
 }
 
-async function tornGet(path, key) {
-  const res = await fetch(TORN + path, { headers: { Authorization: "ApiKey " + key } });
-  const body = await res.json().catch(() => ({}));
-  if (body.error) throw new TornError(path, body.error.code, body.error.error);
-  if (!res.ok) throw new TornError(path, 0, "HTTP " + res.status);
-  return body;
-}
-
-async function collect(key) {
-  const raw = { taken_at: Math.floor(Date.now() / 1000) };
-  const names = Object.keys(ENDPOINTS);
-  const results = await Promise.all(names.map((n) => tornGet(ENDPOINTS[n], key)));
-  names.forEach((n, i) => (raw[n] = results[i]));
-  return raw;
+function tornClient(key) {
+  return async (path) => {
+    const res = await fetch(TORN + path, { headers: { Authorization: "ApiKey " + key } });
+    const body = await res.json().catch(() => ({}));
+    if (body.error) throw new TornError(path, body.error.code, body.error.error);
+    if (!res.ok) throw new TornError(path, 0, "HTTP " + res.status);
+    return body;
+  };
 }
 
 function store(env, prefix) {
@@ -69,14 +54,14 @@ function store(env, prefix) {
     async index() {
       return (await env.SNAPSHOTS.get(k("index"), "json")) || [];
     },
-    async get(date) {
-      return env.SNAPSHOTS.get(k(date), "json");
+    async get(name) {
+      return env.SNAPSHOTS.get(k(name), "json");
     },
-    async put(date, value) {
-      await env.SNAPSHOTS.put(k(date), JSON.stringify(value));
+    async put(name, value) {
+      await env.SNAPSHOTS.put(k(name), JSON.stringify(value));
       const idx = await this.index();
-      if (!idx.includes(date)) {
-        idx.push(date);
+      if (!idx.includes(name)) {
+        idx.push(name);
         idx.sort();
         await env.SNAPSHOTS.put(k("index"), JSON.stringify(idx));
       }
@@ -84,66 +69,43 @@ function store(env, prefix) {
   };
 }
 
-async function listSnapshots(db) {
-  const idx = await db.index();
-  const rows = await Promise.all(idx.map((d) => db.get(d)));
-  return rows
-    .filter(Boolean)
-    .map((j) => deriveSnapshot(j.raw))
-    .sort((a, b) => a.taken_at - b.taken_at);
+function skillList() {
+  const folders = Object.keys(SOURCES);
+  return SKILLS.map((s, i) => ({
+    id: s.id,
+    label: s.label,
+    description: s.description,
+    icon: s.icon || null,
+    md: RAW + SOURCES[folders[i]],
+  }));
 }
 
-async function todayFresh(db) {
-  const idx = await db.index();
-  if (!idx.length) return null;
-  const last = await db.get(idx[idx.length - 1]);
-  if (!last || !last.stored_at || Date.now() - last.stored_at > REUSE_MS) return null;
-  return last;
-}
-
-async function runLedger(req, env, key) {
+async function runSkill(req, env, key, skill) {
   const url = new URL(req.url);
-  const force = url.searchParams.get("force") === "1";
-  const db = store(env, "ledger:" + (await keyHash(key)));
-
-  let reused = false;
-  const fresh = force ? null : await todayFresh(db);
-  let current;
-  if (fresh) {
-    current = deriveSnapshot(fresh.raw);
-    reused = true;
-  } else {
-    const raw = await collect(key);
-    current = deriveSnapshot(raw);
-    await db.put(current.date, { raw, stored_at: Date.now() });
-  }
-
-  const snapshots = await listSnapshots(db);
-  const cur = snapshots.find((s) => s.date === current.date) || current;
-  const baseline = pickBaseline(snapshots, cur);
-  const history = snapshots.filter((s) => s.taken_at <= cur.taken_at && (!baseline || s.taken_at >= baseline.taken_at));
-  const report = render(compare(baseline, cur), history);
-
-  return json({
-    skill: "ledger",
-    date: cur.date,
-    baseline: baseline ? baseline.date : null,
-    snapshots: snapshots.length,
-    reused,
-    report,
-  });
+  const ctx = {
+    key,
+    force: url.searchParams.get("force") === "1",
+    tornGet: tornClient(key),
+    db: store(env, skill.id + ":" + (await keyHash(key))),
+  };
+  const out = await skill.run(ctx);
+  return json({ skill: skill.id, ...out });
 }
 
 export default {
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     const url = new URL(req.url);
-    if (url.pathname === "/health") return json({ ok: true });
+    if (url.pathname === "/health") return json({ ok: true, skills: SKILLS.length });
+    if (url.pathname === "/skills") return json({ skills: skillList() });
+    const m = url.pathname.match(/^\/run\/([a-z0-9_-]+)$/);
+    if (!m || req.method !== "GET") return json({ error: "unknown route" }, 404);
+    const skill = SKILLS.find((s) => s.id === m[1]);
+    if (!skill) return json({ error: "unknown skill " + m[1] }, 404);
     const key = tornKey(req);
     if (!key) return json({ error: "No Torn API key sent" }, 401);
     try {
-      if (url.pathname === "/run/ledger" && req.method === "GET") return await runLedger(req, env, key);
-      return json({ error: "unknown route" }, 404);
+      return await runSkill(req, env, key, skill);
     } catch (e) {
       if (e instanceof TornError && e.code === 2) return json({ error: "Torn rejected the API key" }, 401);
       if (e instanceof TornError) return json({ error: "Torn API: " + e.message }, 502);
