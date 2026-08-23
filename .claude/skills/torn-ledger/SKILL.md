@@ -21,7 +21,7 @@ Produce the weekly Torn income report in the agreed fixed shape: income per day 
 - `scripts/collect.mjs` - pulls nine Torn API v2 endpoints and saves `data/snapshots/<date>.json`.
 - `scripts/report.mjs` - renders `data/reports/<date>.md` from latest snapshot vs baseline.
 - `scripts/lib.mjs` - pure logic (derive, compare, leaks, render). Tested by `tests/lib.test.mjs`.
-- `scripts/runner.mjs` - same collect-then-report flow for the Command Center runner (imported by the Worker, snapshots in KV). As a CLI it prints the report from live data and writes nothing.
+- `scripts/runner.mjs` - stateless Command Center entry (imported by the Worker): collects live data, reports, discards. Stores nothing anywhere; the Torn UI report therefore never shows deltas. As a CLI it prints the same report and writes nothing.
 
 ## Process
 
