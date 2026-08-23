@@ -62,8 +62,6 @@ test("compare computes per-day rates over the real gap and counts only in-window
   assert.equal(c.company.net_per_day, Math.round(21758873 / 7));
   assert.equal(c.company.income_per_day, Math.round(20085325 / 7));
   assert.equal(c.company.income_per_day_prev, Math.round(18000000 / 7));
-  assert.equal(c.bazaar.profit, 4200000);
-  assert.equal(c.bazaar.sales, 12);
   assert.equal(c.inventory.delta, 322000000 - 360815759);
   assert.equal(c.bank.days_to_maturity, 2);
 });
@@ -74,6 +72,7 @@ test("compare flags every known leak with an amount", () => {
   for (const k of ["stock_payouts_ready", "company_slot_empty", "employee_inactive", "stocks_below_threshold", "unpaid_fees", "faction_idle", "vault_idle", "bank_maturing"]) {
     assert.ok(kinds.includes(k), "missing leak " + k);
   }
+  assert.ok(!kinds.includes("bazaar_empty"), "bazaar leak excluded");
   const below = c.leaks.find((l) => l.kind === "stocks_below_threshold");
   assert.equal(below.amount, 403654350);
 });
@@ -99,7 +98,7 @@ test("render produces the agreed report shape", () => {
   assert.match(md, /networth\s+.*M\/day/);
   assert.match(md, /company net/);
   assert.match(md, /bank interest/);
-  assert.match(md, /bazaar profit/);
+  assert.doesNotMatch(md, /bazaar/i, "bazaar excluded from report");
   assert.match(md, /Inventory:/);
   assert.match(md, /Leaks:/);
   assert.match(md, /Do this week:/);
@@ -131,4 +130,51 @@ test("fmtMoney rounds to M or B", () => {
   assert.equal(fmtMoney(2115400000), "2.12B");
   assert.equal(fmtMoney(-38815759), "-38.82M");
   assert.equal(fmtMoney(721556), "0.72M");
+});
+
+test("passive benefits are never listed as payouts to collect", () => {
+  const s = deriveSnapshot(rawA);
+  assert.deepEqual(s.stocks.ready.map((r) => r.acronym), ["TCI"]);
+});
+
+test("deriveSnapshot locks shares needed for the kept increments and frees the rest", () => {
+  const s = deriveSnapshot(rawA);
+  const tct = s.stocks.positions_detail.find((p) => p.acronym === "TCT");
+  assert.equal(tct.increment, 2);
+  assert.equal(tct.protected_shares, 300000);
+  assert.equal(tct.free_shares, 100000);
+  assert.equal(tct.free_value, 30000000);
+  const tci = s.stocks.positions_detail.find((p) => p.acronym === "TCI");
+  assert.equal(tci.protected_shares, 1500000);
+  assert.equal(tci.free_shares, 0);
+  const sys = s.stocks.positions_detail.find((p) => p.acronym === "SYS");
+  assert.equal(sys.protected_shares, 0);
+  assert.equal(sys.free_shares, 229119);
+  assert.deepEqual(s.stocks.protected.map((p) => p.acronym + " " + p.increment + "x"), ["TCI 1x", "IOU 1x", "TCT 2x", "WSU 1x"]);
+  assert.equal(s.stocks.free_value, 30000000);
+});
+
+test("no leak ever asks to sell protected shares", () => {
+  const c = compare(deriveSnapshot(rawA), deriveSnapshot(rawB));
+  for (const l of c.leaks) {
+    if (/sell/i.test(l.action)) assert.ok(!/TCT|TCI|WSU/.test(l.text), "protected stock named in sell leak: " + l.text);
+  }
+  const md = render(c, []);
+  assert.match(md, /stock floors\s+4 locked \(TCT 2x, 3 at 1x\)/);
+  assert.match(md, /30\.00M free above floor/);
+});
+
+test("the floor follows the active increment reported by the API, not a fixed number", () => {
+  const raw = JSON.parse(JSON.stringify(rawA));
+  const tct = raw.stocks.stocks.find((p) => p.id === 9);
+  tct.shares = 800000;
+  tct.bonus.increment = 3;
+  let d = deriveSnapshot(raw).stocks.positions_detail.find((p) => p.acronym === "TCT");
+  assert.equal(d.protected_shares, 700000);
+  assert.equal(d.free_shares, 100000);
+  tct.shares = 250000;
+  tct.bonus.increment = 1;
+  d = deriveSnapshot(raw).stocks.positions_detail.find((p) => p.acronym === "TCT");
+  assert.equal(d.protected_shares, 100000);
+  assert.equal(d.free_shares, 150000);
 });

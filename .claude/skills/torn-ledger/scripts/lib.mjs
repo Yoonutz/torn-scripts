@@ -4,6 +4,9 @@
 const DAY = 86400;
 const BAR_WIDTH = 8;
 const MAX_LEAK_BULLETS = 7;
+export function sharesForIncrement(requirement, n) {
+  return n > 0 ? requirement * (2 ** n - 1) : 0;
+}
 
 export function fmtMoney(n) {
   const sign = n < 0 ? "-" : "";
@@ -40,18 +43,31 @@ export function deriveSnapshot(raw) {
   const trading = raw.trading.personalstats.trading;
   const tornStocks = new Map((raw.torn_stocks.stocks || []).map((s) => [s.id, s]));
 
+  // Torn stock benefits: increment n needs (2^n - 1) blocks of the requirement
+  // (1 block = 1x, 3 blocks = 2x, 7 blocks = 3x). Selling below that floor drops the
+  // increment; collecting a payout never does. Passive benefits have no payout at all:
+  // the API reports them "available" once active, so they are never "ready".
   const ready = [];
   const below = [];
+  const positions_detail = [];
   for (const p of raw.stocks.stocks || []) {
     const ref = tornStocks.get(p.id) || {};
     const acronym = ref.acronym || String(p.id);
-    if (p.bonus && p.bonus.available) ready.push({ id: p.id, acronym, payout: ref.bonus ? ref.bonus.description : "" });
+    const passive = Boolean(ref.bonus && ref.bonus.passive);
     const requirement = ref.bonus ? ref.bonus.requirement : 0;
+    const price = ref.market ? ref.market.price : 0;
+    const increment = p.bonus && p.bonus.increment !== null ? p.bonus.increment : 0;
+    if (p.bonus && p.bonus.available && !passive) ready.push({ id: p.id, acronym, payout: ref.bonus ? ref.bonus.description : "" });
     if (p.bonus && p.bonus.increment === null && requirement > 0) {
-      const price = ref.market ? ref.market.price : 0;
       below.push({ id: p.id, acronym, shares: p.shares, requirement, value: Math.round(p.shares * price) });
     }
+    // The floor is whatever increment is active right now, read from the API each run:
+    // buy a third increment and the floor rises, sell down to one and it falls.
+    const protected_shares = sharesForIncrement(requirement, increment);
+    const free_shares = Math.max(0, p.shares - protected_shares);
+    positions_detail.push({ id: p.id, acronym, passive, shares: p.shares, requirement, increment, protected_shares, free_shares, free_value: Math.round(free_shares * price) });
   }
+  const protectedPositions = positions_detail.filter((p) => p.increment > 0);
 
   const bank = money.city_bank || {};
   return {
@@ -78,6 +94,9 @@ export function deriveSnapshot(raw) {
     },
     stocks: {
       positions: (raw.stocks.stocks || []).length,
+      positions_detail,
+      protected: protectedPositions.map((p) => ({ acronym: p.acronym, increment: p.increment, protected_shares: p.protected_shares })),
+      free_value: positions_detail.filter((p) => p.increment > 0).reduce((a, p) => a + p.free_value, 0),
       ready,
       below_threshold: below,
       below_threshold_value: below.reduce((a, b) => a + b.value, 0),
@@ -156,9 +175,6 @@ function leaksFor(cur) {
   if (n.vault >= 50e6) {
     leaks.push({ kind: "vault_idle", amount: n.vault, text: "Vault " + fmtMoney(n.vault) + " earns nothing", action: "Move vault cash into something that pays" });
   }
-  if (n.bazaar === 0 && n.inventory >= 100e6) {
-    leaks.push({ kind: "bazaar_empty", amount: n.inventory, text: "Bazaar empty while inventory holds " + fmtMoney(n.inventory), action: "Restock bazaar from inventory" });
-  }
   return leaks;
 }
 
@@ -170,7 +186,7 @@ export function compare(prev, cur) {
     matured: Boolean(cur.bank.amount && cur.bank.until && cur.bank.until <= cur.taken_at),
   };
   if (!prev) {
-    return { baseline: true, days: null, date: cur.date, networth: { total: cur.networth.total, per_day: null }, company: { income_per_day: Math.round(cur.company.weekly_income / 7), income_per_day_prev: null, net_per_day: null, popularity: cur.company.popularity, popularity_prev: null, hired: cur.company.hired, capacity: cur.company.capacity }, bank, stocks: { ready: cur.stocks.ready.length, below_threshold_value: cur.stocks.below_threshold_value, payouts_collected: null }, bazaar: { profit: null, sales: null, listed: cur.networth.bazaar, listed_prev: null }, inventory: { value: cur.networth.inventory, delta: null, item_market: cur.networth.item_market }, leaks };
+    return { baseline: true, days: null, date: cur.date, networth: { total: cur.networth.total, per_day: null }, company: { income_per_day: Math.round(cur.company.weekly_income / 7), income_per_day_prev: null, net_per_day: null, popularity: cur.company.popularity, popularity_prev: null, hired: cur.company.hired, capacity: cur.company.capacity }, bank, stocks: { ready: cur.stocks.ready.length, below_threshold_value: cur.stocks.below_threshold_value, payouts_collected: null, protected: cur.stocks.protected || [], free_value: cur.stocks.free_value || 0 }, inventory: { value: cur.networth.inventory, delta: null, item_market: cur.networth.item_market }, leaks };
   }
   const days = (cur.taken_at - prev.taken_at) / DAY;
   const moves = cur.company.fund_moves.filter((m) => m.ts > prev.taken_at && m.ts <= cur.taken_at);
@@ -192,8 +208,7 @@ export function compare(prev, cur) {
       capacity: cur.company.capacity,
     },
     bank,
-    stocks: { ready: cur.stocks.ready.length, below_threshold_value: cur.stocks.below_threshold_value, payouts_collected: cur.lifetime.stock_payouts - prev.lifetime.stock_payouts },
-    bazaar: { profit: cur.lifetime.bazaar_profit - prev.lifetime.bazaar_profit, sales: cur.lifetime.bazaar_sales - prev.lifetime.bazaar_sales, listed: cur.networth.bazaar, listed_prev: prev.networth.bazaar },
+    stocks: { ready: cur.stocks.ready.length, below_threshold_value: cur.stocks.below_threshold_value, payouts_collected: cur.lifetime.stock_payouts - prev.lifetime.stock_payouts, protected: cur.stocks.protected || [], free_value: cur.stocks.free_value || 0 },
     inventory: { value: cur.networth.inventory, delta: cur.networth.inventory - prev.networth.inventory, item_market: cur.networth.item_market },
     leaks,
   };
@@ -238,16 +253,18 @@ export function render(c, history = []) {
   rows.push(["bank interest", c.bank.per_day, c.bank.matured ? "matured, idle" : ""]);
   const max = Math.max(...rows.map((r) => r[1]));
   for (const [label, v, note] of rows) L.push(pad(label, 15) + bar(v, max) + " " + pad(fmtMoney(v) + "/day", 12) + note);
-  if (!c.baseline) L.push(pad("bazaar profit", 15) + (c.bazaar.profit > 0 ? fmtMoney(c.bazaar.profit) + " this period, " + c.bazaar.sales + " sales" : "0 this period"));
   L.push(pad("stock payouts", 15) + (c.baseline ? c.stocks.ready + " ready" : c.stocks.payouts_collected + " collected, " + c.stocks.ready + " waiting"));
+  const multi = c.stocks.protected.filter((p) => p.increment > 1);
+  const singles = c.stocks.protected.length - multi.length;
+  const floors = c.stocks.protected.length ? c.stocks.protected.length + " locked (" + multi.map((p) => p.acronym + " " + p.increment + "x").concat(singles ? [singles + " at 1x"] : []).join(", ") + "); " : "none locked; ";
+  L.push(pad("stock floors", 15) + floors + fmtMoney(c.stocks.free_value) + " free above floor");
   L.push("```");
   L.push("");
   L.push("Inventory:");
   L.push("");
   L.push("```");
-  const invMax = Math.max(c.inventory.value, c.bazaar.listed, 1);
+  const invMax = Math.max(c.inventory.value, c.inventory.item_market, 1);
   L.push(pad("inventory value", 17) + bar(c.inventory.value, invMax) + " " + pad(fmtMoney(c.inventory.value), 9) + (c.inventory.delta === null ? "" : pct(c.inventory.value, c.inventory.value - c.inventory.delta) + " (" + fmtMoney(c.inventory.delta) + ")"));
-  L.push(pad("bazaar listed", 17) + bar(c.bazaar.listed, invMax) + " " + pad(fmtMoney(c.bazaar.listed), 9) + (c.bazaar.listed_prev === null ? "" : c.bazaar.listed_prev === 0 && c.bazaar.listed > 0 ? "▲ was empty" : pct(c.bazaar.listed, c.bazaar.listed_prev)));
   L.push(pad("item market", 17) + bar(c.inventory.item_market, invMax) + " " + fmtMoney(c.inventory.item_market));
   L.push("```");
   L.push("");

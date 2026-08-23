@@ -7,16 +7,48 @@
       "company": 21758873,
       "vault": 168107740,
       "cayman_bank": 0,
-      "city_bank": { "amount": 2115400000, "profit": 115400000, "duration": 30, "interest_rate": 42.55, "invested_at": 1785071249, "until": 1787663249 },
-      "faction": { "money": 345961670, "points": 0 },
+      "city_bank": {
+        "amount": 2115400000,
+        "profit": 115400000,
+        "duration": 30,
+        "interest_rate": 42.55,
+        "invested_at": 1785071249,
+        "until": 1787663249
+      },
+      "faction": {
+        "money": 345961670,
+        "points": 0
+      },
       "daily_networth": 14986586771
     }
   },
   "networth": {
     "networth": {
-      "money": { "pending": 0, "wallet": 721556, "vault": 168107740, "bookie": 0, "city_bank": 2115400000, "cayman_bank": 0, "piggy_bank": 0, "loans": 0, "unpaid_fees": -4935000 },
-      "items": { "inventory": 322000000, "display_case": 150721, "bazaar": 41000000, "trades": 0, "item_market": 0, "auction_house": 0, "enlisted_cars": 50410111 },
-      "assets": { "property": 2929182000, "stock_market": 9200847236, "company": 114414135 },
+      "money": {
+        "pending": 0,
+        "wallet": 721556,
+        "vault": 168107740,
+        "bookie": 0,
+        "city_bank": 2115400000,
+        "cayman_bank": 0,
+        "piggy_bank": 0,
+        "loans": 0,
+        "unpaid_fees": -4935000
+      },
+      "items": {
+        "inventory": 322000000,
+        "display_case": 150721,
+        "bazaar": 41000000,
+        "trades": 0,
+        "item_market": 0,
+        "auction_house": 0,
+        "enlisted_cars": 50410111
+      },
+      "assets": {
+        "property": 2929182000,
+        "stock_market": 9200847236,
+        "company": 114414135
+      },
       "points": 51516513,
       "total": 14986586771,
       "timestamp": 1787470800
@@ -24,31 +56,319 @@
   },
   "stocks": {
     "stocks": [
-      { "id": 2, "shares": 1500000, "transactions": [], "bonus": { "available": true, "increment": 1, "progress": 7, "frequency": 7 } },
-      { "id": 3, "shares": 229119, "transactions": [], "bonus": { "available": false, "increment": null, "progress": null, "frequency": null } },
-      { "id": 5, "shares": 3000000, "transactions": [], "bonus": { "available": false, "increment": 1, "progress": 31, "frequency": 31 } },
-      { "id": 34, "shares": 2294871, "transactions": [], "bonus": { "available": false, "increment": null, "progress": null, "frequency": null } }
+      {
+        "id": 2,
+        "shares": 1500000,
+        "transactions": [],
+        "bonus": {
+          "available": true,
+          "increment": 1,
+          "progress": 7,
+          "frequency": 7
+        }
+      },
+      {
+        "id": 3,
+        "shares": 229119,
+        "transactions": [],
+        "bonus": {
+          "available": false,
+          "increment": null,
+          "progress": null,
+          "frequency": null
+        }
+      },
+      {
+        "id": 5,
+        "shares": 3000000,
+        "transactions": [],
+        "bonus": {
+          "available": false,
+          "increment": 1,
+          "progress": 31,
+          "frequency": 31
+        }
+      },
+      {
+        "id": 34,
+        "shares": 2294871,
+        "transactions": [],
+        "bonus": {
+          "available": false,
+          "increment": null,
+          "progress": null,
+          "frequency": null
+        }
+      },
+      {
+        "id": 9,
+        "shares": 400000,
+        "transactions": [],
+        "bonus": {
+          "available": false,
+          "increment": 2,
+          "progress": 5,
+          "frequency": 31
+        }
+      },
+      {
+        "id": 25,
+        "shares": 1000000,
+        "transactions": [],
+        "bonus": {
+          "available": true,
+          "increment": 1,
+          "progress": 7,
+          "frequency": 7
+        }
+      }
     ]
   },
   "torn_stocks": {
     "stocks": [
-      { "id": 2, "name": "Torn City Investments", "acronym": "TCI", "market": { "price": 1190.0, "cap": 1, "shares": 1, "investors": 1 }, "bonus": { "passive": false, "frequency": 7, "requirement": 1500000, "description": "$75,000,000" } },
-      { "id": 3, "name": "Symbiotic Ltd", "acronym": "SYS", "market": { "price": 660.0, "cap": 1, "shares": 1, "investors": 1 }, "bonus": { "passive": false, "frequency": 0, "requirement": 3000000, "description": "Free education" } },
-      { "id": 5, "name": "Insured On Us", "acronym": "IOU", "market": { "price": 176.0, "cap": 1, "shares": 1, "investors": 1 }, "bonus": { "passive": true, "frequency": 31, "requirement": 3000000, "description": "Interest" } },
-      { "id": 34, "name": "Eaglewood Mercenary", "acronym": "EWM", "market": { "price": 110.0, "cap": 1, "shares": 1, "investors": 1 }, "bonus": { "passive": false, "frequency": 7, "requirement": 3000000, "description": "Box of Grenades" } }
+      {
+        "id": 2,
+        "name": "Torn City Investments",
+        "acronym": "TCI",
+        "market": {
+          "price": 1190,
+          "cap": 1,
+          "shares": 1,
+          "investors": 1
+        },
+        "bonus": {
+          "passive": false,
+          "frequency": 7,
+          "requirement": 1500000,
+          "description": "$75,000,000"
+        }
+      },
+      {
+        "id": 3,
+        "name": "Symbiotic Ltd",
+        "acronym": "SYS",
+        "market": {
+          "price": 660,
+          "cap": 1,
+          "shares": 1,
+          "investors": 1
+        },
+        "bonus": {
+          "passive": false,
+          "frequency": 0,
+          "requirement": 3000000,
+          "description": "Free education"
+        }
+      },
+      {
+        "id": 5,
+        "name": "Insured On Us",
+        "acronym": "IOU",
+        "market": {
+          "price": 176,
+          "cap": 1,
+          "shares": 1,
+          "investors": 1
+        },
+        "bonus": {
+          "passive": true,
+          "frequency": 31,
+          "requirement": 3000000,
+          "description": "Interest"
+        }
+      },
+      {
+        "id": 34,
+        "name": "Eaglewood Mercenary",
+        "acronym": "EWM",
+        "market": {
+          "price": 110,
+          "cap": 1,
+          "shares": 1,
+          "investors": 1
+        },
+        "bonus": {
+          "passive": false,
+          "frequency": 7,
+          "requirement": 3000000,
+          "description": "Box of Grenades"
+        }
+      },
+      {
+        "id": 9,
+        "name": "The Torn City Times",
+        "acronym": "TCT",
+        "market": {
+          "price": 300,
+          "cap": 1,
+          "shares": 1,
+          "investors": 1
+        },
+        "bonus": {
+          "passive": false,
+          "frequency": 31,
+          "requirement": 100000,
+          "description": "$1,000,000"
+        }
+      },
+      {
+        "id": 25,
+        "name": "West Side University",
+        "acronym": "WSU",
+        "market": {
+          "price": 800,
+          "cap": 1,
+          "shares": 1,
+          "investors": 1
+        },
+        "bonus": {
+          "passive": true,
+          "frequency": 7,
+          "requirement": 1000000,
+          "description": "a 10% education course time reduction"
+        }
+      }
     ]
   },
-  "investments": { "personalstats": { "investments": { "bank": { "total": 106604570645, "profit": 3711397560, "current": 2115400000, "time_remaining": 192291 }, "stocks": { "profits": 124396478, "losses": 18202601, "fees": 8368228, "net_profits": 97825649, "payouts": 419 } } } },
-  "trading": { "personalstats": { "trading": { "items": { "bought": { "market": 5511, "shops": 36316 }, "auctions": { "won": 0, "sold": 0 }, "sent": 63 }, "trades": 77, "points": { "bought": 908, "sold": 8033 }, "bazaar": { "customers": 570, "sales": 21769, "profit": 733622705 }, "item_market": { "customers": 3, "sales": 501, "revenue": 267424, "fees": 14076 } } } },
-  "company_profile": { "profile": { "id": 115381, "name": "FlavoTech Corp. Hiring", "rating": 10, "employees": { "hired": 11, "capacity": 12 }, "income": { "daily": 3283825, "weekly": 20085325 }, "customers": { "daily": 162, "weekly": 971 }, "funds": 21758873, "popularity": 59, "efficiency": 100, "environment": 100, "advertisement_budget": 500002 } },
-  "company_news": { "news": [
-    { "id": "y0", "text": "<a href = http://www.torn.com/profiles.php?XID=2805199>KamiRen</a> has withdrawn $20,000,000 from the company funds", "timestamp": 1787100000 },
-    { "id": "x1", "text": "<a href = http://www.torn.com/profiles.php?XID=2805199>KamiRen</a> has withdrawn $46,974,627 from the company funds", "timestamp": 1786737122 },
-    { "id": "x2", "text": "<a href = http://www.torn.com/profiles.php?XID=2805199>KamiRen</a> has withdrawn $42,284,587 from the company funds", "timestamp": 1784696245 }
-  ] },
-  "company_employees": { "employees": [
-    { "id": 1, "name": "A", "wage": 200000, "effectiveness": { "inactivity": 0, "total": 115 }, "stats": { "manual_labor": 1, "intelligence": 1, "endurance": 1 } },
-    { "id": 2, "name": "B", "wage": 100000, "effectiveness": { "inactivity": -8, "total": 121 }, "stats": { "manual_labor": 1, "intelligence": 1, "endurance": 1 } },
-    { "id": 3, "name": "C", "wage": 0, "effectiveness": { "inactivity": 0, "total": 69 }, "stats": { "manual_labor": 113, "intelligence": 675, "endurance": 1288 } }
-  ] }
+  "investments": {
+    "personalstats": {
+      "investments": {
+        "bank": {
+          "total": 106604570645,
+          "profit": 3711397560,
+          "current": 2115400000,
+          "time_remaining": 192291
+        },
+        "stocks": {
+          "profits": 124396478,
+          "losses": 18202601,
+          "fees": 8368228,
+          "net_profits": 97825649,
+          "payouts": 419
+        }
+      }
+    }
+  },
+  "trading": {
+    "personalstats": {
+      "trading": {
+        "items": {
+          "bought": {
+            "market": 5511,
+            "shops": 36316
+          },
+          "auctions": {
+            "won": 0,
+            "sold": 0
+          },
+          "sent": 63
+        },
+        "trades": 77,
+        "points": {
+          "bought": 908,
+          "sold": 8033
+        },
+        "bazaar": {
+          "customers": 570,
+          "sales": 21769,
+          "profit": 733622705
+        },
+        "item_market": {
+          "customers": 3,
+          "sales": 501,
+          "revenue": 267424,
+          "fees": 14076
+        }
+      }
+    }
+  },
+  "company_profile": {
+    "profile": {
+      "id": 115381,
+      "name": "FlavoTech Corp. Hiring",
+      "rating": 10,
+      "employees": {
+        "hired": 11,
+        "capacity": 12
+      },
+      "income": {
+        "daily": 3283825,
+        "weekly": 20085325
+      },
+      "customers": {
+        "daily": 162,
+        "weekly": 971
+      },
+      "funds": 21758873,
+      "popularity": 59,
+      "efficiency": 100,
+      "environment": 100,
+      "advertisement_budget": 500002
+    }
+  },
+  "company_news": {
+    "news": [
+      {
+        "id": "y0",
+        "text": "<a href = http://www.torn.com/profiles.php?XID=2805199>KamiRen</a> has withdrawn $20,000,000 from the company funds",
+        "timestamp": 1787100000
+      },
+      {
+        "id": "x1",
+        "text": "<a href = http://www.torn.com/profiles.php?XID=2805199>KamiRen</a> has withdrawn $46,974,627 from the company funds",
+        "timestamp": 1786737122
+      },
+      {
+        "id": "x2",
+        "text": "<a href = http://www.torn.com/profiles.php?XID=2805199>KamiRen</a> has withdrawn $42,284,587 from the company funds",
+        "timestamp": 1784696245
+      }
+    ]
+  },
+  "company_employees": {
+    "employees": [
+      {
+        "id": 1,
+        "name": "A",
+        "wage": 200000,
+        "effectiveness": {
+          "inactivity": 0,
+          "total": 115
+        },
+        "stats": {
+          "manual_labor": 1,
+          "intelligence": 1,
+          "endurance": 1
+        }
+      },
+      {
+        "id": 2,
+        "name": "B",
+        "wage": 100000,
+        "effectiveness": {
+          "inactivity": -8,
+          "total": 121
+        },
+        "stats": {
+          "manual_labor": 1,
+          "intelligence": 1,
+          "endurance": 1
+        }
+      },
+      {
+        "id": 3,
+        "name": "C",
+        "wage": 0,
+        "effectiveness": {
+          "inactivity": 0,
+          "total": 69
+        },
+        "stats": {
+          "manual_labor": 113,
+          "intelligence": 675,
+          "endurance": 1288
+        }
+      }
+    ]
+  }
 }
