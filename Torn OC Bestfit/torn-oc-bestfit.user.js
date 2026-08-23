@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn OC Best-Fit Role Recommender
 // @namespace    Torn.OC-Best-Fit
-// @version      0.91.0
+// @version      0.92.0
 // @description  Recommends the best Organized Crime role to join, ranking all available faction OCs by a blended success score (your exact API CPR discounted by your faction's real historical success rate). Color-coded green/yellow/red.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -18,9 +18,10 @@
 // ==/UserScript==
 (function() {
   "use strict";
+  const GM_PFX = "ocbf_gm_";
   (function shimGM() {
     const G = typeof window !== "undefined" ? window : globalThis;
-    const PFX = "ocbf_gm_";
+    const PFX = GM_PFX;
     if (typeof GM_getValue === "undefined") {
       G.GM_getValue = (key, def) => {
         try {
@@ -62,7 +63,7 @@
   const factionAccess = () => GM_getValue(FACACC_STORE, true);
   const SCORE_CACHE = "oc_bestfit_scorecache";
   const POS_STORE = "oc_bestfit_panelpos";
-  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.91.0";
+  const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "0.92.0";
   const META_STORE = "oc_bestfit_meta";
   const DATAVER_STORE = "oc_bestfit_dataver";
   const DATA_VERSION = 4;
@@ -561,13 +562,14 @@
         Accept: "application/json"
       }
     });
+    if (r.status && (r.status < 200 || r.status >= 300)) throw new Error(`HTTP ${r.status}`);
     let j;
     try {
       j = JSON.parse(r.text)
     } catch (e) {
       throw new Error("Bad JSON from Torn API")
     }
-    if (j && j.error) throw new Error(`Torn API ${j.error.code}: ${j.error.error}`);
+    if (j && j.error) throw new Error(`Torn API ${j.error.code||"?"}: ${j.error.error||j.error}`);
     return j
   }
   async function supaFn(payload) {
@@ -591,6 +593,51 @@
 
   const STATIC_URL = SUPA_URL + "/storage/v1/object/public/static/oc-static.json";
   const STATIC_STORE = "oc_bestfit_static";
+  const KNOWN_KEYS = [KEY_STORE, SHARE_STORE, REPLACE_CPR_STORE, ID_STORE, SELF_STORE, FACACC_STORE, SCORE_CACHE, POS_STORE, META_STORE, DATAVER_STORE, LOG_META, STATKEY_STORE, STATIC_STORE];
+
+  function healState() {
+    const now = Date.now();
+    let fixed = 0;
+    try {
+      const m = GM_getValue(META_STORE, null);
+      if (m && typeof m === "object") {
+        const ls = +m.lastSync || 0,
+          lf = +m.lastFail || 0;
+        const skewed = t => t > now + 6e4 || t < 0;
+        if (skewed(ls) || skewed(lf)) {
+          GM_setValue(META_STORE, {
+            lastSync: skewed(ls) ? 0 : ls,
+            lastFail: 0
+          });
+          fixed++
+        }
+      }
+    } catch (e) {}
+    try {
+      const keep = new Set((KNOWN_KEYS || []).map(k => GM_PFX + k));
+      const drop = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf(GM_PFX) !== 0) continue;
+        if (!keep.has(k)) {
+          drop.push(k);
+          continue
+        }
+        try {
+          JSON.parse(localStorage.getItem(k))
+        } catch (e) {
+          drop.push(k)
+        }
+      }
+      for (const k of drop) {
+        try {
+          localStorage.removeItem(k);
+          fixed++
+        } catch (e) {}
+      }
+    } catch (e) {}
+    return fixed
+  }
   let ocStatic = null;
   let staticP = null;
   let staticDone = false;
@@ -876,9 +923,41 @@
     }
   }
 
-  function idbOpen() {
+  function idbOpen(rebuilt) {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(IDB_DB, 2);
+      let req;
+      try {
+        req = indexedDB.open(IDB_DB, 2)
+      } catch (e) {
+        reject(new Error("IndexedDB unavailable"));
+        return
+      }
+      let settled = false;
+      const timer = setTimeout(() => recover(), 8e3);
+      const done = (fn, v) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(v)
+      };
+
+      function recover() {
+        if (settled) return;
+        if (rebuilt) {
+          done(reject, new Error("IndexedDB open failed"));
+          return
+        }
+        settled = true;
+        clearTimeout(timer);
+        let del;
+        try {
+          del = indexedDB.deleteDatabase(IDB_DB)
+        } catch (e) {
+          reject(new Error("IndexedDB open failed"));
+          return
+        }
+        del.onsuccess = del.onerror = del.onblocked = () => idbOpen(true).then(resolve, reject)
+      }
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE, {
@@ -888,8 +967,8 @@
           keyPath: "ts"
         })
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(new Error("IndexedDB open failed"))
+      req.onsuccess = () => done(resolve, req.result);
+      req.onerror = req.onblocked = recover
     })
   }
 
@@ -2914,9 +2993,14 @@
       return
     }
     updateTabLabel();
-    if (force) GM_setValue(META_STORE, {
-      lastSync: 0
-    });
+    if (force) {
+      try {
+        healState()
+      } catch (e) {}
+      GM_setValue(META_STORE, {
+        lastSync: 0
+      })
+    }
     setBody("Fetching your CPR...");
     try {
       state.slots = await fetchOpenSlots(key)
@@ -2966,6 +3050,9 @@
   function boot() {
     if (booted) return;
     booted = true;
+    try {
+      healState()
+    } catch (e) {}
     try {
       watchTheme()
     } catch (e) {}
@@ -3119,42 +3206,6 @@
     (document.head || document.documentElement).appendChild(style)
   }
 
-  function getJsonData(url) {
-    return new Promise((resolve, reject) => {
-      if (typeof GM_xmlhttpRequest === "function") {
-        GM_xmlhttpRequest({
-          method: "GET",
-          url: url,
-          onload: res => {
-            if (res.status < 200 || res.status >= 300) {
-              reject(new Error(`HTTP ${res.status}`));
-              return
-            }
-            try {
-              resolve(JSON.parse(res.responseText))
-            } catch (e) {
-              reject(new Error(`Invalid JSON: ${e.message||e}`))
-            }
-          },
-          onerror: () => reject(new Error("Network request failed")),
-          ontimeout: () => reject(new Error("Request timed out"))
-        });
-        return
-      }
-      if (typeof window.PDA_httpGet === "function") {
-        Promise.resolve(window.PDA_httpGet(url, {})).then(r => {
-          const text = r && (r.responseText || r.body || r.text) || (typeof r === "string" ? r : "");
-          try {
-            resolve(JSON.parse(text))
-          } catch (e) {
-            reject(new Error("Invalid JSON"))
-          }
-        }).catch(() => reject(new Error("Network request failed")));
-        return
-      }
-      reject(new Error("No HTTP transport available"))
-    })
-  }
 
   function normalizeKey(str) {
     return (str || "").toLowerCase().replace(/[^a-z0-9]/g, "")
@@ -3187,7 +3238,7 @@
   async function fetchWeights() {
     if (!hasKey()) return;
     try {
-      const data = await getJsonData(WEIGHTS_API_URL);
+      const data = await gmGet(WEIGHTS_API_URL);
       weightData = {};
       for (const [ocName, roles] of Object.entries(data)) {
         const ocKey = normalizeKey(ocName);
