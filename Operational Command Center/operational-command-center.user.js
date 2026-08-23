@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.4.1
-// @description  One floating dashboard inside Torn. Each sidebar button hands its skill file to a free OpenRouter model; the model runs the skill's script on a private Cloudflare runner and delivers the result in the content pane. Mobile first, works in Torn PDA.
+// @version      0.5.0
+// @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -16,12 +16,13 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.4.1';
+  const VERSION = '0.5.0';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
   const KEY_ANS = 'occ.ans.';
   const KEY_TORN = 'occ.torn_key';
+  const KEY_SKILLS = 'occ.skills';
   const PDA_KEY = '###' + 'PDA-APIKEY' + '###';
   const RUNNER = 'https://occ-runner.yoonutz.workers.dev';
   const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
@@ -307,7 +308,7 @@
   async function runTool(s, args) {
     const token = tornKey();
     if (!token) throw new Error('No Torn API token. Open Setup (gear) and paste it.');
-    const url = RUNNER + s.tool.path + (args && args.force ? '&force=1' : '');
+    const url = RUNNER + s.tool.path + (args && args.force ? 'force=1' : '');
     const r = await http({ url, headers: { Authorization: 'ApiKey ' + token } });
     const json = parseJson(r.text);
     if (r.status === 401) throw new Error(json.error || 'Torn rejected the API token (401).');
@@ -351,21 +352,33 @@
     throw new Error('The model never produced an answer.');
   }
 
-  const skills = [
-    {
-      id: 'ledger',
-      label: 'Ledger',
-      icon: ICON.ledger,
-      md: RAW + '.claude/skills/torn-ledger/SKILL.md',
-      tool: {
-        name: 'run_script',
-        path: '/run/ledger?ai=0',
-        description: "Runs this skill's scripts (collect, then report) on the private runner with live Torn data and returns the printed markdown report plus date, baseline date and snapshot count.",
-      },
-    },
-  ];
+  let skills = (store.get(KEY_SKILLS, []) || []).map(fromRunner);
 
-  let win, main, sub, launch;
+  function fromRunner(r) {
+    return {
+      id: r.id,
+      label: r.label,
+      icon: r.icon || '<span style="font:700 16px Arial">' + esc(String(r.label || '?').charAt(0)) + '</span>',
+      md: r.md,
+      tool: { name: 'run_script', path: '/run/' + r.id + '?', description: r.description || "Runs this skill's script on the runner and returns its printed output." },
+    };
+  }
+
+  async function loadSkills() {
+    try {
+      const r = await http({ url: RUNNER + '/skills' });
+      const json = parseJson(r.text);
+      if (r.status !== 200 || !Array.isArray(json.skills)) return false;
+      store.set(KEY_SKILLS, json.skills);
+      skills = json.skills.map(fromRunner);
+      renderSidebar();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  let win, main, sub, launch, side;
   const btns = {};
   const inflight = {};
 
@@ -518,9 +531,30 @@
     wrap.appendChild(c3);
     const info = el('div', 'occ-card');
     info.appendChild(el('h3', '', 'How it works'));
-    info.appendChild(el('div', 'occ-muted', 'A button fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill scripts with your Torn API token, then the model delivers the result here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '.'));
+    info.appendChild(el('div', 'occ-muted', 'Buttons are the skills in the repo, listed by the runner. A button fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill script with your Torn API token, then the model delivers the result here. Router: ' + MODEL + ', fallbacks: ' + FALLBACK.join(', ') + '.'));
     wrap.appendChild(info);
     show(wrap);
+  }
+
+  function renderSidebar() {
+    if (!side) return;
+    side.innerHTML = '';
+    Object.keys(btns).forEach((k) => delete btns[k]);
+    skills.forEach((s) => {
+      const b = el('button', 'occ-btn', s.icon + '<span>' + esc(s.label) + '</span>');
+      b.type = 'button';
+      b.title = s.label;
+      b.addEventListener('click', () => runSkill(s.id));
+      btns[s.id] = b;
+      side.appendChild(b);
+    });
+    const gear = el('button', 'occ-btn occ-gear', ICON.gear + '<span>Setup</span>');
+    gear.type = 'button';
+    gear.addEventListener('click', () => showSettings());
+    btns.settings = gear;
+    side.appendChild(gear);
+    const active = store.get(KEY_SKILL, null);
+    if (active && btns[active] && main && main.dataset.ran) btns[active].classList.add('occ-act');
   }
 
   function setOpen(on) {
@@ -597,29 +631,22 @@
     head.appendChild(x);
     win.appendChild(head);
 
-    const side = el('div', 'occ-side');
-    skills.forEach((s) => {
-      const b = el('button', 'occ-btn', s.icon + '<span>' + esc(s.label) + '</span>');
-      b.type = 'button';
-      b.addEventListener('click', () => runSkill(s.id));
-      btns[s.id] = b;
-      side.appendChild(b);
-    });
-    const gear = el('button', 'occ-btn occ-gear', ICON.gear + '<span>Setup</span>');
-    gear.type = 'button';
-    gear.addEventListener('click', () => showSettings());
-    btns.settings = gear;
-    side.appendChild(gear);
+    side = el('div', 'occ-side');
+    renderSidebar();
     win.appendChild(side);
 
     main = el('div', 'occ-main');
-    main.appendChild(el('div', 'occ-empty', '<div>Pick a skill on the left.</div><div class="occ-muted">' + skills.length + ' available</div>'));
+    main.appendChild(el('div', 'occ-empty', '<div>Pick a skill on the left.</div><div class="occ-muted">' + (skills.length ? skills.length + ' available' : 'loading skills...') + '</div>'));
     win.appendChild(main);
     root.appendChild(win);
 
     document.body.appendChild(root);
     if (store.get(KEY_OPEN, false)) setOpen(true);
     watchName();
+    loadSkills().then((ok) => {
+      const empty = main.querySelector('.occ-empty .occ-muted');
+      if (empty) empty.textContent = ok ? skills.length + ' available' : skills.length ? skills.length + ' available (offline list)' : 'runner unreachable';
+    });
   }
 
   if (document.body) build();

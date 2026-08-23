@@ -1,0 +1,22 @@
+name: occ-runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Operational Command Center/worker/**"
+      - ".claude/skills/**"
+      - ".github/workflows/occ-runner.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 3e099d3dab808ce99a0626101a60c610
+          workingDirectory: "Operational Command Center/worker"
+          command: deploy
