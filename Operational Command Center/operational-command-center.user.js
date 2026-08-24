@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.6.2
+// @version      0.6.3
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.6.2';
+  const VERSION = '0.6.3';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -650,14 +650,48 @@
     }
   }
 
+  // Anchors we are willing to sit next to, best first. The first two are the desktop
+  // sidebar, which Torn PDA does not render at all. The fallback below finds the Home
+  // page "General Information" name row structurally, because Torn's class names there
+  // are generated and cannot be relied on.
+  const NAME_ANCHORS = ['[class*="user-information"] a[href*="profiles.php"]', '[class*="menu-value"] a[href*="profiles.php"]'];
+
+  // Home page fallback: the player's own name link, identified by shape rather than by
+  // class - an anchor to their own profile that is NOT inside a list of other players.
+  function homeNameAnchor() {
+    const links = document.querySelectorAll('a[href*="profiles.php"]');
+    for (let i = 0; i < links.length; i++) {
+      const a = links[i];
+      if (!a.parentNode || a.closest('.occ-win')) continue;
+      // Their own row reads "Name  KamiRen [2805199]"; the id in brackets is the giveaway.
+      if (!/\[\d+\]/.test(a.textContent || '')) continue;
+      const row = a.closest('tr,li,div');
+      if (row && /name/i.test((row.textContent || '').slice(0, 40))) return a;
+      return a;
+    }
+    return null;
+  }
+
   function nameAnchor() {
-    return document.querySelector('[class*="user-information"] a[href*="profiles.php"]') || document.querySelector('[class*="menu-value"] a[href*="profiles.php"]');
+    for (let i = 0; i < NAME_ANCHORS.length; i++) {
+      const a = document.querySelector(NAME_ANCHORS[i]);
+      if (a && a.parentNode) return a;
+    }
+    return homeNameAnchor();
   }
 
   function mountInline() {
     const a = nameAnchor();
-    if (!a || !a.parentNode) return false;
-    if (a.parentNode.querySelector('.occ-inline')) return true;
+    // No anchor on this page (PDA, or a page without the name row): keep the floating
+    // launcher visible so the panel is always reachable. Never hide it without a mount.
+    if (!a || !a.parentNode) {
+      launch.classList.remove('occ-hide');
+      return false;
+    }
+    if (a.parentNode.querySelector('.occ-inline')) {
+      launch.classList.add('occ-hide');
+      return true;
+    }
     const b = el('button', 'occ-inline', ICON.dash);
     b.type = 'button';
     b.title = 'Operational Command Center';
@@ -688,6 +722,9 @@
       if (!document.querySelector('.occ-inline')) mountInline();
     });
     mo.observe(document.body, { childList: true, subtree: true });
+    // Torn swaps pages client-side; re-check after each navigation.
+    addEventListener('hashchange', mountInline);
+    addEventListener('popstate', mountInline);
   }
 
   function build() {
