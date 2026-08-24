@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.6.3
+// @version      0.6.4
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.6.3';
+  const VERSION = '0.6.4';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -56,18 +56,18 @@
 
   const CSS = `
     #occ-root,#occ-root *{box-sizing:border-box}
-    :where(#occ-root) button{font-family:Verdana,Arial,sans-serif;line-height:1.2;margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+    :where(#occ-root) button{font-family:Verdana,Arial,sans-serif;line-height:1.2;margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent;height:auto;min-height:0;width:auto;min-width:0;max-width:none;box-shadow:none;text-indent:0;border-radius:0;float:none}
     :where(#occ-root) button:focus-visible{box-shadow:0 0 0 2px rgba(242,193,78,.5)}
     :where(#occ-root) p,:where(#occ-root) ul,:where(#occ-root) ol,:where(#occ-root) h3,:where(#occ-root) pre{margin:0;padding:0;font-family:inherit}
     .occ-launch{position:fixed;right:16px;bottom:88px;z-index:99990;width:52px;height:52px;border-radius:50%;border:1px solid #3a3a3a;background:#1f1f1f;color:#f2c14e;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.55);user-select:none}
     .occ-launch.occ-hide{display:none}
     .occ-launch:active{transform:scale(.95)}
     .occ-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    button.occ-inline{all:unset;box-sizing:border-box;display:inline-flex!important;align-items:center;justify-content:center;width:18px;height:18px;min-width:18px;min-height:18px;margin:0 0 0 6px;padding:0;border:0;border-radius:4px;background:transparent;color:#f2c14e;vertical-align:middle;cursor:pointer;flex:none;overflow:visible;text-indent:0;font-size:0;line-height:0;-webkit-tap-highlight-color:transparent}
+    button.occ-inline{all:unset;box-sizing:border-box;position:relative;z-index:5;display:inline-flex!important;align-items:center;justify-content:center;width:18px;height:18px;min-width:18px;min-height:18px;margin:0 0 0 6px;padding:0;border:0;border-radius:4px;background:transparent;color:#f2c14e;vertical-align:middle;cursor:pointer;flex:none;overflow:visible;text-indent:0;font-size:0;line-height:0;-webkit-tap-highlight-color:transparent}
     button.occ-inline>svg{display:block;width:16px!important;height:16px!important;fill:none!important;stroke:#f2c14e!important;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:1;visibility:visible}
     button.occ-inline:active{transform:scale(.9)}
     button.occ-inline:focus-visible{box-shadow:0 0 0 2px rgba(242,193,78,.5)}
-    .occ-win{position:fixed;inset:0;z-index:99991;display:none;grid-template-rows:44px auto 1fr 54px;grid-template-areas:"head" "stats" "main" "tabs";background:#191919;color:#d9d9d9;font:13px/1.5 Verdana,Arial,sans-serif;overflow:hidden;text-align:left;color-scheme:dark}
+    .occ-win{position:fixed;top:10px;left:10px;right:10px;bottom:10px;z-index:99991;display:none;grid-template-rows:44px auto 1fr 54px;grid-template-areas:"head" "stats" "main" "tabs";background:#191919;background-color:#191919;color:#d9d9d9;font:13px/1.5 Verdana,Arial,sans-serif;overflow:hidden;text-align:left;color-scheme:dark;border:1px solid #2f2f2f;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.65)}
     .occ-win.occ-on{display:grid}
     .occ-head{grid-area:head;display:flex;align-items:center;gap:8px;padding:0 8px 0 14px;border-bottom:1px solid #2f2f2f;min-width:0}
     .occ-title{font-weight:700;font-size:14px;color:#fff;white-space:nowrap}
@@ -83,7 +83,7 @@
     .occ-stat .v small{font-size:9px;color:#8c8c8c;font-weight:400}
     .occ-stat.occ-hot{border-color:#4c5f3a}
     .occ-stat.occ-hot .v{color:#b9e39c}
-    .occ-main{grid-area:main;overflow:hidden auto;padding:10px 12px 70px;min-width:0;position:relative;-webkit-overflow-scrolling:touch;overflow-wrap:anywhere;scrollbar-width:thin;scrollbar-color:#3a3a3a transparent}
+    .occ-main{grid-area:main;overflow-x:hidden;overflow-y:auto;padding:10px 12px 70px;min-width:0;position:relative;-webkit-overflow-scrolling:touch;overflow-wrap:anywhere;scrollbar-width:thin;scrollbar-color:#3a3a3a transparent}
     .occ-main::-webkit-scrollbar{width:8px}
     .occ-main::-webkit-scrollbar-track{background:transparent}
     .occ-main::-webkit-scrollbar-thumb{background:#333;border-radius:4px;border:2px solid #191919}
@@ -120,7 +120,7 @@
     .occ-field{display:block;width:100%;height:36px;padding:0 10px;margin:7px 0 2px;border:1px solid #3a3a3a;border-radius:6px;background:#161616;color:#d9d9d9;font:12px/1 Consolas,Menlo,monospace;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
     .occ-field:focus{border-color:#f2c14e;box-shadow:0 0 0 2px rgba(242,193,78,.2)}
     .occ-tabs{grid-area:tabs;display:flex;border-top:1px solid #2f2f2f;background:#161616}
-    .occ-tab{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 9px;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#8c8c8c;user-select:none}
+    .occ-tab{flex:1;min-width:0;align-self:stretch;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 9px;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#8c8c8c;user-select:none}
     .occ-tab svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
     .occ-tab span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .occ-tab.occ-act{color:#f2c14e}
@@ -143,7 +143,7 @@
     .occ-md hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
     @media (min-width:768px){
       .occ-launch{bottom:24px;right:24px}
-      .occ-win{inset:auto 24px 88px auto;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #2f2f2f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+      .occ-win{top:auto;left:auto;right:24px;bottom:88px;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #2f2f2f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
       .occ-fab{right:38px;bottom:158px}
     }
   `;
@@ -656,18 +656,23 @@
   // are generated and cannot be relied on.
   const NAME_ANCHORS = ['[class*="user-information"] a[href*="profiles.php"]', '[class*="menu-value"] a[href*="profiles.php"]'];
 
-  // Home page fallback: the player's own name link, identified by shape rather than by
-  // class - an anchor to their own profile that is NOT inside a list of other players.
+  // Home page fallback: the player's OWN name row in "General Information", found
+  // structurally. Torn's class names there are generated, so instead: a profiles.php
+  // link whose row label starts with "Name". Written without regex escapes on purpose -
+  // a \b escape in this spot once got corrupted into literal backspace bytes, which
+  // silently disabled the row check and mounted the icon next to any player link.
   function homeNameAnchor() {
     const links = document.querySelectorAll('a[href*="profiles.php"]');
     for (let i = 0; i < links.length; i++) {
       const a = links[i];
       if (!a.parentNode || a.closest('.occ-win')) continue;
-      // Their own row reads "Name  KamiRen [2805199]"; the id in brackets is the giveaway.
-      if (!/\[\d+\]/.test(a.textContent || '')) continue;
+      const text = (a.textContent || '').trim();
+      // Their own row reads "Name  KamiRen [2805199]"; the [id] is the giveaway.
+      if (text.indexOf('[') === -1 || text.indexOf(']') === -1) continue;
       const row = a.closest('tr,li,div');
-      if (row && /name/i.test((row.textContent || '').slice(0, 40))) return a;
-      return a;
+      if (!row) continue;
+      const label = (row.textContent || '').trim().slice(0, 4).toLowerCase();
+      if (label === 'name') return a;
     }
     return null;
   }
@@ -695,6 +700,13 @@
     const b = el('button', 'occ-inline', ICON.dash);
     b.type = 'button';
     b.title = 'Operational Command Center';
+    // Torn appends badges (donator star, awards) right after the name link. Kami wants
+    // only his icon there, so those badges are hidden and the button takes their spot.
+    let ref = a;
+    while (ref.nextElementSibling && !ref.nextElementSibling.matches('button,.occ-inline,a') && ref.nextElementSibling.getBoundingClientRect().width <= 24) {
+      ref = ref.nextElementSibling;
+      ref.style.display = 'none';
+    }
     a.insertAdjacentElement('afterend', b);
     launch.classList.add('occ-hide');
     return true;
