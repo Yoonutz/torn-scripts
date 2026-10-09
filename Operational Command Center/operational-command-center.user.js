@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.6
+// @version      0.7.7
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.6';
+  const VERSION = '0.7.7';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -979,16 +979,21 @@
   }
 
   // Phone-sized Torn layout (PDA or mobile browser): icons row is crowded, so use the fixed slot.
-  function useDock() {
-    return isPda() || window.innerWidth <= 768;
+  function useDock(btn) {
+    return isPda() || window.innerWidth <= 768 || !!(btn && btn.closest('[class*="user-information-mobile"]'));
   }
 
   // Torn PDA: no room beside the icon, so the pill gets its own fixed slot on every page,
   // right under the status icons line and above the page title.
   function placeDock(btn) {
-    // Real Torn markup: div.content-wrapper[role=main] > ... > div.content-title (page title row).
-    const title = document.querySelector('.content-wrapper > .content-title') || document.querySelector('.content-title');
-    let anchor = title ? { node: title, where: 'beforebegin' } : null;
+    // Real Torn mobile markup: div.content > [div.areas (nav), div.user-information-mobile (money + icons swiper)],
+    // then the page. The icons <ul> sits in a horizontal swiper, so the dock must go AFTER the whole block.
+    const um = btn.closest('[class*="user-information-mobile"]') || document.querySelector('[class*="user-information-mobile"]');
+    let anchor = um && um.parentNode ? { node: um, where: 'afterend' } : null;
+    if (!anchor) {
+      const title = document.querySelector('.content-wrapper > .content-title') || document.querySelector('.content-title');
+      if (title) anchor = { node: title, where: 'beforebegin' };
+    }
     if (!anchor) {
       const row = btn.closest('[class*="status-icons"]') || btn.closest('ul,ol') || btn.parentNode;
       if (!row || !row.parentNode || row === document.body) return false;
@@ -1015,7 +1020,7 @@
   }
 
   function placeTrains(btn) {
-    if (useDock() && placeDock(btn)) return;
+    if (useDock(btn) && placeDock(btn)) return;
     let p = btn.nextElementSibling;
     if (!p || !p.classList.contains('occ-trains') || p.classList.contains('occ-float')) {
       p = makeTrainsPill(false);
