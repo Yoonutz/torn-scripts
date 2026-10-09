@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.2
+// @version      0.7.3
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.2';
+  const VERSION = '0.7.3';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -807,6 +807,9 @@
 
   let toastEl = null;
   let toastTimer = 0;
+  let toastWatch = 0;
+  let toastUntil = 0;
+  let toastBound = false;
   let tipEl = null;
 
   // Boxes live in #occ-root (a direct child of body, fixed, top z-index) so Torn's own
@@ -845,22 +848,39 @@
     if (!root || !anchor) return;
     if (!toastEl || !toastEl.isConnected) {
       toastEl = el('div', 'occ-toast');
-      toastEl.addEventListener('click', () => {
-        toastEl.style.display = 'none';
-      });
+      toastEl.addEventListener('click', hideToast);
       root.appendChild(toastEl);
     }
     toastEl.textContent = text;
     toastEl.classList.toggle('bad', !!bad);
-    toastEl.style.display = 'block';
+    toastEl.style.setProperty('display', 'block', 'important');
     placeBox(toastEl, anchor);
+    // Disappears on its own: a timer, plus a watchdog that re-checks the deadline, plus any
+    // tap or click outside the message.
+    const ms = bad ? 8000 : 3500;
+    toastUntil = Date.now() + ms;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(
-      () => {
-        toastEl.style.display = 'none';
-      },
-      bad ? 9000 : 4500
-    );
+    clearInterval(toastWatch);
+    toastTimer = setTimeout(hideToast, ms);
+    toastWatch = setInterval(() => {
+      if (Date.now() >= toastUntil) hideToast();
+    }, 400);
+    if (!toastBound) {
+      toastBound = true;
+      document.addEventListener(
+        'pointerdown',
+        (e) => {
+          if (toastEl && toastEl.style.display !== 'none' && !(e.target && e.target.closest && e.target.closest('.occ-trains'))) hideToast();
+        },
+        true
+      );
+    }
+  }
+
+  function hideToast() {
+    clearTimeout(toastTimer);
+    clearInterval(toastWatch);
+    if (toastEl) toastEl.style.setProperty('display', 'none', 'important');
   }
 
   async function fetchTrains(manual, pill) {
