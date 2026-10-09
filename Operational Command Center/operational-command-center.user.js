@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.1
+// @version      0.7.2
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.1';
+  const VERSION = '0.7.2';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -174,11 +174,10 @@
     .occ-trains.stale{opacity:.55}
     .occ-trains.busy{animation:occ-tpulse 1s ease-in-out infinite}
     @keyframes occ-tpulse{50%{opacity:.35}}
-    .occ-trains:hover::after{content:attr(data-tip);position:absolute;left:0;top:18px;width:max-content;max-width:240px;white-space:normal;background:#111;border:1px solid #3a3a3a;border-radius:4px;padding:5px 8px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;z-index:99993}
     .occ-trains.occ-float{position:fixed;right:16px;bottom:146px;margin:0;z-index:99990}
-    .occ-toast{position:fixed;z-index:99994;display:none;max-width:260px;padding:7px 10px;background:#111;border:1px solid #3a3a3a;border-left:3px solid #f2c14e;border-radius:4px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;box-shadow:0 4px 14px rgba(0,0,0,.55);cursor:pointer;text-align:left}
+    .occ-tip{position:fixed;z-index:2147483600;display:none;pointer-events:none;max-width:260px;padding:6px 9px;background:#111;border:1px solid #3a3a3a;border-radius:4px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;box-shadow:0 4px 14px rgba(0,0,0,.55);text-align:left}
+    .occ-toast{position:fixed;z-index:2147483600;display:none;max-width:260px;padding:7px 10px;background:#111;border:1px solid #3a3a3a;border-left:3px solid #f2c14e;border-radius:4px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;box-shadow:0 4px 14px rgba(0,0,0,.55);cursor:pointer;text-align:left}
     .occ-toast.bad{border-left-color:#e5534b}
-    .occ-trains.occ-float:hover::after{top:auto;bottom:18px;left:auto;right:0}
     @media (min-width:768px){
       .occ-launch{bottom:24px;right:24px}
       .occ-win{top:auto;left:auto;right:24px;bottom:88px;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #2f2f2f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
@@ -803,10 +802,41 @@
       if (p.innerHTML !== html) p.innerHTML = html;
       if (p.getAttribute('data-tip') !== tip) p.setAttribute('data-tip', tip);
     });
+    if (tipEl && tipEl.style.display === 'block') tipEl.textContent = tip;
   }
 
   let toastEl = null;
   let toastTimer = 0;
+  let tipEl = null;
+
+  // Boxes live in #occ-root (a direct child of body, fixed, top z-index) so Torn's own
+  // panels and its sidebar stacking context can never cover them.
+  function placeBox(box, anchor) {
+    const r = anchor.getBoundingClientRect();
+    const w = Math.min(260, window.innerWidth - 16);
+    box.style.maxWidth = w + 'px';
+    box.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    box.style.top = '';
+    box.style.bottom = '';
+    if (r.bottom + 90 < window.innerHeight) box.style.top = r.bottom + 8 + 'px';
+    else box.style.bottom = window.innerHeight - r.top + 8 + 'px';
+  }
+
+  function showTrainsTip(p) {
+    const root = document.getElementById('occ-root');
+    if (!root) return;
+    if (!tipEl || !tipEl.isConnected) {
+      tipEl = el('div', 'occ-tip');
+      root.appendChild(tipEl);
+    }
+    tipEl.textContent = trainsTip();
+    tipEl.style.display = 'block';
+    placeBox(tipEl, p);
+  }
+
+  function hideTrainsTip() {
+    if (tipEl) tipEl.style.display = 'none';
+  }
 
   // Small message next to the pill: what the click did, or why it did not work.
   function trainsToast(text, bad, pill) {
@@ -823,14 +853,7 @@
     toastEl.textContent = text;
     toastEl.classList.toggle('bad', !!bad);
     toastEl.style.display = 'block';
-    const r = anchor.getBoundingClientRect();
-    const w = Math.min(260, window.innerWidth - 16);
-    toastEl.style.maxWidth = w + 'px';
-    toastEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
-    toastEl.style.top = '';
-    toastEl.style.bottom = '';
-    if (r.bottom + 90 < window.innerHeight) toastEl.style.top = r.bottom + 8 + 'px';
-    else toastEl.style.bottom = window.innerHeight - r.top + 8 + 'px';
+    placeBox(toastEl, anchor);
     clearTimeout(toastTimer);
     toastTimer = setTimeout(
       () => {
@@ -921,9 +944,11 @@
     p.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      hideTrainsTip();
       fetchTrains(true, p);
     });
-    p.addEventListener('mouseenter', () => p.setAttribute('data-tip', trainsTip()));
+    p.addEventListener('mouseenter', () => showTrainsTip(p));
+    p.addEventListener('mouseleave', hideTrainsTip);
     return p;
   }
 
