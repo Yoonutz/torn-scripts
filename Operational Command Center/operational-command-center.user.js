@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.3
+// @version      0.7.4
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.3';
+  const VERSION = '0.7.4';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -174,6 +174,8 @@
     .occ-trains.stale{opacity:.55}
     .occ-trains.busy{animation:occ-tpulse 1s ease-in-out infinite}
     @keyframes occ-tpulse{50%{opacity:.35}}
+    .occ-dock{display:flex;justify-content:flex-end;box-sizing:border-box;width:100%;margin:0;padding:3px 12px 0;background:transparent;pointer-events:none;position:relative;z-index:1}
+    .occ-dock .occ-trains{pointer-events:auto;margin:0;height:16px;padding:0 6px;font-size:11px}
     .occ-trains.occ-float{position:fixed;right:16px;bottom:146px;margin:0;z-index:99990}
     .occ-tip{position:fixed;z-index:2147483600;display:none;pointer-events:none;max-width:260px;padding:6px 9px;background:#111;border:1px solid #3a3a3a;border-radius:4px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;box-shadow:0 4px 14px rgba(0,0,0,.55);text-align:left}
     .occ-toast{position:fixed;z-index:2147483600;display:none;max-width:260px;padding:7px 10px;background:#111;border:1px solid #3a3a3a;border-left:3px solid #f2c14e;border-radius:4px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;box-shadow:0 4px 14px rgba(0,0,0,.55);cursor:pointer;text-align:left}
@@ -972,7 +974,36 @@
     return p;
   }
 
+  function isPda() {
+    return typeof window.PDA_httpGet === 'function';
+  }
+
+  // Torn PDA: no room beside the icon, so the pill gets its own fixed slot on every page,
+  // right under the status icons line and above the page title.
+  function placeDock(btn) {
+    const row = btn.closest('[class*="status-icons"]') || btn.closest('ul,ol') || btn.parentNode;
+    if (!row || !row.parentNode || row === document.body) return false;
+    let dock = row.nextElementSibling;
+    let p = dock && dock.classList.contains('occ-dock') ? dock.querySelector('.occ-trains') : null;
+    if (!p) {
+      if (dock && dock.classList.contains('occ-dock')) dock.remove();
+      dock = el('div', 'occ-dock');
+      p = makeTrainsPill(false);
+      dock.appendChild(p);
+      row.insertAdjacentElement('afterend', dock);
+    }
+    document.querySelectorAll('.occ-trains').forEach((x) => {
+      if (x !== p) x.remove();
+    });
+    document.querySelectorAll('.occ-dock').forEach((d) => {
+      if (d !== dock) d.remove();
+    });
+    paintTrains();
+    return true;
+  }
+
   function placeTrains(btn) {
+    if (isPda() && placeDock(btn)) return;
     let p = btn.nextElementSibling;
     if (!p || !p.classList.contains('occ-trains') || p.classList.contains('occ-float')) {
       p = makeTrainsPill(false);
