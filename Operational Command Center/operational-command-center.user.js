@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.5
+// @version      0.7.6
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.5';
+  const VERSION = '0.7.6';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -975,7 +975,12 @@
   }
 
   function isPda() {
-    return typeof window.PDA_httpGet === 'function';
+    return typeof window.PDA_httpGet === 'function' || /TornPDA/i.test(navigator.userAgent || '');
+  }
+
+  // Phone-sized Torn layout (PDA or mobile browser): icons row is crowded, so use the fixed slot.
+  function useDock() {
+    return isPda() || window.innerWidth <= 768;
   }
 
   // Torn PDA: no room beside the icon, so the pill gets its own fixed slot on every page,
@@ -1010,7 +1015,7 @@
   }
 
   function placeTrains(btn) {
-    if (isPda() && placeDock(btn)) return;
+    if (useDock() && placeDock(btn)) return;
     let p = btn.nextElementSibling;
     if (!p || !p.classList.contains('occ-trains') || p.classList.contains('occ-float')) {
       p = makeTrainsPill(false);
