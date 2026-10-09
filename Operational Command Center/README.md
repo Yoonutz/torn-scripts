@@ -125,6 +125,26 @@ CLI uses, so a style edit plus push changes the Torn UI output too. Caveat: body
 model, which can occasionally mangle a line; `stats` cards bypass the model
 and always carry 1:1.
 
+## Company trains pill
+
+Small `x / 20` badge right of the OCC icon (next to the player name; floating
+above the launcher on pages without a name row). Userscript only, no skill or
+Worker involved.
+
+- One call per 6 hours: `GET https://api.torn.com/v2/company/profile` with
+  `Authorization: ApiKey <torn key>`, field `profile.trains`. Needs a director
+  key, Limited access or higher. Max `20` is hardcoded (not in the response).
+- Click the pill to refresh now (30 s cooldown). Hover shows the last refresh
+  time, relative age and the next auto refresh.
+- Colors: grey 0, amber 1-19, red 20/20 (full bank, daily trains are lost).
+  Faded `?` or value = no data or last refresh failed (reason in the tooltip).
+- Cached in `localStorage` (`occ.trains`); tabs share it and a short lock
+  (`occ.trains.lock`) keeps several Torn tabs from calling at once. Keys that
+  will not fix themselves (invalid, access too low, paused) stop auto retrying
+  until the key changes or the pill is clicked.
+- Needs `@connect api.torn.com`, so Tampermonkey asks to approve it once after
+  the update.
+
 ## Keys the player pastes once
 
 Both live in the userscript settings pane, stored in `localStorage`:
