@@ -134,6 +134,8 @@ Worker involved.
 - One call per 6 hours: `GET https://api.torn.com/v2/company/profile` with
   `Authorization: ApiKey <torn key>`, field `profile.trains`. Needs a director
   key, Limited access or higher. Max `20` is hardcoded (not in the response).
+- In Torn PDA the pill has its own fixed slot on every page: right-aligned
+  directly under the status icons line, above the page title.
 - Click the pill to refresh now (30 s cooldown). A small message appears next
   to it saying what happened (new value, or why it failed). Hover shows the
   last refresh time, relative age and the next auto refresh.
