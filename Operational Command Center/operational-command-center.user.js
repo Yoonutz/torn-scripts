@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.0
+// @version      0.7.1
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.0';
+  const VERSION = '0.7.1';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -163,9 +163,9 @@
     .occ-md strong{color:#fff;font-weight:700}
     .occ-md em{color:#bdbdbd}
     .occ-md hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
-    .occ-trains{all:unset;box-sizing:border-box;position:relative;display:inline-flex!important;align-items:center;flex:none;height:18px;margin:0 0 0 6px;padding:0 6px;background:#1f1f1f;border:1px solid #3a3a3a;border-radius:4px;font:700 12px/1 Verdana,Arial,sans-serif;color:#8a8a8a;white-space:nowrap;vertical-align:middle;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+    .occ-trains{all:unset;box-sizing:border-box;position:relative;display:inline-flex!important;align-items:center;flex:none;height:14px;margin:0 0 0 4px;padding:0 4px;background:#1f1f1f;border:1px solid #3a3a3a;border-radius:3px;font:700 10px/1 Verdana,Arial,sans-serif;color:#8a8a8a;white-space:nowrap;vertical-align:middle;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
     .occ-trains .n{color:#d6d6d6}
-    .occ-trains .s{margin:0 3px;font-weight:400;color:#8a8a8a}
+    .occ-trains .s{margin:0 2px;font-weight:400;color:#8a8a8a}
     .occ-trains .m{font-weight:400;color:#8a8a8a}
     .occ-trains.hot{border-color:#6b5a26}
     .occ-trains.hot .n{color:#f2c14e}
@@ -174,9 +174,11 @@
     .occ-trains.stale{opacity:.55}
     .occ-trains.busy{animation:occ-tpulse 1s ease-in-out infinite}
     @keyframes occ-tpulse{50%{opacity:.35}}
-    .occ-trains:hover::after{content:attr(data-tip);position:absolute;left:0;top:24px;width:max-content;max-width:240px;white-space:normal;background:#111;border:1px solid #3a3a3a;border-radius:4px;padding:5px 8px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;z-index:99993}
+    .occ-trains:hover::after{content:attr(data-tip);position:absolute;left:0;top:18px;width:max-content;max-width:240px;white-space:normal;background:#111;border:1px solid #3a3a3a;border-radius:4px;padding:5px 8px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;z-index:99993}
     .occ-trains.occ-float{position:fixed;right:16px;bottom:146px;margin:0;z-index:99990}
-    .occ-trains.occ-float:hover::after{top:auto;bottom:24px;left:auto;right:0}
+    .occ-toast{position:fixed;z-index:99994;display:none;max-width:260px;padding:7px 10px;background:#111;border:1px solid #3a3a3a;border-left:3px solid #f2c14e;border-radius:4px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;box-shadow:0 4px 14px rgba(0,0,0,.55);cursor:pointer;text-align:left}
+    .occ-toast.bad{border-left-color:#e5534b}
+    .occ-trains.occ-float:hover::after{top:auto;bottom:18px;left:auto;right:0}
     @media (min-width:768px){
       .occ-launch{bottom:24px;right:24px}
       .occ-win{top:auto;left:auto;right:24px;bottom:88px;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #2f2f2f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
@@ -803,31 +805,81 @@
     });
   }
 
-  async function fetchTrains(manual) {
-    if (trainsBusy) return;
+  let toastEl = null;
+  let toastTimer = 0;
+
+  // Small message next to the pill: what the click did, or why it did not work.
+  function trainsToast(text, bad, pill) {
+    const root = document.getElementById('occ-root');
+    const anchor = pill || document.querySelector('.occ-trains');
+    if (!root || !anchor) return;
+    if (!toastEl || !toastEl.isConnected) {
+      toastEl = el('div', 'occ-toast');
+      toastEl.addEventListener('click', () => {
+        toastEl.style.display = 'none';
+      });
+      root.appendChild(toastEl);
+    }
+    toastEl.textContent = text;
+    toastEl.classList.toggle('bad', !!bad);
+    toastEl.style.display = 'block';
+    const r = anchor.getBoundingClientRect();
+    const w = Math.min(260, window.innerWidth - 16);
+    toastEl.style.maxWidth = w + 'px';
+    toastEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    toastEl.style.top = '';
+    toastEl.style.bottom = '';
+    if (r.bottom + 90 < window.innerHeight) toastEl.style.top = r.bottom + 8 + 'px';
+    else toastEl.style.bottom = window.innerHeight - r.top + 8 + 'px';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(
+      () => {
+        toastEl.style.display = 'none';
+      },
+      bad ? 9000 : 4500
+    );
+  }
+
+  async function fetchTrains(manual, pill) {
+    const say = (t, bad) => {
+      if (manual) trainsToast(t, bad, pill);
+    };
+    if (trainsBusy) {
+      say('Still refreshing. Give it a few seconds.');
+      return;
+    }
     const key = tornKey();
     const cur = store.get(KEY_TRAINS, null);
     if (!key) {
       trains = Object.assign({}, cur || {}, { nokey: true, err: 'Set your Torn key in Setup' });
       paintTrains();
+      say('No Torn key yet. Open the Command Center, tap Setup and paste your key.', true);
       return;
     }
     const kh = trainsTail(key);
     const now = Date.now();
     const same = !!cur && cur.kh === kh;
     if (manual) {
-      if (same && now - cur.tried < TRAINS_COOLDOWN) return;
-    } else if (!trainsDue(cur, key)) {
-      trains = cur;
-      paintTrains();
-      return;
+      if (same && now - cur.tried < TRAINS_COOLDOWN) {
+        const last = typeof cur.n === 'number' && !cur.err ? cur.n + ' / ' + TRAINS_MAX : cur.err || 'no value yet';
+        say('Refreshed ' + Math.round((now - cur.tried) / 1000) + 's ago (' + last + '). You can refresh again in ' + Math.ceil((TRAINS_COOLDOWN - (now - cur.tried)) / 1000) + 's.', !!cur.err);
+        return;
+      }
+    } else {
+      if (!trainsDue(cur, key)) {
+        trains = cur;
+        paintTrains();
+        return;
+      }
+      // Another Torn tab is already fetching: skip, the storage event will bring its result.
+      if (now - store.get(KEY_TRAINS_LOCK, 0) < TRAINS_LOCK_MS) return;
     }
-    // Another Torn tab is already fetching: skip, the storage event will bring its result.
-    if (now - store.get(KEY_TRAINS_LOCK, 0) < TRAINS_LOCK_MS) return;
     store.set(KEY_TRAINS_LOCK, now);
     trainsBusy = true;
     paintTrains();
+    say('Refreshing…');
     const rec = { n: same ? cur.n : undefined, ts: same ? cur.ts : undefined, tried: now, kh: kh };
+    let net = false;
     try {
       const r = await http({ url: TRAINS_URL, headers: { Authorization: 'ApiKey ' + key, Accept: 'application/json' }, timeout: 20000 });
       let j = null;
@@ -844,9 +896,10 @@
       } else if (j && j.profile) {
         rec.err = 'Key owner is not the company director';
       } else {
-        rec.err = 'Unexpected reply (HTTP ' + r.status + ')';
+        rec.err = 'Unexpected reply from Torn (HTTP ' + r.status + '): ' + String(r.text || '').slice(0, 60);
       }
     } catch (e) {
+      net = true;
       rec.err = 'Refresh failed: ' + (e && e.message ? e.message : 'error');
     } finally {
       trainsBusy = false;
@@ -854,6 +907,11 @@
       store.del(KEY_TRAINS_LOCK);
       trains = rec;
       paintTrains();
+    }
+    if (rec.err) {
+      say(rec.err + (net ? '. If Tampermonkey asked about api.torn.com, choose Always allow, then click again.' : ''), true);
+    } else {
+      say('Company trains: ' + rec.n + ' / ' + TRAINS_MAX + (rec.n >= TRAINS_MAX ? '. Full: daily trains are being lost.' : '.'));
     }
   }
 
@@ -863,7 +921,7 @@
     p.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      fetchTrains(true);
+      fetchTrains(true, p);
     });
     p.addEventListener('mouseenter', () => p.setAttribute('data-tip', trainsTip()));
     return p;
@@ -875,6 +933,8 @@
       p = makeTrainsPill(false);
       btn.insertAdjacentElement('afterend', p);
     }
+    const par = btn.parentNode;
+    if (par && par.style && par.style.whiteSpace !== 'nowrap') par.style.whiteSpace = 'nowrap';
     document.querySelectorAll('.occ-trains').forEach((x) => {
       if (x !== p) x.remove();
     });
