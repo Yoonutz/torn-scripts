@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.6.4
+// @version      0.7.0
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -10,13 +10,14 @@
 // @connect      openrouter.ai
 // @connect      raw.githubusercontent.com
 // @connect      occ-runner.yoonutz.workers.dev
+// @connect      api.torn.com
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  const VERSION = '0.6.4';
+  const VERSION = '0.7.0';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -32,6 +33,27 @@
   const ATTEMPTS = 3;
   const MAX_STEPS = 4;
   const TIMEOUT_MS = 90000;
+  // Company trains pill (next to the OCC icon). One Torn call per 6h, or on click.
+  const KEY_TRAINS = 'occ.trains';
+  const KEY_TRAINS_LOCK = 'occ.trains.lock';
+  const TRAINS_URL = 'https://api.torn.com/v2/company/profile';
+  const TRAINS_MAX = 20;
+  const TRAINS_EVERY = 6 * 3600 * 1000;
+  const TRAINS_COOLDOWN = 30000;
+  const TRAINS_LOCK_MS = 30000;
+  const TRAINS_TICK = 300000;
+  const TRAINS_ERR = {
+    1: 'Torn key is empty',
+    2: 'Torn key is invalid',
+    5: 'Rate limited, try again later',
+    8: 'IP temporarily blocked by Torn',
+    13: 'Key paused: owner inactive',
+    16: 'Key access level too low (needs Limited or higher)',
+    18: 'Key paused by its owner',
+  };
+  const TRAINS_STOP = [1, 2, 16, 18];
+  let trains = null;
+  let trainsBusy = false;
 
   const store = {
     get(k, d) {
@@ -141,10 +163,25 @@
     .occ-md strong{color:#fff;font-weight:700}
     .occ-md em{color:#bdbdbd}
     .occ-md hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
+    .occ-trains{all:unset;box-sizing:border-box;position:relative;display:inline-flex!important;align-items:center;flex:none;height:18px;margin:0 0 0 6px;padding:0 6px;background:#1f1f1f;border:1px solid #3a3a3a;border-radius:4px;font:700 12px/1 Verdana,Arial,sans-serif;color:#8a8a8a;white-space:nowrap;vertical-align:middle;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+    .occ-trains .n{color:#d6d6d6}
+    .occ-trains .s{margin:0 3px;font-weight:400;color:#8a8a8a}
+    .occ-trains .m{font-weight:400;color:#8a8a8a}
+    .occ-trains.hot{border-color:#6b5a26}
+    .occ-trains.hot .n{color:#f2c14e}
+    .occ-trains.full{border-color:#7a2f2b}
+    .occ-trains.full .n{color:#e5534b}
+    .occ-trains.stale{opacity:.55}
+    .occ-trains.busy{animation:occ-tpulse 1s ease-in-out infinite}
+    @keyframes occ-tpulse{50%{opacity:.35}}
+    .occ-trains:hover::after{content:attr(data-tip);position:absolute;left:0;top:24px;width:max-content;max-width:240px;white-space:normal;background:#111;border:1px solid #3a3a3a;border-radius:4px;padding:5px 8px;font:400 11px/1.4 Verdana,Arial,sans-serif;color:#d6d6d6;z-index:99993}
+    .occ-trains.occ-float{position:fixed;right:16px;bottom:146px;margin:0;z-index:99990}
+    .occ-trains.occ-float:hover::after{top:auto;bottom:24px;left:auto;right:0}
     @media (min-width:768px){
       .occ-launch{bottom:24px;right:24px}
       .occ-win{top:auto;left:auto;right:24px;bottom:88px;width:420px;height:640px;max-height:calc(100vh - 112px);border:1px solid #2f2f2f;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
       .occ-fab{right:38px;bottom:158px}
+      .occ-trains.occ-float{bottom:84px;right:24px}
     }
   `;
 
@@ -691,10 +728,13 @@
     // launcher visible so the panel is always reachable. Never hide it without a mount.
     if (!a || !a.parentNode) {
       launch.classList.remove('occ-hide');
+      placeFloatTrains();
       return false;
     }
-    if (a.parentNode.querySelector('.occ-inline')) {
+    const have = a.parentNode.querySelector('.occ-inline');
+    if (have) {
       launch.classList.add('occ-hide');
+      placeTrains(have);
       return true;
     }
     const b = el('button', 'occ-inline', ICON.dash);
@@ -709,7 +749,159 @@
     }
     a.insertAdjacentElement('afterend', b);
     launch.classList.add('occ-hide');
+    placeTrains(b);
     return true;
+  }
+
+  // ---- Company trains pill -------------------------------------------------
+  function hhmm(ts) {
+    const d = new Date(ts);
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function ago(ts) {
+    const m = Math.max(0, Math.round((Date.now() - ts) / 60000));
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'm ago';
+    return Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago';
+  }
+
+  function trainsTail(k) {
+    return String(k).slice(-4);
+  }
+
+  function trainsDue(c, key) {
+    if (!c || typeof c.tried !== 'number' || c.kh !== trainsTail(key)) return true;
+    if (c.bad) return false;
+    return Date.now() - c.tried >= TRAINS_EVERY;
+  }
+
+  function trainsTip() {
+    const t = trains || {};
+    if (t.nokey) return 'Company trains · ' + t.err;
+    const parts = ['Company trains'];
+    parts.push(typeof t.ts === 'number' ? 'refreshed ' + hhmm(t.ts) + ' (' + ago(t.ts) + ')' : 'not refreshed yet');
+    if (t.err) parts.push(t.err);
+    if (typeof t.n === 'number' && t.n >= TRAINS_MAX) parts.push('FULL: daily trains are being lost');
+    if (!t.bad && typeof t.tried === 'number') parts.push('next ' + hhmm(Math.max(Date.now(), t.tried + TRAINS_EVERY)));
+    parts.push('click to refresh');
+    return parts.join(' · ');
+  }
+
+  function paintTrains() {
+    const has = !!trains && typeof trains.n === 'number';
+    const n = has ? trains.n : -1;
+    const html = '<span class="n">' + (has ? n : '?') + '</span><span class="s">/</span><span class="m">' + TRAINS_MAX + '</span>';
+    const tip = trainsTip();
+    document.querySelectorAll('.occ-trains').forEach((p) => {
+      p.classList.toggle('full', n >= TRAINS_MAX);
+      p.classList.toggle('hot', n > 0 && n < TRAINS_MAX);
+      p.classList.toggle('stale', !has || !!(trains && trains.err));
+      p.classList.toggle('busy', trainsBusy);
+      if (p.innerHTML !== html) p.innerHTML = html;
+      if (p.getAttribute('data-tip') !== tip) p.setAttribute('data-tip', tip);
+    });
+  }
+
+  async function fetchTrains(manual) {
+    if (trainsBusy) return;
+    const key = tornKey();
+    const cur = store.get(KEY_TRAINS, null);
+    if (!key) {
+      trains = Object.assign({}, cur || {}, { nokey: true, err: 'Set your Torn key in Setup' });
+      paintTrains();
+      return;
+    }
+    const kh = trainsTail(key);
+    const now = Date.now();
+    const same = !!cur && cur.kh === kh;
+    if (manual) {
+      if (same && now - cur.tried < TRAINS_COOLDOWN) return;
+    } else if (!trainsDue(cur, key)) {
+      trains = cur;
+      paintTrains();
+      return;
+    }
+    // Another Torn tab is already fetching: skip, the storage event will bring its result.
+    if (now - store.get(KEY_TRAINS_LOCK, 0) < TRAINS_LOCK_MS) return;
+    store.set(KEY_TRAINS_LOCK, now);
+    trainsBusy = true;
+    paintTrains();
+    const rec = { n: same ? cur.n : undefined, ts: same ? cur.ts : undefined, tried: now, kh: kh };
+    try {
+      const r = await http({ url: TRAINS_URL, headers: { Authorization: 'ApiKey ' + key, Accept: 'application/json' }, timeout: 20000 });
+      let j = null;
+      try {
+        j = JSON.parse(r.text);
+      } catch (e) {}
+      if (j && j.error) {
+        const code = j.error.code;
+        rec.err = TRAINS_ERR[code] || 'Torn error ' + code + (j.error.error ? ': ' + j.error.error : '');
+        if (TRAINS_STOP.indexOf(code) !== -1) rec.bad = true;
+      } else if (j && j.profile && typeof j.profile.trains === 'number') {
+        rec.n = j.profile.trains;
+        rec.ts = Date.now();
+      } else if (j && j.profile) {
+        rec.err = 'Key owner is not the company director';
+      } else {
+        rec.err = 'Unexpected reply (HTTP ' + r.status + ')';
+      }
+    } catch (e) {
+      rec.err = 'Refresh failed: ' + (e && e.message ? e.message : 'error');
+    } finally {
+      trainsBusy = false;
+      store.set(KEY_TRAINS, rec);
+      store.del(KEY_TRAINS_LOCK);
+      trains = rec;
+      paintTrains();
+    }
+  }
+
+  function makeTrainsPill(floating) {
+    const p = el('span', 'occ-trains' + (floating ? ' occ-float' : ''));
+    p.setAttribute('role', 'button');
+    p.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fetchTrains(true);
+    });
+    p.addEventListener('mouseenter', () => p.setAttribute('data-tip', trainsTip()));
+    return p;
+  }
+
+  function placeTrains(btn) {
+    let p = btn.nextElementSibling;
+    if (!p || !p.classList.contains('occ-trains') || p.classList.contains('occ-float')) {
+      p = makeTrainsPill(false);
+      btn.insertAdjacentElement('afterend', p);
+    }
+    document.querySelectorAll('.occ-trains').forEach((x) => {
+      if (x !== p) x.remove();
+    });
+    paintTrains();
+  }
+
+  // No name row on this page (PDA etc.): small pill above the floating launcher.
+  function placeFloatTrains() {
+    if (document.querySelector('.occ-trains')) return;
+    const root = document.getElementById('occ-root');
+    if (!root) return;
+    root.appendChild(makeTrainsPill(true));
+    paintTrains();
+  }
+
+  function startTrains() {
+    trains = store.get(KEY_TRAINS, null);
+    paintTrains();
+    fetchTrains(false);
+    setInterval(() => {
+      fetchTrains(false);
+    }, TRAINS_TICK);
+    addEventListener('storage', (e) => {
+      if (e.key !== KEY_TRAINS) return;
+      trains = store.get(KEY_TRAINS, null);
+      paintTrains();
+    });
   }
 
   function watchName() {
@@ -731,7 +923,7 @@
     };
     tick();
     const mo = new MutationObserver(() => {
-      if (!document.querySelector('.occ-inline')) mountInline();
+      if (!document.querySelector('.occ-inline') || !document.querySelector('.occ-trains')) mountInline();
     });
     mo.observe(document.body, { childList: true, subtree: true });
     // Torn swaps pages client-side; re-check after each navigation.
@@ -788,6 +980,7 @@
     document.body.appendChild(root);
     if (store.get(KEY_OPEN, false)) setOpen(true);
     watchName();
+    startTrains();
     loadSkills().then((ok) => {
       const empty = main.querySelector('.occ-empty .occ-muted');
       if (empty) empty.textContent = ok ? skills.length + ' available' : skills.length ? skills.length + ' available (offline list)' : 'runner unreachable';
