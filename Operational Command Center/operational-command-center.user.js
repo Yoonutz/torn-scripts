@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.4
+// @version      0.7.5
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.4';
+  const VERSION = '0.7.5';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -981,16 +981,23 @@
   // Torn PDA: no room beside the icon, so the pill gets its own fixed slot on every page,
   // right under the status icons line and above the page title.
   function placeDock(btn) {
-    const row = btn.closest('[class*="status-icons"]') || btn.closest('ul,ol') || btn.parentNode;
-    if (!row || !row.parentNode || row === document.body) return false;
-    let dock = row.nextElementSibling;
-    let p = dock && dock.classList.contains('occ-dock') ? dock.querySelector('.occ-trains') : null;
+    // Real Torn markup: div.content-wrapper[role=main] > ... > div.content-title (page title row).
+    const title = document.querySelector('.content-wrapper > .content-title') || document.querySelector('.content-title');
+    let anchor = title ? { node: title, where: 'beforebegin' } : null;
+    if (!anchor) {
+      const row = btn.closest('[class*="status-icons"]') || btn.closest('ul,ol') || btn.parentNode;
+      if (!row || !row.parentNode || row === document.body) return false;
+      anchor = { node: row, where: 'afterend' };
+    }
+    const sib = anchor.where === 'beforebegin' ? anchor.node.previousElementSibling : anchor.node.nextElementSibling;
+    let dock = sib && sib.classList.contains('occ-dock') ? sib : null;
+    let p = dock ? dock.querySelector('.occ-trains') : null;
     if (!p) {
-      if (dock && dock.classList.contains('occ-dock')) dock.remove();
+      if (dock) dock.remove();
       dock = el('div', 'occ-dock');
       p = makeTrainsPill(false);
       dock.appendChild(p);
-      row.insertAdjacentElement('afterend', dock);
+      anchor.node.insertAdjacentElement(anchor.where, dock);
     }
     document.querySelectorAll('.occ-trains').forEach((x) => {
       if (x !== p) x.remove();
