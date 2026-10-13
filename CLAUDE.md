@@ -12,10 +12,9 @@ Invoke via the Skill tool when the task matches. Scripts run from the repo root;
 
 ## Userscript versions
 
-One commit per push. Raise the last number of `// @version` yourself in the same commit as the change
-(`1.2.0` -> `1.2.1`), so Greasy Fork and installed userscript managers see the update, with that commit's
-message as the changelog. Nothing bumps it for you: a changed script with the same `@version` never reaches
-installed users.
+One commit per push. Raise the last number of `// @version` in the same commit as the change
+(`1.2.0` -> `1.2.1`), with that commit's message as the changelog. A changed script with the same `@version`
+never reaches installed users.
 
 ## Commits
 
