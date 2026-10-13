@@ -40,10 +40,13 @@ fast each one pays for itself.
 | Cost | Shares needed x share price |
 | Days to break even | Cost / (payout / days per payout) |
 | ROI @365d | Yearly payout / cost |
-| Owned? | **YES** if you hold that increment or more. Bank: **YES** at the cap, **PARTLY** below it |
+| Owned? | **YES** if you hold that increment or more. Bank: **YES** at the cap, **PARTLY** below it. Bank and TCI: only the row that matches your merits |
 
 Increment *n* needs requirement x (2^*n* - 1) shares in total and pays *n* x the base return
 ([Torn wiki](https://wiki.torn.com/wiki/Stock_Market)).
+
+**Select my holdings** selects every YES row. A higher increment includes the lower ones, so the totals
+count only the highest selected increment of each stock.
 
 </details>
 

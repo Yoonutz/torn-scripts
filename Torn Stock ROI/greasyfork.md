@@ -46,7 +46,8 @@
 <li><b>Increment:</b> 1 to 4. Bank and TCI: <i>No merits</i> or <i>10 merits</i>.</li>
 <li><b>Days to break even:</b> cost divided by (payout divided by days per payout).</li>
 <li><b>ROI @365d:</b> yearly payout divided by cost.</li>
-<li><b>Owned?:</b> <b>YES</b> if you hold that increment or more. Bank: <b>YES</b> at the cap, <b>PARTLY</b> below it.</li>
+<li><b>Owned?:</b> <b>YES</b> if you hold that increment or more. Bank: <b>YES</b> at the cap, <b>PARTLY</b> below it. Bank and TCI: only the row that matches your merits.</li>
+<li><b>Select my holdings:</b> selects every <b>YES</b> row. The totals count only the highest selected increment of each stock, because a higher increment includes the lower ones.</li>
 </ul>
 </details>
 

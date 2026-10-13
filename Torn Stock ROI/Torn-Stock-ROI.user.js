@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Stock Block ROI
 // @namespace    kamiren.torn-stock-roi
-// @version      1.2.3
+// @version      1.2.4
 // @description  Shows which Torn stock benefit blocks, and the bank, pay for themselves fastest, using live prices, item values and your own holdings. Opens on the stock market page; works on desktop and Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -1708,6 +1708,11 @@ button:focus-visible {
   function hasAccount() {
     return account.updatedAt > 0;
   }
+  // The two bank and TCI rows are two possible states of one account, so only the row that matches
+  // the merits detected from the bank profit counts as yours.
+  function meritMatch(m) {
+    return (m === 1.5) === account.bank.meritRatio >= 1.4;
+  }
   function cap() {
     return account.property.oilRig ? 3e9 : 2e9;
   }
@@ -1776,7 +1781,7 @@ button:focus-visible {
         pay: bi,
         d: DAYS,
         c: cp,
-        own: has && inv >= cp,
+        own: has && inv >= cp && meritMatch(m[1]),
         key: 'Bank ' + m[0],
         kind: 'bank',
         m: m[1],
@@ -1791,7 +1796,7 @@ button:focus-visible {
           pay: bi * 0.1,
           d: DAYS,
           c: tci.requirement * tci.price,
-          own: has && incOf('TCI') >= 1,
+          own: has && incOf('TCI') >= 1 && meritMatch(m[1]),
           key: 'TCI ' + m[0],
           kind: 'tci',
           m: m[1],
@@ -1804,24 +1809,28 @@ button:focus-visible {
     });
     return rows;
   }
+  function bankState(r) {
+    var v = account.bank.invested;
+    if (!meritMatch(r.m) || v <= 0) return 'NO';
+    return v >= cap() ? 'YES' : 'PARTLY';
+  }
   function ownRank(r) {
     if (!hasAccount()) return 0;
     if (r.kind === 'bank') {
-      var v = account.bank.invested;
-      return v >= cap() ? 3 : v > 0 ? 2.5 : 0;
+      var st = bankState(r);
+      return st === 'YES' ? 3 : st === 'PARTLY' ? 2.5 : 0;
     }
     return r.own ? 3 : 0;
   }
   function saveSel() {
     Store.set('selection', selection);
   }
+  // Selects every row marked YES. A higher increment includes the lower ones, so the totals count only
+  // the highest selected increment of each stock (see totals in draw).
   function selectHoldings(rows) {
     selection.rows = [];
-    var merits = account.bank.meritRatio >= 1.4;
     rows.forEach(function (r) {
-      if (r.kind === 'stock' && incOf(r.a) === r.i) selection.rows.push(r.key);
-      else if (r.kind === 'bank' && account.bank.invested > 0 && (r.m === 1.5) === merits)
-        selection.rows.push(r.key);
+      if (r.kind === 'bank' ? bankState(r) !== 'NO' : r.own) selection.rows.push(r.key);
     });
     selection.initialised = true;
     saveSel();
@@ -1830,10 +1839,7 @@ button:focus-visible {
   /* ---------- column values and filters ---------- */
   function ownLabel(r, has) {
     if (!has) return '-';
-    if (r.kind === 'bank') {
-      var v = account.bank.invested;
-      return v >= cap() ? 'YES' : v > 0 ? 'PARTLY' : 'NO';
-    }
+    if (r.kind === 'bank') return bankState(r);
     return r.own ? 'YES' : 'NO';
   }
   // What the table shows for a cell, so a filter always matches what the person sees.
@@ -1977,18 +1983,19 @@ button:focus-visible {
       var cls = r.roi >= 35 ? 'hi' : r.roi >= 15 ? 'mid' : 'lo',
         ow;
       if (!has) ow = '<span class="d">-</span>';
-      else if (r.kind === 'bank')
+      else if (r.kind === 'bank') {
+        var bs = bankState(r);
         ow =
-          iv >= cp
+          bs === 'YES'
             ? '<span class="pill y">YES</span><span class="sub">' + fm(iv) + '</span>'
-            : iv > 0
+            : bs === 'PARTLY'
               ? '<span class="pill pp">PARTLY</span><span class="ppn">' +
                 Math.round((iv / cp) * 100) +
                 '% of ' +
                 sh(cp) +
                 '</span>'
               : '<span class="pill n">NO</span>';
-      else ow = r.own ? '<span class="pill y">YES</span>' : '<span class="pill n">NO</span>';
+      } else ow = r.own ? '<span class="pill y">YES</span>' : '<span class="pill n">NO</span>';
       h +=
         '<tr data-k="' +
         esc(r.key) +
@@ -2045,13 +2052,20 @@ button:focus-visible {
       t.querySelector('.ar').className = 'ar' + (on ? (asc ? ' up' : ' dn') : '');
     });
     renderFilterBar(rows, has, list.length);
-    var c = 0,
+    // A higher increment already includes the lower ones (cost and payout are cumulative), so for each
+    // stock only its highest selected increment counts. Bank and TCI count once each, at the higher merits.
+    var top = {},
+      c = 0,
       d = 0;
     rows.forEach(function (r) {
-      if (r.sel) {
-        c += r.c;
-        d += r.pay / r.d;
-      }
+      if (!r.sel) return;
+      var g = r.kind === 'stock' ? r.a : r.kind,
+        lvl = r.kind === 'stock' ? r.i : r.m;
+      if (!top[g] || lvl > top[g].lvl) top[g] = { r: r, lvl: lvl };
+    });
+    Object.keys(top).forEach(function (g) {
+      c += top[g].r.c;
+      d += top[g].r.pay / top[g].r.d;
     });
     $('sc').textContent = c ? sh(c) : '-';
     $('sw').textContent = d ? sh(d * 7) : '-';
