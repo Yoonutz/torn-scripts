@@ -505,6 +505,250 @@ tbody tr.s td {
   overflow-y: auto;
   max-width: calc(100vw - 32px);
 }
+th:hover,
+th[aria-expanded='true'] {
+  background: linear-gradient(180deg, #666 0%, #444 100%);
+}
+th:focus-visible {
+  outline-offset: -2px;
+}
+th .fi {
+  display: none;
+  width: 9px;
+  height: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background: var(--blue);
+  clip-path: polygon(0 0, 100% 0, 62% 48%, 62% 100%, 38% 84%, 38% 48%);
+}
+th.f .fi {
+  display: inline-block;
+}
+tbody tr.empty {
+  cursor: default;
+}
+tbody tr.empty td {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 22px 10px;
+}
+.fbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.fbar .chip,
+.fbar .lnk {
+  height: auto;
+  line-height: 1.2;
+  margin: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+.fbar .chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 9px;
+  background: #222;
+  border: 1px solid #555;
+  border-radius: 12px;
+  color: #ddd;
+  font: 400 12px/1.2 Arial;
+}
+.fbar .chip b {
+  margin-left: 4px;
+  color: var(--blue);
+}
+.fbar .chip:hover,
+.fbar .chip:active {
+  background: #333;
+  border-color: #777;
+  color: #fff;
+}
+.fbar .lnk {
+  padding: 4px 2px;
+  background: none;
+  border: 0;
+  color: var(--blue);
+  font: 400 12px/1.2 Arial;
+  text-decoration: underline;
+}
+.fbar .lnk:hover,
+.fbar .lnk:active {
+  background: none;
+  color: #fff;
+}
+.fbar .cnt {
+  margin-left: auto;
+}
+.dsk {
+  font-style: normal;
+}
+.nar {
+  display: none;
+  font-style: normal;
+}
+/* Column menu: sort, then a checklist (lists) or min/max (numbers). Sits over the table, inside the window. */
+.cm {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  width: 230px;
+  box-sizing: border-box;
+  padding: 4px 0 10px;
+  background: #1d1d1d;
+  border: 1px solid #666;
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--text);
+  font-size: 12px;
+}
+.cm .cm-i {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+  text-align: left;
+  color: #ddd;
+  font: 400 12px/1.2 Arial;
+}
+.cm .cm-i:hover,
+.cm .cm-i:focus-visible {
+  background: #2c2c2c;
+  color: #fff;
+  text-shadow: none;
+}
+.cm .cm-i:active {
+  background: #383838;
+  color: #fff;
+  box-shadow: none;
+}
+.cm .cm-i:disabled,
+.cm .cm-i:disabled:hover {
+  background: none;
+  color: #666;
+  cursor: default;
+}
+.cm .cm-i.on {
+  color: #fff;
+}
+.cm .cm-i.on::after {
+  content: '✓';
+  margin-left: 8px;
+  color: var(--green);
+}
+.cm-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+  box-shadow: 0 1px 0 #ffffff14;
+}
+.cm .cm-pick {
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px 4px;
+  color: var(--text-dim);
+}
+.cm select {
+  box-sizing: border-box;
+  width: 100%;
+}
+.cm-q {
+  padding: 4px 10px 0;
+}
+.cm input[type='text'] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  flex: none;
+}
+.cm input.bad {
+  border-color: var(--red);
+}
+.cm-box {
+  margin: 6px 10px 0;
+  background: #141414;
+  border: 1px solid var(--panel-hi);
+}
+.cm-all,
+.cm-list label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 8px;
+  color: #ddd;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cm input[type='checkbox'] {
+  flex: none;
+  margin: 0;
+}
+.cm-all {
+  border-bottom: 1px solid var(--line);
+}
+.cm-all span,
+.cm-list label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 110px; /* five rows, the rest scrolls */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #888 #141414;
+}
+.cm-all:hover,
+.cm-list label:hover {
+  background: #2c2c2c;
+}
+.cm-list .none {
+  padding: 5px 8px;
+  color: var(--text-dim);
+}
+.cm-n {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px 0;
+}
+.cm-n label {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-dim);
+}
+.cm-hint {
+  padding: 8px 10px 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
 /* ---------- phones and small tablets: table becomes cards ---------- */
 @media (max-width: 860px) {
   .mob {
@@ -573,7 +817,7 @@ tbody tr.s td {
   }
   .ctl > label[for='nb'] {
     grid-column: 1/-1;
-    grid-row: 3;
+    grid-row: 4;
     flex-direction: row;
     align-items: center;
     gap: 8px;
@@ -581,11 +825,11 @@ tbody tr.s td {
   }
   #mine {
     grid-column: 1;
-    grid-row: 4;
+    grid-row: 5;
   }
   #clr {
     grid-column: 2;
-    grid-row: 4;
+    grid-row: 5;
   }
   button {
     white-space: nowrap;
@@ -726,6 +970,63 @@ tbody tr.s td {
     flex: 1 1 100%;
   }
 }
+@media (max-width: 860px) {
+  .dsk {
+    display: none;
+  }
+  .nar {
+    display: inline;
+  }
+  .fbar .chip {
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+  .fbar .lnk {
+    padding: 8px 4px;
+    font-size: 13px;
+  }
+  .cm {
+    width: auto;
+    padding-bottom: 12px;
+    font-size: 14px;
+  }
+  .cm .cm-i {
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+  .cm .cm-pick {
+    padding: 8px 12px 6px;
+  }
+  .cm select {
+    height: 38px;
+    font-size: 16px;
+  }
+  .cm-q {
+    padding: 6px 12px 0;
+  }
+  .cm-box {
+    margin: 8px 12px 0;
+  }
+  .cm-all,
+  .cm-list label {
+    gap: 10px;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 14px;
+  }
+  .cm-list {
+    max-height: 180px;
+  }
+  .cm-n,
+  .cm-hint {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  #fb {
+    grid-column: 1/-1;
+    grid-row: 3;
+  }
+}
 @media (min-width: 600px) and (max-width: 860px) {
   tbody tr {
     grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -786,7 +1087,11 @@ tbody tr.s td {
     grid-row: 1;
   }
   .ctl > label[for='nb'] {
-    grid-column: 1/3;
+    grid-column: 1;
+    grid-row: 2;
+  }
+  #fb {
+    grid-column: 2;
     grid-row: 2;
   }
   #mine {
@@ -1009,6 +1314,7 @@ button:focus-visible {
 <label for="inc">Max increment <select id="inc"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
 <label class="mob" for="so">Sort <select id="so"><option value="be">Break-even</option><option value="roi">ROI @365d</option><option value="c">Cost</option><option value="p">Payout</option><option value="d">Days / payout</option><option value="i">Increment</option><option value="a">Stock</option><option value="r">Return</option><option value="o">Owned</option></select></label>
 <button id="sd" class="mob" type="button" aria-label="Sort direction"></button>
+<button id="fb" class="mob" type="button" aria-haspopup="dialog" aria-expanded="false">Column filters</button>
 <span class="sp"></span>
 <button id="mine" type="button">Select my holdings</button>
 <button id="clr" type="button">Clear selection</button>
@@ -1027,28 +1333,49 @@ button:focus-visible {
 <div><small>ROI @365d</small><b id="sr">-</b></div>
 <div><small>Break-even (days)</small><b id="sb">-</b></div>
 </div>
+<div class="fbar" id="fbar" hidden></div>
 <div class="tw">
 <table>
 <thead><tr>
-<th class="l" data-k="a">Stock<span class="ar"></span></th>
-<th class="l" data-k="r">Return<span class="ar"></span></th>
-<th data-k="i">Increment<span class="ar"></span></th>
-<th data-k="p">Payout value<span class="ar"></span></th>
-<th data-k="d">Days per payout<span class="ar"></span></th>
-<th data-k="c">Cost<span class="ar"></span></th>
-<th data-k="be">Days to break even<span class="ar"></span></th>
-<th data-k="roi">ROI @365d<span class="ar"></span></th>
-<th data-k="o">Owned?<span class="ar"></span></th>
+<th class="l" data-k="a" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Stock<span class="ar"></span><span class="fi"></span></th>
+<th class="l" data-k="r" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Return<span class="ar"></span><span class="fi"></span></th>
+<th data-k="i" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Increment<span class="ar"></span><span class="fi"></span></th>
+<th data-k="p" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Payout value<span class="ar"></span><span class="fi"></span></th>
+<th data-k="d" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Days per payout<span class="ar"></span><span class="fi"></span></th>
+<th data-k="c" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Cost<span class="ar"></span><span class="fi"></span></th>
+<th data-k="be" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Days to break even<span class="ar"></span><span class="fi"></span></th>
+<th data-k="roi" tabindex="0" aria-haspopup="dialog" aria-expanded="false">ROI @365d<span class="ar"></span><span class="fi"></span></th>
+<th data-k="o" tabindex="0" aria-haspopup="dialog" aria-expanded="false">Owned?<span class="ar"></span><span class="fi"></span></th>
 </tr></thead>
 <tbody id="tb"></tbody>
 </table>
 </div>
-<div class="foot"><button id="more" type="button">Show more</button><span>Tap a row to add it to the selection. Tap a column header (or use Sort) to sort.</span></div>
+<div class="foot"><button id="more" type="button">Show more</button><span>Tap a row to add it to the selection. <i class="dsk">Click a column header to sort or filter.</i><i class="nar">Use Sort and Column filters above.</i></span></div>
 <div class="note">
 <b>Rules used.</b> Increment n needs requirement x (2<sup>n</sup> - 1) shares in total and pays n x the base return each cycle (Torn wiki, Stock Market). Cost = shares x price. ROI @365d = yearly payout / cost.<br>
 <b>Data.</b> Prices, item market values, bank rates, your bank, property and stock holdings come from the Torn API. Everything is cached in localStorage (tsr.market, tsr.account, tsr.settings, tsr.selection, tsr.key) so the table shows instantly on open, then refreshes in the background. Before the first refresh the page uses a 13 Oct 2026 snapshot.<br>
 <b>Bank and TCI.</b> Deposit cap is $2,000,000,000, or $3,000,000,000 when your property is an Oil Rig, for 90 days at the 90-day bank rate. Bank YES = invested at the cap, PARTLY = below it, NO = nothing invested. Merits are detected from your bank profit (x1.5 interest). TCI pays 10% of that interest. The deposit and the shares come back, so break-even there is a yield measure, not a payback.<br>
 <b class="est">Estimated:</b> Clothing Cache uses the average market value of 7 cache items. Not included: passive stocks, HRG, BAG, EVL, MCS, CBD.
+</div>
+<div class="cm" id="cm" role="dialog" aria-label="Sort and filter column" hidden>
+<label class="cm-pick mob" for="cmc"><span>Column</span><select id="cmc"></select></label>
+<button type="button" class="cm-i" id="cms1"></button>
+<button type="button" class="cm-i" id="cms2"></button>
+<div class="cm-sep"></div>
+<button type="button" class="cm-i" id="cmx">Clear filter</button>
+<div id="cml">
+<div class="cm-q"><input type="text" id="cmq" placeholder="Search" autocomplete="off" spellcheck="false" aria-label="Search values"></div>
+<div class="cm-box">
+<label class="cm-all"><input type="checkbox" id="cma"><span id="cmal">(Select All)</span></label>
+<ul class="cm-list" id="cmu"></ul>
+</div>
+</div>
+<div id="cmn">
+<div class="cm-n">
+<label>Min<input type="text" id="cmmin" inputmode="decimal" placeholder="Any" autocomplete="off" spellcheck="false"></label>
+<label>Max<input type="text" id="cmmax" inputmode="decimal" placeholder="Any" autocomplete="off" spellcheck="false"></label>
+</div>
+<div class="cm-hint" id="cmr"></div>
 </div>
 </div>
 `;
@@ -1081,7 +1408,43 @@ button:focus-visible {
     sortAsc: true,
     limit: 25,
     win: null, // dragged window position {x, y}; null = centred
+    colFilters: null, // per column: {ex: [hidden values]} for lists, {min, max} for numbers
   };
+  // Columns that can be sorted and filtered. list = pick values from a checklist, otherwise min/max.
+  var COLS = {
+    a: { name: 'Stock', list: true },
+    r: { name: 'Return', list: true },
+    i: { name: 'Increment', list: true },
+    p: { name: 'Payout value' },
+    d: { name: 'Days per payout', list: true },
+    c: { name: 'Cost' },
+    be: { name: 'Days to break even' },
+    roi: { name: 'ROI @365d' },
+    o: { name: 'Owned?', list: true },
+  };
+  var COL_ORDER = ['a', 'r', 'i', 'p', 'd', 'c', 'be', 'roi', 'o'];
+  var OWN_ORDER = ['YES', 'PARTLY', 'NO', '-'];
+  function cleanFilters(src) {
+    var out = {};
+    if (!src || typeof src !== 'object' || Array.isArray(src)) return out;
+    COL_ORDER.forEach(function (k) {
+      var f = src[k];
+      if (!f || typeof f !== 'object') return;
+      if (COLS[k].list) {
+        var ex = Array.isArray(f.ex)
+          ? f.ex.filter(function (x) {
+              return typeof x === 'string';
+            })
+          : [];
+        if (ex.length) out[k] = { ex: ex };
+      } else {
+        var mn = typeof f.min === 'number' && isFinite(f.min) ? f.min : null;
+        var mx = typeof f.max === 'number' && isFinite(f.max) ? f.max : null;
+        if (mn !== null || mx !== null) out[k] = { min: mn, max: mx };
+      }
+    });
+    return out;
+  }
   var DEF_ACCOUNT = {
     updatedAt: 0,
     bank: { invested: 0, profit: 0, durationDays: 0, ratePct: 0, until: 0, meritRatio: 0 },
@@ -1284,6 +1647,7 @@ button:focus-visible {
     return o;
   }
   var settings = merge(DEF_SETTINGS, Store.get('settings', {}));
+  settings.colFilters = cleanFilters(settings.colFilters);
   var account = merge(DEF_ACCOUNT, Store.get('account', {}));
   account.bank = merge(DEF_ACCOUNT.bank, account.bank);
   account.property = merge(DEF_ACCOUNT.property, account.property);
@@ -1463,6 +1827,102 @@ button:focus-visible {
     saveSel();
   }
 
+  /* ---------- column values and filters ---------- */
+  function ownLabel(r, has) {
+    if (!has) return '-';
+    if (r.kind === 'bank') {
+      var v = account.bank.invested;
+      return v >= cap() ? 'YES' : v > 0 ? 'PARTLY' : 'NO';
+    }
+    return r.own ? 'YES' : 'NO';
+  }
+  // What the table shows for a cell, so a filter always matches what the person sees.
+  function colVal(r, k, has) {
+    if (k === 'a') return r.a;
+    if (k === 'r') return r.rt;
+    if (k === 'i') return String(r.i);
+    if (k === 'd') return String(r.d);
+    if (k === 'o') return ownLabel(r, has);
+    if (k === 'p') return Math.round(r.pay);
+    if (k === 'c') return Math.round(r.c);
+    if (k === 'be') return Math.round(r.be);
+    return +r.roi.toFixed(2);
+  }
+  function passCols(r, has) {
+    var cf = settings.colFilters;
+    for (var k in cf) {
+      var f = cf[k],
+        v = colVal(r, k, has);
+      if (COLS[k].list) {
+        if (f.ex.indexOf(v) >= 0) return false;
+      } else if ((f.min !== null && v < f.min) || (f.max !== null && v > f.max)) return false;
+    }
+    return true;
+  }
+  function domainOf(k, rows, has) {
+    var seen = {},
+      out = [];
+    rows.forEach(function (r) {
+      var v = colVal(r, k, has);
+      if (!Object.prototype.hasOwnProperty.call(seen, v)) {
+        seen[v] = 1;
+        out.push(v);
+      }
+    });
+    if (k === 'a' || k === 'r')
+      out.sort(function (x, y) {
+        x = x.toLowerCase();
+        y = y.toLowerCase();
+        return x < y ? -1 : x > y ? 1 : 0;
+      });
+    else if (k === 'd')
+      out.sort(function (x, y) {
+        return x - y;
+      });
+    else if (k === 'o')
+      out.sort(function (x, y) {
+        return OWN_ORDER.indexOf(x) - OWN_ORDER.indexOf(y);
+      });
+    return out; // increments keep table order: 1, 2, 3, 4, No merits, 10 merits
+  }
+  function itemText(k, v) {
+    return k === 'd' ? v + ' days' : v;
+  }
+  function numText(k, v) {
+    if (k === 'p' || k === 'c') return sh(v);
+    if (k === 'roi') return v + '%';
+    return v.toLocaleString('en-US');
+  }
+  function filterText(k, f, rows, has) {
+    var name = COLS[k].name;
+    if (COLS[k].list) {
+      var dom = domainOf(k, rows, has),
+        inc = dom.filter(function (v) {
+          return f.ex.indexOf(v) < 0;
+        });
+      if (!inc.length) return name + ': none';
+      return (
+        name +
+        ': ' +
+        (inc.length <= 3
+          ? inc
+              .map(function (v) {
+                return itemText(k, v);
+              })
+              .join(', ')
+          : inc.length + ' of ' + dom.length)
+      );
+    }
+    if (f.min !== null && f.max !== null)
+      return name + ': ' + numText(k, f.min) + ' to ' + numText(k, f.max);
+    return name + ': ' + (f.min !== null ? 'from ' + numText(k, f.min) : 'up to ' + numText(k, f.max));
+  }
+  function activeFilters() {
+    return COL_ORDER.filter(function (k) {
+      return settings.colFilters[k];
+    });
+  }
+
   /* ---------- drawing ---------- */
   function draw() {
     var rows = buildRows(),
@@ -1471,10 +1931,10 @@ button:focus-visible {
     var list = rows.filter(function (r) {
       if (settings.hideBank && (r.kind === 'bank' || r.kind === 'tci')) return false;
       if (typeof r.i === 'number' && r.i > mx) return false;
-      if (settings.filter === 'own') return r.own;
-      if (settings.filter === 'not') return !r.own;
-      if (settings.filter === 'sel') return r.sel;
-      return true;
+      if (settings.filter === 'own' && !r.own) return false;
+      if (settings.filter === 'not' && r.own) return false;
+      if (settings.filter === 'sel' && !r.sel) return false;
+      return passCols(r, has);
     });
     var k = settings.sortKey,
       asc = settings.sortAsc;
@@ -1566,6 +2026,8 @@ button:focus-visible {
         ow +
         '</td></tr>';
     });
+    if (!list.length)
+      h = '<tr class="empty"><td colspan="9">No rows match the current filters.</td></tr>';
     $('tb').innerHTML = h;
     $('more').hidden = list.length <= settings.limit;
     $('more').textContent = 'Show more (' + (list.length - settings.limit) + ' left)';
@@ -1576,10 +2038,13 @@ button:focus-visible {
     }
     $('sd').textContent = asc ? 'Low to high' : 'High to low';
     root.querySelectorAll('th').forEach(function (t) {
-      var on = t.getAttribute('data-k') === k;
-      t.className = t.className.replace(' on', '') + (on ? ' on' : '');
+      var tk = t.getAttribute('data-k'),
+        on = tk === k;
+      t.classList.toggle('on', on);
+      t.classList.toggle('f', !!settings.colFilters[tk]);
       t.querySelector('.ar').className = 'ar' + (on ? (asc ? ' up' : ' dn') : '');
     });
+    renderFilterBar(rows, has, list.length);
     var c = 0,
       d = 0;
     rows.forEach(function (r) {
@@ -1594,6 +2059,31 @@ button:focus-visible {
     $('sr').textContent = c ? (((d * 365) / c) * 100).toFixed(1) + '%' : '-';
     $('sb').textContent = c ? Math.round(c / d).toLocaleString('en-US') : '-';
     renderStatus();
+  }
+  function renderFilterBar(rows, has, shown) {
+    var keys = activeFilters(),
+      bar = $('fbar'),
+      h = '';
+    keys.forEach(function (k) {
+      var t = filterText(k, settings.colFilters[k], rows, has);
+      h +=
+        '<button type="button" class="chip" data-x="' +
+        k +
+        '" aria-label="Remove filter ' +
+        esc(t) +
+        '">' +
+        esc(t) +
+        ' <b aria-hidden="true">×</b></button>';
+    });
+    if (keys.length)
+      h +=
+        '<button type="button" class="lnk" data-x="*">Clear filters</button><span class="cnt">' +
+        shown +
+        (shown === 1 ? ' row' : ' rows') +
+        '</span>';
+    bar.innerHTML = h;
+    bar.hidden = !keys.length;
+    $('fb').textContent = 'Column filters' + (keys.length ? ' (' + keys.length + ')' : '');
   }
   function renderStatus() {
     var p = [];
@@ -1926,6 +2416,7 @@ button:focus-visible {
     if (!t) return;
     var k = t.getAttribute('data-k'),
       i = selection.rows.indexOf(k);
+    if (!k) return; // the "no rows match" line
     if (i >= 0) selection.rows.splice(i, 1);
     else selection.rows.push(k);
     saveSel();
@@ -1941,10 +2432,268 @@ button:focus-visible {
     saveSettings();
     draw();
   }
-  root.querySelectorAll('th').forEach(function (t) {
-    t.addEventListener('click', function () {
-      setSort(t.getAttribute('data-k'), true);
+
+  /* ---------- column menu: sort and filter ---------- */
+  var cm = $('cm'),
+    cmK = '',
+    cmAnchor = null,
+    cmDomain = [],
+    cmVis = [];
+  function sortLabels(k) {
+    if (k === 'a' || k === 'r') return ['Sort A to Z', 'Sort Z to A'];
+    if (k === 'o') return ['Sort No to Yes', 'Sort Yes to No'];
+    return ['Sort smallest to largest', 'Sort largest to smallest'];
+  }
+  // Accepts 1500000, 1,500,000, $1.5m, 2b, 750k, 35%.
+  function parseNum(t) {
+    var m = /^(-?(?:\d+\.?\d*|\.\d+))\s*([kmb])?$/i.exec(t.replace(/[,$%\s]/g, ''));
+    if (!m) return NaN;
+    var mul = { k: 1e3, m: 1e6, b: 1e9 }[(m[2] || '').toLowerCase()] || 1;
+    return Math.round(+m[1] * mul * 1e6) / 1e6;
+  }
+  function inText(k, v) {
+    if (k !== 'p' && k !== 'c') return String(v);
+    var t = function (x) {
+      return String(+x.toFixed(3));
+    };
+    if (v >= 1e9) return t(v / 1e9) + 'b';
+    if (v >= 1e6) return t(v / 1e6) + 'm';
+    if (v >= 1e3) return t(v / 1e3) + 'k';
+    return String(v);
+  }
+  function setFilter(k, f) {
+    if (f) settings.colFilters[k] = f;
+    else delete settings.colFilters[k];
+    saveSettings();
+    draw();
+    syncMenu();
+  }
+  function syncMenu() {
+    var on = settings.sortKey === cmK;
+    $('cms1').classList.toggle('on', on && settings.sortAsc);
+    $('cms2').classList.toggle('on', on && !settings.sortAsc);
+    $('cmx').disabled = !settings.colFilters[cmK];
+    Array.prototype.forEach.call($('cmc').options, function (o) {
+      o.textContent = COLS[o.value].name + (settings.colFilters[o.value] ? ' (filtered)' : '');
     });
+  }
+  function syncAll() {
+    var f = settings.colFilters[cmK],
+      ex = f && f.ex ? f.ex : [],
+      n = cmVis.filter(function (v) {
+        return ex.indexOf(v) < 0;
+      }).length,
+      all = $('cma');
+    all.checked = cmVis.length > 0 && n === cmVis.length;
+    all.indeterminate = n > 0 && n < cmVis.length;
+    all.disabled = !cmVis.length;
+    $('cmal').textContent = $('cmq').value.trim() ? '(Select all search results)' : '(Select All)';
+  }
+  function renderList() {
+    var q = $('cmq').value.trim().toLowerCase(),
+      f = settings.colFilters[cmK],
+      ex = f && f.ex ? f.ex : [],
+      h = '';
+    cmVis = cmDomain.filter(function (v) {
+      return !q || itemText(cmK, v).toLowerCase().indexOf(q) >= 0;
+    });
+    cmVis.forEach(function (v, i) {
+      h +=
+        '<li><label><input type="checkbox" data-i="' +
+        i +
+        '"' +
+        (ex.indexOf(v) < 0 ? ' checked' : '') +
+        '><span>' +
+        esc(itemText(cmK, v)) +
+        '</span></label></li>';
+    });
+    $('cmu').innerHTML = h || '<li class="none">No matches</li>';
+    syncAll();
+  }
+  function renderMenu() {
+    var k = cmK,
+      lab = sortLabels(k),
+      has = hasAccount(),
+      rows = buildRows();
+    $('cms1').textContent = lab[0];
+    $('cms2').textContent = lab[1];
+    $('cmc').value = k;
+    $('cml').hidden = !COLS[k].list;
+    $('cmn').hidden = !!COLS[k].list;
+    if (COLS[k].list) {
+      $('cmq').value = '';
+      cmDomain = domainOf(k, rows, has);
+      renderList();
+    } else {
+      var f = settings.colFilters[k] || { min: null, max: null },
+        vals = rows.map(function (r) {
+          return colVal(r, k, has);
+        });
+      $('cmmin').value = f.min !== null ? inText(k, f.min) : '';
+      $('cmmax').value = f.max !== null ? inText(k, f.max) : '';
+      $('cmmin').classList.remove('bad');
+      $('cmmax').classList.remove('bad');
+      $('cmr').textContent =
+        'In the table: ' +
+        numText(k, Math.min.apply(null, vals)) +
+        ' to ' +
+        numText(k, Math.max.apply(null, vals)) +
+        '. Both ends included. You can type 5m, 2b or 750k.';
+    }
+    syncMenu();
+  }
+  function positionMenu() {
+    if (cm.hidden || !cmAnchor) return;
+    if (!cmAnchor.getClientRects().length) return closeMenu(); // anchor hidden: layout changed
+    var w = win.getBoundingClientRect(),
+      a = cmAnchor.getBoundingClientRect(),
+      top = Math.max(4, a.bottom - w.top - win.clientTop + 2);
+    if (wide.matches) {
+      var left = a.left - w.left - win.clientLeft;
+      left = Math.max(4, Math.min(left, win.clientWidth - cm.offsetWidth - 4));
+      cm.style.left = left + 'px';
+      cm.style.right = 'auto';
+    } else {
+      cm.style.left = '8px';
+      cm.style.right = '8px';
+    }
+    cm.style.top = top + 'px';
+    cm.style.maxHeight = Math.max(160, win.clientHeight - top - 6) + 'px';
+  }
+  function openMenu(k, anchor) {
+    if (cmAnchor && cmAnchor !== anchor) cmAnchor.setAttribute('aria-expanded', 'false');
+    cmK = k;
+    cmAnchor = anchor;
+    anchor.setAttribute('aria-expanded', 'true');
+    cm.hidden = false;
+    renderMenu();
+    positionMenu();
+    // Typing straight away is handy with a mouse; on a phone it would only raise the keyboard.
+    if (window.matchMedia('(hover: hover)').matches)
+      (COLS[k].list ? $('cmq') : $('cmmin')).focus({ preventScroll: true });
+  }
+  function closeMenu(refocus) {
+    if (cm.hidden) return;
+    cm.hidden = true;
+    if (cmAnchor) {
+      cmAnchor.setAttribute('aria-expanded', 'false');
+      if (refocus && cmAnchor.getClientRects().length) cmAnchor.focus();
+    }
+  }
+  function toggleMenu(k, anchor) {
+    if (!cm.hidden && cmAnchor === anchor && cmK === k) closeMenu();
+    else openMenu(k, anchor);
+  }
+  var colHeads = root.querySelectorAll('th');
+  Array.prototype.forEach.call(colHeads, function (t) {
+    var tk = t.getAttribute('data-k');
+    t.addEventListener('click', function () {
+      toggleMenu(tk, t);
+    });
+    t.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleMenu(tk, t);
+      }
+    });
+  });
+  COL_ORDER.forEach(function (k) {
+    var o = document.createElement('option');
+    o.value = k;
+    o.textContent = COLS[k].name;
+    $('cmc').appendChild(o);
+  });
+  $('cmc').addEventListener('change', function () {
+    cmK = $('cmc').value;
+    renderMenu();
+    positionMenu();
+  });
+  $('fb').addEventListener('click', function () {
+    if (!cm.hidden && cmAnchor === $('fb')) closeMenu();
+    else openMenu(cmK || settings.sortKey, $('fb'));
+  });
+  document.addEventListener('click', function (e) {
+    if (cm.hidden) return;
+    var p = e.composedPath();
+    if (p.indexOf(cm) < 0 && p.indexOf(cmAnchor) < 0) closeMenu();
+  });
+  root.querySelector('.panel').addEventListener('scroll', positionMenu, { passive: true });
+  root.querySelector('.tw').addEventListener('scroll', positionMenu, { passive: true });
+  function menuSort(asc) {
+    settings.sortKey = cmK;
+    settings.sortAsc = asc;
+    saveSettings();
+    draw();
+    closeMenu(true);
+  }
+  $('cms1').addEventListener('click', function () {
+    menuSort(true);
+  });
+  $('cms2').addEventListener('click', function () {
+    menuSort(false);
+  });
+  $('cmx').addEventListener('click', function () {
+    setFilter(cmK, null);
+    renderMenu();
+  });
+  function commitList(ex) {
+    ex = ex.filter(function (v) {
+      return cmDomain.indexOf(v) >= 0;
+    });
+    setFilter(cmK, ex.length ? { ex: ex } : null);
+    syncAll();
+  }
+  $('cmq').addEventListener('input', renderList);
+  $('cmu').addEventListener('change', function (e) {
+    var i = e.target.getAttribute('data-i');
+    if (i === null) return;
+    var f = settings.colFilters[cmK],
+      ex = f ? f.ex.slice() : [],
+      v = cmVis[+i],
+      at = ex.indexOf(v);
+    if (e.target.checked) {
+      if (at >= 0) ex.splice(at, 1);
+    } else if (at < 0) ex.push(v);
+    commitList(ex);
+  });
+  $('cma').addEventListener('change', function () {
+    var want = $('cma').checked,
+      f = settings.colFilters[cmK],
+      ex = f ? f.ex.slice() : [];
+    cmVis.forEach(function (v) {
+      var at = ex.indexOf(v);
+      if (want) {
+        if (at >= 0) ex.splice(at, 1);
+      } else if (at < 0) ex.push(v);
+    });
+    Array.prototype.forEach.call($('cmu').querySelectorAll('input'), function (b) {
+      b.checked = want;
+    });
+    commitList(ex);
+  });
+  ['cmmin', 'cmmax'].forEach(function (id) {
+    $(id).addEventListener('input', function () {
+      var side = id === 'cmmin' ? 'min' : 'max',
+        t = $(id).value.trim(),
+        v = t === '' ? null : parseNum(t),
+        bad = v !== null && isNaN(v);
+      $(id).classList.toggle('bad', bad);
+      if (bad) return; // keep the last valid number until this one parses
+      var cur = settings.colFilters[cmK] || { min: null, max: null },
+        f = { min: cur.min, max: cur.max };
+      f[side] = v;
+      setFilter(cmK, f.min === null && f.max === null ? null : f);
+    });
+  });
+  $('fbar').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var x = b.getAttribute('data-x');
+    if (x === '*') settings.colFilters = {};
+    else delete settings.colFilters[x];
+    saveSettings();
+    draw();
+    if (!cm.hidden) renderMenu();
   });
   $('so').value = settings.sortKey;
   $('so').addEventListener('change', function () {
@@ -2071,7 +2820,10 @@ button:focus-visible {
     applyPos();
   });
   window.addEventListener('resize', function () {
-    if (!win.hidden) applyPos();
+    if (!win.hidden) {
+      applyPos();
+      positionMenu();
+    }
   });
 
   function openWindow() {
@@ -2083,6 +2835,7 @@ button:focus-visible {
     else if (!hasAccount() || Date.now() - account.updatedAt > STALE_MS) refresh();
   }
   function closeWindow() {
+    closeMenu();
     win.hidden = true;
     launchBtn.setAttribute('aria-expanded', 'false');
   }
@@ -2094,7 +2847,9 @@ button:focus-visible {
   document.addEventListener(
     'keydown',
     function (e) {
-      if (e.key === 'Escape' && !win.hidden) closeWindow();
+      if (e.key !== 'Escape' || win.hidden) return;
+      if (!cm.hidden) closeMenu(true); // first Escape closes the menu, the next one the window
+      else closeWindow();
     },
     true,
   );
