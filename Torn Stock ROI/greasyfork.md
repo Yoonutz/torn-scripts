@@ -1,8 +1,11 @@
 **Which Torn stock should you buy next?** Ranks every stock benefit block, plus the bank and TCI, by how fast each one pays for itself.
 
-<center><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Stock%20ROI/screenshot.png" alt="Torn Stock Block ROI" width="720"></center>
+<center>
+<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Stock%20ROI/screenshot.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Stock%20ROI/screenshot.png" alt="Torn Stock Block ROI on desktop" width="620"></a>
+<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Stock%20ROI/screenshot-mobile.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Stock%20ROI/screenshot-mobile.png" alt="Torn Stock Block ROI on a phone" width="190"></a>
+</center>
 
-<center><small>Demo account.</small></center>
+<center><small>Desktop and phone. Demo account.</small></center>
 
 ## What it does
 
