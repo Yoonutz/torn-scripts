@@ -13,11 +13,9 @@ Invoke via the Skill tool when the task matches. Scripts run from the repo root;
 ## Userscript versions
 
 One commit per push. Raise the last number of `// @version` yourself in the same commit as the change
-(`1.2.0` -> `1.2.1`), so Greasy Fork gets the new version with that commit's message. The workflow
-`.github/workflows/bump-userscript-versions.yml` skips files whose `@version` the push already changed;
-it only bumps (bot commit "Bump userscript version") when a push modifies a `*.user.js` without touching
-`@version`. Also skipped: files new in the push and `backup/` folders. If a bot commit does land, run
-`git pull --rebase` before the next push.
+(`1.2.0` -> `1.2.1`), so Greasy Fork and installed userscript managers see the update, with that commit's
+message as the changelog. Nothing bumps it for you: a changed script with the same `@version` never reaches
+installed users.
 
 ## Commits
 
