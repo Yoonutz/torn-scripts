@@ -12,6 +12,7 @@
 - **One scale for everything.** Cash, items and points blocks (increments 1 to 4) compared by days to break even and yearly ROI, using live prices and live item values.
 - **Knows your account.** Shows what you own, your bank deposit and your bank cap (Oil Rig aware).
 - **Pick and total.** Select rows to see their combined cost, weekly and monthly income and ROI.
+- **Sort and filter any column.** Click a header to sort, or to keep only the values you tick (say increment 1, or increments 2 and 3) or a number range. Filters stack and are remembered.
 - **Desktop and Torn PDA.** Opens instantly from cache, refreshes only when the data is old.
 
 ## How to use
@@ -25,6 +26,18 @@
 - Your key is stored only in your browser (localStorage) and sent only to `api.torn.com`.
 - It reads nothing from the page and clicks nothing. Its only network calls go to the official Torn API with your own key, after you press ROI (stale cache) or Refresh.
 - Not included: passive stocks, HRG, BAG, EVL, MCS, CBD. Clothing Cache is an estimate (average of the seven caches).
+
+<details>
+<summary><b>Sort and filter</b></summary>
+<ul>
+<li>Click a column header: <b>Sort A to Z</b> or <b>Z to A</b> (smallest or largest first for numbers).</li>
+<li>Stock, Return, Increment, Days per payout and Owned? also get a search box and a checklist. Five rows show, the rest scrolls.</li>
+<li>Payout value, Cost, Days to break even and ROI @365d get <b>Min</b> and <b>Max</b>. You can type 5m, 2b or 750k.</li>
+<li>Filters stack. Each active one is a chip above the table: click it to remove it.</li>
+<li>Fastest payback among increment 1: tick only 1 under Increment, then sort Days to break even smallest to largest.</li>
+<li>On a phone use <b>Sort</b> and <b>Column filters</b> at the top.</li>
+</ul>
+</details>
 
 <details>
 <summary><b>Reading the table</b></summary>

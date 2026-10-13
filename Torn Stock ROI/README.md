@@ -15,6 +15,8 @@ fast each one pays for itself.
   break even and yearly ROI, using live prices and live item values.
 - **Knows your account.** Shows what you own, your bank deposit and your bank cap (Oil Rig aware).
 - **Pick and total.** Select rows to see their combined cost, weekly and monthly income and ROI.
+- **Sort and filter any column.** Click a header to sort, or to keep only the values you tick (say
+  increment 1, or increments 2 and 3) or a number range. Filters stack and are remembered.
 - **Desktop and Torn PDA.** Opens instantly from cache, refreshes only when the data is old.
 
 ## Install
@@ -42,6 +44,22 @@ fast each one pays for itself.
 
 Increment *n* needs requirement x (2^*n* - 1) shares in total and pays *n* x the base return
 ([Torn wiki](https://wiki.torn.com/wiki/Stock_Market)).
+
+</details>
+
+<details>
+<summary><b>Sort and filter</b></summary>
+
+- Click a column header: **Sort A to Z** or **Z to A** (smallest or largest first for numbers).
+- Stock, Return, Increment, Days per payout and Owned? also get a search box and a checklist. Five
+  rows show, the rest scrolls. **(Select All)** applies to what the search shows.
+- Payout value, Cost, Days to break even and ROI @365d get **Min** and **Max** (both included). You
+  can type `5m`, `2b` or `750k`.
+- Filters stack with each other and with **Show**, **Max increment** and **Hide Bank and TCI**. Each
+  active filter is a chip above the table: click it to remove it, or use **Clear filters**.
+- Fastest payback among increment 1: tick only 1 under Increment, then sort Days to break even
+  smallest to largest.
+- On a phone the header row is gone: use **Sort** and **Column filters** at the top.
 
 </details>
 
