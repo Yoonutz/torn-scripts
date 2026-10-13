@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Stock Block ROI
 // @namespace    kamiren.torn-stock-roi
-// @version      1.0.0
-// @description  Ranks Torn stock benefit blocks, the bank and TCI by days to break even and ROI, using live prices, item values and your own holdings. Shows what you own and your bank cap (Oil Rig aware). Opens as an overlay on the stock market page, mobile friendly.
+// @version      1.0.1
+// @description  Shows which Torn stock benefit blocks, and the bank, pay for themselves fastest, using live prices, item values and your own holdings. Opens on the stock market page; works on desktop and Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/page.php?sid=StockMarket*

@@ -1,8 +1,31 @@
 # Torn Stock Block ROI
 
-Adds an **ROI** button to the [Torn](https://www.torn.com) stock market page. It opens a full-screen
-table of every stock benefit block (increments 1 to 4), plus the bank and TCI, sorted by how fast each
-one pays itself back, using live prices, live item values and your own holdings.
+**Which stock should I buy next?** This script answers it.
+
+Torn's stock market pays you for holding enough shares: cash, items, or points, every week or month.
+Those payouts are very different from each other, and so are the share prices needed to unlock them, so
+they are hard to compare by eye. This script puts every stock benefit block on the same scale: how many
+days it takes to earn back what it cost, and what it returns over a year. The bank and TCI sit in the
+same table, so you can see whether money is better off in a stock block or in the bank.
+
+It works from live prices, live item market values and your own account. It knows what you already own,
+what your bank deposit is, and what your bank cap is, so you can see at a glance what is worth buying
+next and what is already covered.
+
+![Stock Block ROI on desktop](screenshot.png)
+
+<p align="center"><img src="screenshot-mobile.png" alt="Stock Block ROI on a phone" width="300"></p>
+
+*(Screenshots use a demo account.)*
+
+## At a glance
+
+- Opens from an **ROI** button on the stock market page, as a window over the page.
+- Every block, increments 1 to 4, plus the bank and TCI, ranked by days to break even or by ROI.
+- Shows what you own, what you partly own (bank), and what is still open.
+- Pick any rows to see their combined cost, weekly and monthly income and overall ROI.
+- Works on desktop and phone (Torn PDA included). One API key, kept only in your browser.
+- Cached, so it opens instantly and only asks Torn for fresh data when the cache is old.
 
 ## What it shows
 
