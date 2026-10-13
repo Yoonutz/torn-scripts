@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Stock Block ROI
 // @namespace    kamiren.torn-stock-roi
-// @version      1.2.1
+// @version      1.2.2
 // @description  Shows which Torn stock benefit blocks, and the bank, pay for themselves fastest, using live prices, item values and your own holdings. Opens on the stock market page; works on desktop and Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
