@@ -292,12 +292,15 @@ a.btn {
   margin-top: 8px;
 }
 .sum {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1px;
   background: var(--line);
 }
 .sum div {
+  flex: 1 1 130px;
+  box-sizing: border-box;
+  min-width: 0;
   background: var(--panel);
   padding: 9px 10px;
 }
@@ -313,6 +316,7 @@ a.btn {
   font-size: 15px;
   color: #fff;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .tw {
   overflow-x: auto;
@@ -631,12 +635,6 @@ tbody tr.s td {
     flex: 1 1 40%;
     text-align: center;
   }
-  .sum {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .sum div:last-child {
-    grid-column: 1/-1;
-  }
   .sum div {
     padding: 7px 10px;
   }
@@ -696,13 +694,7 @@ tbody tr.s td {
     margin-bottom: 3px;
     font-weight: 400;
   }
-  td:nth-child(1) {
-    grid-column: 1/3;
-    grid-row: 1;
-  }
   td:nth-child(8) {
-    grid-column: 3;
-    grid-row: 1;
     text-align: right;
     font-size: 17px;
     font-weight: 700;
@@ -712,37 +704,11 @@ tbody tr.s td {
     font-weight: 400;
     text-align: right;
   }
-  td:nth-child(2) {
-    grid-column: 1/3;
-    grid-row: 2;
-  }
   td:nth-child(9) {
-    grid-column: 3;
-    grid-row: 2;
     text-align: right;
   }
-  td:nth-child(3) {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  td:nth-child(4) {
-    grid-column: 2;
-    grid-row: 3;
-  }
-  td:nth-child(5) {
-    grid-column: 3;
-    grid-row: 3;
-  }
-  td:nth-child(6) {
-    grid-column: 1/3;
-    grid-row: 4;
-  }
-  td:nth-child(7) {
-    grid-column: 3;
-    grid-row: 4;
-  }
   .acr {
-    font-size: 14px;
+    font-size: 15px;
   }
   .nm,
   .sub,
@@ -832,10 +798,100 @@ tbody tr.s td {
     grid-row: 2;
   }
   .sum {
-    grid-template-columns: repeat(5, 1fr);
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
-  .sum div:last-child {
-    grid-column: auto;
+}
+@media (max-width: 599px) {
+  /* Five summary cards: three on top, two below sharing the full width. Values sit on the bottom edge. */
+  .sum {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .sum div {
+    grid-column: span 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .sum div:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+  /* One card per stock: name and status on top, what it pays, then the numbers in two aligned rows. */
+  tbody tr {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.45fr);
+    gap: 10px;
+    padding: 12px 12px 13px;
+  }
+  tbody tr td:nth-child(1) {
+    grid-column: 1/3;
+    grid-row: 1;
+  }
+  tbody tr td:nth-child(9) {
+    grid-column: 3;
+    grid-row: 1;
+    text-align: right;
+  }
+  tbody tr td:nth-child(2) {
+    grid-column: 1/-1;
+    grid-row: 2;
+    margin-top: -4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--text);
+  }
+  tbody tr td:nth-child(2) .sub {
+    display: inline;
+    margin: 0 0 0 6px;
+  }
+  tbody tr td:nth-child(8) {
+    grid-column: 1;
+    grid-row: 3;
+    text-align: left;
+    font-size: 18px;
+  }
+  tbody tr td:nth-child(8)::before {
+    text-align: left;
+  }
+  tbody tr td:nth-child(7) {
+    grid-column: 2;
+    grid-row: 3;
+    font-size: 14px;
+    color: #fff;
+  }
+  tbody tr td:nth-child(7)::before {
+    content: 'Break-even';
+  }
+  tbody tr td:nth-child(7)::after,
+  tbody tr td:nth-child(5)::after {
+    content: ' days';
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  tbody tr td:nth-child(6) {
+    grid-column: 3;
+    grid-row: 3;
+    font-size: 14px;
+    color: #fff;
+  }
+  tbody tr td:nth-child(3) {
+    grid-column: 1;
+    grid-row: 4;
+    font-size: 12px;
+  }
+  tbody tr td:nth-child(5) {
+    grid-column: 2;
+    grid-row: 4;
+    font-size: 12px;
+  }
+  tbody tr td:nth-child(5)::before {
+    content: 'Pays every';
+  }
+  tbody tr td:nth-child(4) {
+    grid-column: 3;
+    grid-row: 4;
+    font-size: 12px;
   }
 }
 @media (max-width: 380px) {
