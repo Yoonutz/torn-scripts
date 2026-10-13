@@ -25,13 +25,13 @@
 
 <details>
 <summary><b>Reading the table</b></summary>
-
-- **Return:** what it pays, with the item's market value underneath.
-- **Increment:** 1 to 4. Bank and TCI: *No merits* or *10 merits*.
-- **Days to break even:** cost divided by (payout divided by days per payout).
-- **ROI @365d:** yearly payout divided by cost.
-- **Owned?:** **YES** if you hold that increment or more. Bank: **YES** at the cap, **PARTLY** below it.
-
+<ul>
+<li><b>Return:</b> what it pays, with the item's market value underneath.</li>
+<li><b>Increment:</b> 1 to 4. Bank and TCI: <i>No merits</i> or <i>10 merits</i>.</li>
+<li><b>Days to break even:</b> cost divided by (payout divided by days per payout).</li>
+<li><b>ROI @365d:</b> yearly payout divided by cost.</li>
+<li><b>Owned?:</b> <b>YES</b> if you hold that increment or more. Bank: <b>YES</b> at the cap, <b>PARTLY</b> below it.</li>
+</ul>
 </details>
 
 Source and issues: [GitHub](https://github.com/Yoonutz/torn-scripts/tree/main/Torn%20Stock%20ROI)
