@@ -31,7 +31,7 @@
 <summary><b>Sort and filter</b></summary>
 <ul>
 <li>Click a column header: <b>Sort A to Z</b> or <b>Z to A</b> (smallest or largest first for numbers).</li>
-<li>Stock, Return, Increment, Days per payout and Owned? also get a search box and a checklist. Five rows show, the rest scrolls.</li>
+<li>Stock, Return, Increment, Days per payout and Owned? also get a search box and a checklist. Five rows show, the rest scrolls. Type a value and press Enter to keep only the matches.</li>
 <li>Payout value, Cost, Days to break even and ROI @365d get <b>Min</b> and <b>Max</b>. You can type 5m, 2b or 750k.</li>
 <li>Filters stack. Each active one is a chip above the table: click it to remove it.</li>
 <li>Fastest payback among increment 1: tick only 1 under Increment, then sort Days to break even smallest to largest.</li>

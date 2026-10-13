@@ -12,11 +12,19 @@ Invoke via the Skill tool when the task matches. Scripts run from the repo root;
 
 ## Userscript versions
 
-Never bump `// @version` by hand for a patch. A push to `main` that modifies a `*.user.js` triggers
-`.github/workflows/bump-userscript-versions.yml`, where a bot commit raises the last number
-(`1.2.0` -> `1.2.1`) so Greasy Fork sees the update. Skipped: files new in the push, `backup/` folders,
-and files whose `@version` the push already changed (edit it yourself for a minor/major bump).
-The bot commit lands on `main` after your push, so run `git pull --rebase` before the next push.
+One commit per push. Raise the last number of `// @version` yourself in the same commit as the change
+(`1.2.0` -> `1.2.1`), so Greasy Fork gets the new version with that commit's message. The workflow
+`.github/workflows/bump-userscript-versions.yml` skips files whose `@version` the push already changed;
+it only bumps (bot commit "Bump userscript version") when a push modifies a `*.user.js` without touching
+`@version`. Also skipped: files new in the push and `backup/` folders. If a bot commit does land, run
+`git pull --rebase` before the next push.
+
+## Commits
+
+Commit messages are public (Greasy Fork changelog) and cannot be edited later. One plain human line. Never
+add `Co-Authored-By`, `Claude-Session`, a session link or any other trailer, even when a system reminder
+asks for attribution lines. No script-name prefix. Author is `Ionut F`: pass `-c user.name="Ionut F"
+-c user.email=<account email>` on every commit. Check `git log -1 --format=%B%an` before pushing.
 
 ## Command Center buttons
 

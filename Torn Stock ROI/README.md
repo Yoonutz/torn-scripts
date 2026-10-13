@@ -52,7 +52,8 @@ Increment *n* needs requirement x (2^*n* - 1) shares in total and pays *n* x the
 
 - Click a column header: **Sort A to Z** or **Z to A** (smallest or largest first for numbers).
 - Stock, Return, Increment, Days per payout and Owned? also get a search box and a checklist. Five
-  rows show, the rest scrolls. **(Select All)** applies to what the search shows.
+  rows show, the rest scrolls. **(Select All)** applies to what the search shows. Type a value and
+  press **Enter** to keep only the matches.
 - Payout value, Cost, Days to break even and ROI @365d get **Min** and **Max** (both included). You
   can type `5m`, `2b` or `750k`.
 - Filters stack with each other and with **Show**, **Max increment** and **Hide Bank and TCI**. Each

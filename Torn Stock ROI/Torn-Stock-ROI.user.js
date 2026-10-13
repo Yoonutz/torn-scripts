@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Stock Block ROI
 // @namespace    kamiren.torn-stock-roi
-// @version      1.2.2
+// @version      1.2.3
 // @description  Shows which Torn stock benefit blocks, and the bank, pay for themselves fastest, using live prices, item values and your own holdings. Opens on the stock market page; works on desktop and Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -1364,7 +1364,7 @@ button:focus-visible {
 <div class="cm-sep"></div>
 <button type="button" class="cm-i" id="cmx">Clear filter</button>
 <div id="cml">
-<div class="cm-q"><input type="text" id="cmq" placeholder="Search" autocomplete="off" spellcheck="false" aria-label="Search values"></div>
+<div class="cm-q"><input type="text" id="cmq" placeholder="Search, Enter to filter" enterkeyhint="search" autocomplete="off" spellcheck="false" aria-label="Search values, press Enter to keep only the matches"></div>
 <div class="cm-box">
 <label class="cm-all"><input type="checkbox" id="cma"><span id="cmal">(Select All)</span></label>
 <ul class="cm-list" id="cmu"></ul>
@@ -1372,8 +1372,8 @@ button:focus-visible {
 </div>
 <div id="cmn">
 <div class="cm-n">
-<label>Min<input type="text" id="cmmin" inputmode="decimal" placeholder="Any" autocomplete="off" spellcheck="false"></label>
-<label>Max<input type="text" id="cmmax" inputmode="decimal" placeholder="Any" autocomplete="off" spellcheck="false"></label>
+<label>Min<input type="text" id="cmmin" inputmode="decimal" enterkeyhint="done" placeholder="Any" autocomplete="off" spellcheck="false"></label>
+<label>Max<input type="text" id="cmmax" inputmode="decimal" enterkeyhint="done" placeholder="Any" autocomplete="off" spellcheck="false"></label>
 </div>
 <div class="cm-hint" id="cmr"></div>
 </div>
@@ -2644,6 +2644,19 @@ button:focus-visible {
     syncAll();
   }
   $('cmq').addEventListener('input', renderList);
+  // Enter keeps only what the search shows (like OK in a spreadsheet filter) and closes the menu.
+  $('cmq').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!$('cmq').value.trim()) return closeMenu(true);
+    if (!cmVis.length) return; // nothing matches: stay open so the search can be corrected
+    commitList(
+      cmDomain.filter(function (v) {
+        return cmVis.indexOf(v) < 0;
+      }),
+    );
+    closeMenu(true);
+  });
   $('cmu').addEventListener('change', function (e) {
     var i = e.target.getAttribute('data-i');
     if (i === null) return;
@@ -2672,6 +2685,12 @@ button:focus-visible {
     commitList(ex);
   });
   ['cmmin', 'cmmax'].forEach(function (id) {
+    $(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        closeMenu(true); // already applied while typing
+      }
+    });
     $(id).addEventListener('input', function () {
       var side = id === 'cmmin' ? 'min' : 'max',
         t = $(id).value.trim(),
