@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Stock Block ROI
 // @namespace    kamiren.torn-stock-roi
-// @version      1.1.0
+// @version      1.2.0
 // @description  Shows which Torn stock benefit blocks, and the bank, pay for themselves fastest, using live prices, item values and your own holdings. Opens on the stock market page; works on desktop and Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -868,16 +868,6 @@ tbody tr.s td {
     0 12px 40px rgba(0, 0, 0, 0.7),
     0 0 0 1px #000;
 }
-.fab {
-  position: fixed;
-  right: 10px;
-  bottom: calc(52px + env(safe-area-inset-bottom));
-  z-index: 2147482000;
-  height: 30px;
-  line-height: 28px;
-  padding: 0 12px;
-  box-shadow: 0 1px 4px #000a;
-}
 .titlebar {
   display: flex;
   align-items: center;
@@ -909,6 +899,46 @@ tbody tr.s td {
     cursor: move;
     user-select: none;
     touch-action: none;
+  }
+}
+`;
+
+  // The launcher is a separate host so it can sit in Torn's page header while the window floats.
+  const LAUNCH_CSS = `
+:host {
+  all: initial;
+}
+button {
+  height: 24px;
+  padding: 0 14px;
+  border: 1px solid #3a5a14;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #9ad33f 0%, #6ea037 50%, #4f8a1d 100%);
+  color: #fff;
+  font: 700 12px/22px Arial, Helvetica, sans-serif;
+  text-shadow: 0 1px 0 #1d3507;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  button:hover {
+    background: linear-gradient(180deg, #b0e65a 0%, #80b844 50%, #5c9c26 100%);
+  }
+}
+button:active,
+button[aria-expanded='true'] {
+  background: linear-gradient(180deg, #4f8a1d 0%, #6ea037 100%);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+button:focus-visible {
+  outline: 1px solid #74c0fc;
+  outline-offset: 1px;
+}
+@media (max-width: 860px) {
+  button {
+    height: 30px;
+    line-height: 28px;
   }
 }
 `;
@@ -973,9 +1003,16 @@ tbody tr.s td {
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML =
     '<style>' + CSS + '</style>' +
-    '<button class="fab" id="fab" type="button" aria-label="Open stock ROI table" aria-expanded="false">ROI</button>' +
     '<div class="win" id="win" hidden>' + MARKUP + '</div>';
   document.body.appendChild(host);
+
+  const launchHost = document.createElement('div');
+  launchHost.id = 'tsr-launch-host';
+  const launchRoot = launchHost.attachShadow({ mode: 'open' });
+  launchRoot.innerHTML =
+    '<style>' + LAUNCH_CSS + '</style>' +
+    '<button id="launch" type="button" aria-label="Open stock ROI table" aria-expanded="false">ROI</button>';
+  const launchBtn = launchRoot.getElementById('launch');
 
   // --------------------------------------------------------------------- app
   var NS = 'tsr.';
@@ -1983,7 +2020,7 @@ tbody tr.s td {
 
   function openWindow() {
     win.hidden = false;
-    $('fab').setAttribute('aria-expanded', 'true');
+    launchBtn.setAttribute('aria-expanded', 'true');
     applyPos();
     draw(); // cached data, instantly
     if (!apiKey) openKey();
@@ -1991,9 +2028,9 @@ tbody tr.s td {
   }
   function closeWindow() {
     win.hidden = true;
-    $('fab').setAttribute('aria-expanded', 'false');
+    launchBtn.setAttribute('aria-expanded', 'false');
   }
-  $('fab').addEventListener('click', function () {
+  launchBtn.addEventListener('click', function () {
     if (win.hidden) openWindow();
     else closeWindow();
   });
@@ -2009,6 +2046,44 @@ tbody tr.s td {
   host.addEventListener('keydown', function (e) {
     e.stopPropagation();
   });
+
+  /* ---------- launcher placement: Torn's stock page header ---------- */
+  // Torn's class names carry a build suffix (titleContainer___dTehe), so match on the stable prefix.
+  // Target: <div topSection> <div titleContainer/> [ROI] <div linksContainer/> ... </div>
+  function findHeader() {
+    var top = document.querySelector('[class*="topSection_"]');
+    if (!top) return null;
+    var title = null;
+    var links = null;
+    Array.prototype.forEach.call(top.children, function (c) {
+      var cls = String(c.className || '');
+      if (/titleContainer_/.test(cls)) title = c;
+      else if (/linksContainer_/.test(cls)) links = c;
+    });
+    return title && links ? { top: top, links: links } : null;
+  }
+  function placeLauncher() {
+    var h = findHeader();
+    if (h) {
+      if (launchHost.parentNode !== h.top || launchHost.nextElementSibling !== h.links) {
+        launchHost.style.cssText =
+          'display:flex;align-items:center;align-self:center;flex:0 0 auto;margin:0 10px;';
+        h.top.insertBefore(launchHost, h.links);
+      }
+    } else if (!launchHost.isConnected || launchHost.parentNode !== document.body) {
+      // Header not found (yet, or Torn changed it): float the button bottom-right instead.
+      launchHost.style.cssText =
+        'position:fixed;right:10px;bottom:52px;z-index:2147482000;filter:drop-shadow(0 1px 3px #000a);';
+      document.body.appendChild(launchHost);
+    }
+  }
+  placeLauncher();
+  // The stock page is a React app: the header appears after load and can be re-rendered.
+  var placeTimer = 0;
+  new MutationObserver(function () {
+    clearTimeout(placeTimer);
+    placeTimer = setTimeout(placeLauncher, 200);
+  }).observe(document.body, { childList: true, subtree: true });
 
   draw();
 
