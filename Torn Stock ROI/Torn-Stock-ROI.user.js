@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Stock Block ROI
 // @namespace    kamiren.torn-stock-roi
-// @version      1.0.1
+// @version      1.1.0
 // @description  Shows which Torn stock benefit blocks, and the bank, pay for themselves fastest, using live prices, item values and your own holdings. Opens on the stock market page; works on desktop and Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -11,7 +11,7 @@
 // ==/UserScript==
 
 /*
- * Adds an ROI button to the stock market page. Pressing it opens a full-screen table of every stock
+ * Adds an ROI button to the stock market page. Pressing it opens a floating window with a table of every stock
  * block (increments 1-4), plus the bank and TCI, sorted by how fast they pay themselves back.
  *
  * Torn requests are made only after you press the button (and only when the cached data is older than
@@ -61,23 +61,15 @@
   --sel-hover: rgba(110, 160, 55, 0.3);
   color-scheme: dark;
 }
-.ov {
-  background: var(--page);
+.win {
+  background: var(--panel);
   color: var(--text);
-}
-.ov {
   margin: 0;
-  padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
-    max(16px, env(safe-area-inset-left));
   font:
     12px/1.2 Arial,
     Helvetica,
     sans-serif;
   -webkit-tap-highlight-color: transparent;
-}
-.wrap {
-  max-width: 1040px;
-  margin: 0 auto;
 }
 .titlebar {
   background: var(--head);
@@ -88,14 +80,13 @@
   padding: 9px 10px;
   border-top: 1px solid #222;
   border-bottom: 1px solid #444;
-  border-radius: 5px 5px 0 0;
 }
 .panel {
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-top: 0;
-  border-radius: 0 0 5px 5px;
-  margin-bottom: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .ctl {
   display: flex;
@@ -512,11 +503,6 @@ tbody tr.s td {
 }
 /* ---------- phones and small tablets: table becomes cards ---------- */
 @media (max-width: 860px) {
-  .ov {
-    padding-top: 8px;
-    padding-left: max(8px, env(safe-area-inset-left));
-    padding-right: max(8px, env(safe-area-inset-right));
-  }
   .mob {
     display: flex;
   }
@@ -861,14 +847,26 @@ tbody tr.s td {
   }
 }
 
-/* ---------- userscript shell: launcher and full-screen overlay ---------- */
-.ov {
+/* ---------- userscript shell: launcher and floating window ---------- */
+/* Rounded top-left and bottom-right corners, sharp top-right and bottom-left. */
+.win {
   position: fixed;
-  inset: 0;
   z-index: 2147483000;
-  overflow: auto;
-  overscroll-behavior: contain;
+  top: max(12px, 5vh);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1040px, calc(100vw - 24px));
+  max-height: calc(100vh - max(12px, 5vh) - 12px);
+  max-height: calc(100dvh - max(12px, 5vh) - 12px);
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
+  border: 1px solid #555;
+  border-radius: 14px 0 14px 0;
+  overflow: hidden;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.7),
+    0 0 0 1px #000;
 }
 .fab {
   position: fixed;
@@ -892,17 +890,32 @@ tbody tr.s td {
   padding: 0 10px;
 }
 @media (max-width: 860px) {
+  .win {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    width: auto;
+    transform: none;
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
   .xb {
     height: 30px;
     line-height: 28px;
+  }
+}
+@media (min-width: 861px) {
+  .titlebar {
+    cursor: move;
+    user-select: none;
+    touch-action: none;
   }
 }
 `;
 
   // ------------------------------------------------------------------ markup
   const MARKUP = `
-<div class="wrap">
-<div class="titlebar"><span>Stock Block ROI</span><button id="x" type="button" class="xb">Close</button></div>
+<div class="titlebar" id="bar"><span>Stock Block ROI</span><button id="x" type="button" class="xb">Close</button></div>
 <div class="panel">
 <div class="ctl">
 <label for="f">Show <select id="f"><option value="all">All rows</option><option value="own">Owned</option><option value="not">Not owned</option><option value="sel">Selected</option></select></label>
@@ -952,7 +965,6 @@ tbody tr.s td {
 <b class="est">Estimated:</b> Clothing Cache uses the average market value of 7 cache items. Not included: passive stocks, HRG, BAG, EVL, MCS, CBD.
 </div>
 </div>
-</div>
 `;
 
   // Everything lives in a shadow root so Torn's own CSS cannot touch it and ours cannot leak out.
@@ -961,8 +973,8 @@ tbody tr.s td {
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML =
     '<style>' + CSS + '</style>' +
-    '<button class="fab" id="fab" type="button" aria-label="Open stock ROI table">ROI</button>' +
-    '<div class="ov" id="ov" hidden>' + MARKUP + '</div>';
+    '<button class="fab" id="fab" type="button" aria-label="Open stock ROI table" aria-expanded="false">ROI</button>' +
+    '<div class="win" id="win" hidden>' + MARKUP + '</div>';
   document.body.appendChild(host);
 
   // --------------------------------------------------------------------- app
@@ -975,6 +987,7 @@ tbody tr.s td {
     sortKey: 'be',
     sortAsc: true,
     limit: 25,
+    win: null, // dragged window position {x, y}; null = centred
   };
   var DEF_ACCOUNT = {
     updatedAt: 0,
@@ -1913,28 +1926,82 @@ tbody tr.s td {
     render();
   });
 
-  /* ---------- launcher and overlay ---------- */
+  /* ---------- launcher and floating window ---------- */
   var STALE_MS = 5 * 60 * 1000;
-  var ov = $('ov');
+  var win = $('win');
+  var bar = $('bar');
+  var wide = window.matchMedia('(min-width: 861px)');
   if (PDA_KEY_IN_USE) $('kb').hidden = true;
 
-  function openOverlay() {
-    ov.hidden = false;
-    $('fab').hidden = true;
+  // Keep the window reachable: some of the title bar must stay on screen.
+  function place(x, y) {
+    var r = win.getBoundingClientRect();
+    x = Math.min(Math.max(x, 80 - r.width), window.innerWidth - 80);
+    y = Math.min(Math.max(y, 0), window.innerHeight - 40);
+    win.style.left = x + 'px';
+    win.style.top = y + 'px';
+    win.style.transform = 'none';
+    win.style.maxHeight = Math.max(160, window.innerHeight - y - 12) + 'px';
+    return { x: x, y: y };
+  }
+  function applyPos() {
+    if (wide.matches && settings.win) {
+      place(settings.win.x, settings.win.y);
+    } else {
+      // Centred on desktop, full width on phones: the stylesheet decides.
+      win.style.left = win.style.top = win.style.transform = win.style.maxHeight = '';
+    }
+  }
+  var drag = null;
+  bar.addEventListener('pointerdown', function (e) {
+    if (!wide.matches || e.button > 0 || e.target.closest('button')) return;
+    var r = win.getBoundingClientRect();
+    drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    bar.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  bar.addEventListener('pointermove', function (e) {
+    if (drag) settings.win = place(e.clientX - drag.dx, e.clientY - drag.dy);
+  });
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    saveSettings();
+  }
+  bar.addEventListener('pointerup', endDrag);
+  bar.addEventListener('pointercancel', endDrag);
+  // Double-click the title bar to put the window back in the centre.
+  bar.addEventListener('dblclick', function (e) {
+    if (e.target.closest('button')) return;
+    settings.win = null;
+    saveSettings();
+    applyPos();
+  });
+  window.addEventListener('resize', function () {
+    if (!win.hidden) applyPos();
+  });
+
+  function openWindow() {
+    win.hidden = false;
+    $('fab').setAttribute('aria-expanded', 'true');
+    applyPos();
     draw(); // cached data, instantly
     if (!apiKey) openKey();
     else if (!hasAccount() || Date.now() - account.updatedAt > STALE_MS) refresh();
   }
-  function closeOverlay() {
-    ov.hidden = true;
-    $('fab').hidden = false;
+  function closeWindow() {
+    win.hidden = true;
+    $('fab').setAttribute('aria-expanded', 'false');
   }
-  $('fab').addEventListener('click', openOverlay);
-  $('x').addEventListener('click', closeOverlay);
+  $('fab').addEventListener('click', function () {
+    if (win.hidden) openWindow();
+    else closeWindow();
+  });
+  $('x').addEventListener('click', closeWindow);
   document.addEventListener(
     'keydown',
     function (e) {
-      if (e.key === 'Escape' && !ov.hidden) closeOverlay();
+      if (e.key === 'Escape' && !win.hidden) closeWindow();
     },
     true,
   );
