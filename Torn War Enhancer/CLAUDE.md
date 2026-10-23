@@ -10,23 +10,16 @@ Torn City faction war enforcement tool. Blocks faction members' attack links in-
 2. **Userscript** (`Torn-War-Enforcer.user.js`) — Tampermonkey/PDA script running on torn.com. Reads `war_state` / `member_progress` / `enemy_status` via the anon key (RLS read-only), visually disables + click-kills attack links, shows reasons in a tooltip, floating panel with admin rule editing (via `set-rules` Edge Function + `x-admin-token` header).
 3. **Console** (`index.html`) — standalone dashboard page (hosted on Cloudflare Pages). Same anon-key reads, plus Supabase Realtime websocket for instant refresh, title-flash + desktop notifications on cap hits, admin rule editor.
 
-## Critical: repo lags the deployed backend
+## Repo vs deployed backend
 
-The live Supabase project (`mmoaqgkhfxmbgvirsgxw`) is **ahead of the files here**. The userscript and console reference things that exist in production but NOT in this repo's SQL/TS:
-
-- `war_state` columns: `idle_minutes_target`, `enlisted`, `start_ts`, `opponent_name`
-- Table `enemy_status` (enemy last-action timestamps, anon-readable)
-- Edge Function `set-rules` (admin rule writes, guarded by `x-admin-token`)
-- Phase 2 per-member tally (`member_progress` is populated live; repo `index.ts` only has the Phase 2 hook comment)
-
-Before editing schema or the Edge Function, treat the deployed state as source of truth — pull current schema/function from Supabase rather than assuming these files are complete. Client files (userscript, console) ARE current.
+Synced with the live Supabase project (`mmoaqgkhfxmbgvirsgxw`) on 2026-10-23: `index.ts` matches deployed `war-poll` v12, `set-rules.ts` matches deployed `set-rules` v4, and `01`→`04` SQL rebuild the production columns. Still unverified from the catalog: constraints, indexes, policies and the Realtime publication beyond what `01_schema.sql` and `04_prod_sync.sql` declare. The same project also hosts `oc-gateway` and the `torn_oc_cpr` schema for Torn OC Bestfit (cron `refresh-community-crime-stats`); those live in that app's folder.
 
 ## Deploy / operate
 
 No build, lint, or tests — plain JS/SQL/TS, deployed manually:
 
 - **Schema changes**: paste SQL into the Supabase SQL editor.
-- **Edge Function**: needs layout `supabase/functions/war-poll/index.ts`, then `supabase functions deploy war-poll` (CLI must be linked: `supabase link --project-ref <ref>`). Torn key: `supabase secrets set TORN_API_KEY=...` — `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` auto-injected.
+- **Edge Functions**: needs layout `supabase/functions/war-poll/index.ts` (from `index.ts`) and `supabase/functions/set-rules/index.ts` (from `set-rules.ts`), then `supabase functions deploy <name>` (CLI must be linked: `supabase link --project-ref <ref>`). Secrets: `TORN_API_KEY` (war-poll), `ADMIN_TOKEN` (set-rules) — `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` auto-injected.
 - **Cron ops** (SQL editor): jobs `select * from cron.job;` · runs `select jobname, status, return_message, start_time from cron.job_run_details order by start_time desc limit 10;` · HTTP results `select id, status_code, content from net._http_response order by id desc limit 10;`
 - **Smoke test**: `curl -s -X POST "https://<ref>.supabase.co/functions/v1/war-poll" -H "Authorization: Bearer <anon_key>" -d '{}'` → expect `{"ok":true,"war":false}` idle.
 - **Userscript**: bump `@version` in the header on every change (users update via Tampermonkey).

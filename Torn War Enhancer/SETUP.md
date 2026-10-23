@@ -6,6 +6,8 @@ All Supabase. No Cloudflare. Order matters.
 - `01_schema.sql` — tables + RLS (run once)
 - `war-poll/index.ts` — Edge Function (war detection + heartbeat + faction totals)
 - `02_schedule.sql` — pg_cron job that invokes the function every minute
+- `03_war_split.sql`, `04_prod_sync.sql` — later schema changes (run after 01)
+- `set-rules.ts` — admin rule-write Edge Function (deploy as `set-rules`, secret `ADMIN_TOKEN`)
 
 ## Prereqs
 - Supabase project (you have one)
