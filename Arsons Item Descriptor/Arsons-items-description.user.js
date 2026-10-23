@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Arson 2.0 items description
 // @namespace    http://tampermonkey.net/
-// @version      3.5.3
+// @version      3.5.4
 // @author       KamiRen [2805199]
 // @description  Items description popup
-// @match        https://www.torn.com/page.php?sid=crimes#/arson
+// @match        https://www.torn.com/page.php?sid=crimes*
 // @grant        none
 // @license      MIT
 // @downloadURL none
@@ -32,7 +32,7 @@
     const IS_MOBILE = !document.body.querySelector('.searchFormWrapper___LXcWp');
 
     function extractItemName(ariaLabel) {
-        if (!ariaLabel) return null;
+        if (!ariaLabel || !/arson/i.test(location.hash)) return null;
         const lower = ariaLabel.toLowerCase();
         return Object.keys(ITEM_MAP).find(name => lower.includes(name.toLowerCase())) || null;
     }
