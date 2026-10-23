@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.10
+// @version      0.7.11
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.10';
+  const VERSION = '0.7.11';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -695,7 +695,16 @@
   // sidebar, which Torn PDA does not render at all. The fallback below finds the Home
   // page "General Information" name row structurally, because Torn's class names there
   // are generated and cannot be relied on.
-  const NAME_ANCHORS = ['[class*="user-information"] a[href*="profiles.php"]', '[class*="menu-value"] a[href*="profiles.php"]'];
+  // Torn's sidebar moved to camelCase hashed classes in 2026-10: <p class="menuInfoRow___x"><span>Name:</span>
+  // <a class="menuValue___x" href="/profiles.php?XID=...">. The kebab-case ones are kept for the old layout.
+  const NAME_ANCHORS = [
+    'a[class*="menuValue"][href*="profiles.php"]',
+    '[class*="menuInfoRow"] a[href*="profiles.php"]',
+    '[class*="userInformation"] a[href*="profiles.php"]',
+    '[class*="user-information"] a[href*="profiles.php"]',
+    '[class*="menu-value"] a[href*="profiles.php"]',
+  ];
+  const MOBILE_INFO = '[class*="user-information-mobile"],[class*="userInformationMobile"]';
 
   // Home page fallback: the player's OWN name row in "General Information", found
   // structurally. Torn's class names there are generated, so instead: a profiles.php
@@ -997,7 +1006,7 @@
 
   // Phone-sized Torn layout (PDA or mobile browser): icons row is crowded, so use the fixed slot.
   function useDock(btn) {
-    return isPda() || window.innerWidth <= 768 || !!(btn && btn.closest('[class*="user-information-mobile"]'));
+    return isPda() || window.innerWidth <= 768 || !!(btn && btn.closest(MOBILE_INFO));
   }
 
   // Torn PDA: no room beside the icon, so the pill gets its own fixed slot on every page,
@@ -1005,7 +1014,7 @@
   function placeDock(btn) {
     // Real Torn mobile markup: div.content > [div.areas (nav), div.user-information-mobile (money + icons swiper)],
     // then the page. The icons <ul> sits in a horizontal swiper, so the dock must go AFTER the whole block.
-    const um = btn.closest('[class*="user-information-mobile"]') || document.querySelector('[class*="user-information-mobile"]');
+    const um = btn.closest(MOBILE_INFO) || document.querySelector(MOBILE_INFO);
     let anchor = um && um.parentNode ? { node: um, where: 'afterend' } : null;
     if (!anchor) {
       const title = document.querySelector('.content-wrapper > .content-title') || document.querySelector('.content-title');
