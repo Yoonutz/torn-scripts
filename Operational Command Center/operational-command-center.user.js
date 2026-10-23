@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.12
+// @version      0.7.13
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.12';
+  const VERSION = '0.7.13';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -33,15 +33,19 @@
   const ATTEMPTS = 3;
   const MAX_STEPS = 4;
   const TIMEOUT_MS = 90000;
-  // Company trains pill (next to the OCC icon). One Torn call per 6h, or on click.
+  // Company trains pill (next to the OCC icon). Torn adds the daily trains with the company
+  // update at ~18:05 TCT (UTC, no DST), so one call just after that, a 12h safety net,
+  // a call after training on the company page, or on click.
   const KEY_TRAINS = 'occ.trains';
   const KEY_TRAINS_LOCK = 'occ.trains.lock';
   const TRAINS_URL = 'https://api.torn.com/v2/company/profile';
   const TRAINS_MAX = 20;
-  const TRAINS_EVERY = 6 * 3600 * 1000;
+  const TRAINS_GRANT = (18 * 60 + 7) * 60000; // 18:07 TCT, as ms after UTC midnight
+  const TRAINS_SAFETY = 12 * 3600 * 1000;
+  const TRAINS_RETRY = 10 * 60000;
+  const TRAINS_AFTER_TRAIN = 4000;
   const TRAINS_COOLDOWN = 30000;
   const TRAINS_LOCK_MS = 30000;
-  const TRAINS_TICK = 300000;
   const TRAINS_ERR = {
     1: 'Torn key is empty',
     2: 'Torn key is invalid',
@@ -54,6 +58,7 @@
   const TRAINS_STOP = [1, 2, 16, 18];
   let trains = null;
   let trainsBusy = false;
+  let trainsTimer = 0;
 
   const store = {
     get(k, d) {
@@ -783,9 +788,10 @@
   }
 
   // ---- Company trains pill -------------------------------------------------
+  // Torn City Time (UTC), so the shown times never move with local daylight saving.
   function hhmm(ts) {
     const d = new Date(ts);
-    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0') + ' TCT';
   }
 
   function ago(ts) {
@@ -799,10 +805,39 @@
     return String(k).slice(-4);
   }
 
+  // Latest 18:07 TCT at or before now.
+  function lastGrant(now) {
+    const day = 86400000;
+    const g = Math.floor(now / day) * day + TRAINS_GRANT;
+    return g <= now ? g : g - day;
+  }
+
+  // When the next automatic refresh is due (ms timestamp), or Infinity when it never is.
+  function trainsNext(c, key) {
+    if (!c || typeof c.tried !== 'number' || c.kh !== trainsTail(key)) return 0;
+    if (c.bad) return Infinity;
+    const now = Date.now();
+    if (c.tried < lastGrant(now)) return 0;
+    let at = Math.min(lastGrant(now) + 86400000, c.tried + TRAINS_SAFETY);
+    if (c.retry) at = Math.min(at, c.tried + TRAINS_RETRY);
+    return at;
+  }
+
   function trainsDue(c, key) {
-    if (!c || typeof c.tried !== 'number' || c.kh !== trainsTail(key)) return true;
-    if (c.bad) return false;
-    return Date.now() - c.tried >= TRAINS_EVERY;
+    return Date.now() >= trainsNext(c, key);
+  }
+
+  function scheduleTrains() {
+    clearTimeout(trainsTimer);
+    const key = tornKey();
+    if (!key) return;
+    const at = trainsNext(store.get(KEY_TRAINS, null), key);
+    if (at === Infinity) return;
+    // Cap the wait so a sleeping laptop or throttled tab re-checks reasonably soon.
+    const wait = Math.min(Math.max(5000, at - Date.now()), 3600000);
+    trainsTimer = setTimeout(() => {
+      fetchTrains(false).then(scheduleTrains);
+    }, wait);
   }
 
   function trainsTip() {
@@ -812,7 +847,9 @@
     parts.push(typeof t.ts === 'number' ? 'refreshed ' + hhmm(t.ts) + ' (' + ago(t.ts) + ')' : 'not refreshed yet');
     if (t.err) parts.push(t.err);
     if (typeof t.n === 'number' && t.n >= TRAINS_MAX) parts.push('FULL: daily trains are being lost');
-    if (!t.bad && typeof t.tried === 'number') parts.push('next ' + hhmm(Math.max(Date.now(), t.tried + TRAINS_EVERY)));
+    const key = tornKey();
+    const at = key ? trainsNext(t, key) : Infinity;
+    if (at !== Infinity) parts.push('next ' + hhmm(Math.max(Date.now(), at)));
     parts.push('click to refresh');
     return parts.join(' · ');
   }
@@ -911,7 +948,7 @@
     if (toastEl) toastEl.style.setProperty('display', 'none', 'important');
   }
 
-  async function fetchTrains(manual, pill) {
+  async function fetchTrains(manual, pill, force) {
     const say = (t, bad) => {
       if (manual) trainsToast(t, bad, pill);
     };
@@ -937,7 +974,7 @@
         return;
       }
     } else {
-      if (!trainsDue(cur, key)) {
+      if (!force && !trainsDue(cur, key)) {
         trains = cur;
         paintTrains();
         return;
@@ -961,6 +998,7 @@
         const code = j.error.code;
         rec.err = TRAINS_ERR[code] || 'Torn error ' + code + (j.error.error ? ': ' + j.error.error : '');
         if (TRAINS_STOP.indexOf(code) !== -1) rec.bad = true;
+        if (code === 5) rec.retry = true;
       } else if (j && j.profile && typeof j.profile.trains === 'number') {
         rec.n = j.profile.trains;
         rec.ts = Date.now();
@@ -971,6 +1009,7 @@
       }
     } catch (e) {
       net = true;
+      rec.retry = true;
       rec.err = 'Refresh failed: ' + (e && e.message ? e.message : 'error');
     } finally {
       trainsBusy = false;
@@ -978,6 +1017,7 @@
       store.del(KEY_TRAINS_LOCK);
       trains = rec;
       paintTrains();
+      scheduleTrains();
     }
     if (rec.err) {
       say(rec.err + (net ? '. If Tampermonkey asked about api.torn.com, choose Always allow, then click again.' : ''), true);
@@ -1090,15 +1130,33 @@
   function startTrains() {
     trains = store.get(KEY_TRAINS, null);
     paintTrains();
-    fetchTrains(false);
-    setInterval(() => {
-      fetchTrains(false);
-    }, TRAINS_TICK);
+    fetchTrains(false).then(scheduleTrains);
+    // Background tabs get their timers throttled: check again when the tab comes back.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') fetchTrains(false).then(scheduleTrains);
+    });
     addEventListener('storage', (e) => {
       if (e.key !== KEY_TRAINS) return;
       trains = store.get(KEY_TRAINS, null);
       paintTrains();
+      scheduleTrains();
     });
+    // Training an employee spends trains: refresh a few seconds after the last Train click
+    // on the company page (the wait also covers the confirm step).
+    let trainedTimer = 0;
+    document.addEventListener(
+      'click',
+      (e) => {
+        if (!/companies\.php/.test(location.pathname)) return;
+        const b = e.target && e.target.closest ? e.target.closest('button,a,input[type="button"],input[type="submit"]') : null;
+        if (!b || !/\btrain/i.test(b.textContent || b.value || '')) return;
+        clearTimeout(trainedTimer);
+        trainedTimer = setTimeout(() => {
+          fetchTrains(false, null, true).then(scheduleTrains);
+        }, TRAINS_AFTER_TRAIN);
+      },
+      true
+    );
   }
 
   function watchName() {

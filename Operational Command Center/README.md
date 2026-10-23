@@ -131,14 +131,20 @@ Small `x / 20` badge right of the OCC icon (next to the player name; floating
 above the launcher on pages without a name row). Userscript only, no skill or
 Worker involved.
 
-- One call per 6 hours: `GET https://api.torn.com/v2/company/profile` with
+- `GET https://api.torn.com/v2/company/profile` with
   `Authorization: ApiKey <torn key>`, field `profile.trains`. Needs a director
   key, Limited access or higher. Max `20` is hardcoded (not in the response).
+- Torn adds the daily trains with the company update at ~18:05 TCT (the daily
+  report lands 18:04-18:06). The pill calls once at 18:07 TCT, again when a tab
+  comes back into view and has missed that, a few seconds after a Train click
+  on the company page, and otherwise at most every 12 h. Network or rate-limit
+  failures retry after 10 min. All times are TCT (UTC), so daylight saving
+  never shifts them.
 - In Torn PDA the pill has its own fixed slot on every page: right-aligned
   directly under the status icons line, above the page title.
 - Click the pill to refresh now (30 s cooldown). A small message appears next
   to it saying what happened (new value, or why it failed). Hover shows the
-  last refresh time, relative age and the next auto refresh.
+  last refresh time, relative age and the next auto refresh, in TCT.
 - Colors: grey 0, amber 1-19, red 20/20 (full bank, daily trains are lost).
   Faded `?` or value = no data or last refresh failed (reason in the tooltip).
 - Cached in `localStorage` (`occ.trains`); tabs share it and a short lock
