@@ -46,3 +46,15 @@ This folder is configured to work with Google Apps Script using `clasp`.
 - `.clasp.json` is ignored so your script ID stays local to this machine.
 - `.clasprc.json` is ignored because it contains authentication details.
 - Once you pull the project, edit the files under `src/` from VS Code.
+
+## Security setup (once)
+
+The web app is public so the Company Training Companion can read the snapshot. Two things stay private:
+
+- Run `moveApiKeyToScriptProperties` from the editor. It moves the Torn key out of `Data!K2` into
+  Script Properties and clears the cell.
+- Run `createAdminToken` and copy the token from the log. `?refresh=1` and `?employee=Name` now need
+  `&token=<that token>`; without it they return an error. The plain snapshot needs no token.
+
+After `npm run push`, update the existing deployment (`clasp deploy -i <deploymentId>`) so the
+`/exec` URL and the userscript's deployment ID stay the same.

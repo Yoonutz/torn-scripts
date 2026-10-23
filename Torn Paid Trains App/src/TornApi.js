@@ -1,4 +1,7 @@
 function getTornApiKey_() {
+  const fromProps = PropertiesService.getScriptProperties().getProperty(CONFIG.API_KEY_PROPERTY);
+  if (fromProps) return fromProps.trim();
+
   const { dataSheet } = getSheets_();
   if (!dataSheet) {
     throw new Error(`[getTornApiKey_] Missing required sheet: ${CONFIG.SHEET_DATA}`);
@@ -10,6 +13,25 @@ function getTornApiKey_() {
   }
 
   return apiKey;
+}
+
+// Run once from the editor: copies the key from Data!K2 into Script Properties,
+// then clears the cell so the key is no longer visible to anyone with sheet access.
+function moveApiKeyToScriptProperties() {
+  const { dataSheet } = getSheets_();
+  const cell = dataSheet.getRange(CONFIG.API_KEY_CELL_A1);
+  const apiKey = String(cell.getValue() || "").trim();
+  if (!apiKey) throw new Error(`Nothing to move: ${CONFIG.SHEET_DATA}!${CONFIG.API_KEY_CELL_A1} is empty.`);
+  PropertiesService.getScriptProperties().setProperty(CONFIG.API_KEY_PROPERTY, apiKey);
+  cell.clearContent();
+  Logger.log(`[moveApiKeyToScriptProperties] Key moved to Script Properties (${CONFIG.API_KEY_PROPERTY}).`);
+}
+
+// Run once from the editor: creates the token that refresh and employee lookups require.
+function createAdminToken() {
+  const token = Utilities.getUuid().replace(/-/g, "");
+  PropertiesService.getScriptProperties().setProperty(CONFIG.ADMIN_TOKEN_PROPERTY, token);
+  Logger.log(`[createAdminToken] Add &token=${token} to refresh and employee URLs.`);
 }
 
 function fetchTornCompanyApi_(selectionsQuery, apiKey) {

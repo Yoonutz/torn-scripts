@@ -32,6 +32,12 @@ function doGet(e) {
   const shouldRefresh = params.refresh === "1" || params.refresh === "true";
   const employeeName = String(params.employee || "").trim();
 
+  // The plain snapshot stays public for the Company Training Companion userscript.
+  // Refreshing (spends the Torn key) and per-employee pay details need the admin token.
+  if ((shouldRefresh || employeeName) && !isAdminToken_(params.token)) {
+    return createJsonOutput_({ error: "Admin token required for refresh and employee lookups." });
+  }
+
   if (shouldRefresh) {
     try {
       updateCompanySnapshot({ source: "webapp" });
@@ -53,6 +59,11 @@ function doGet(e) {
     : { error: "No snapshot yet. Run updateCompanySnapshot once or call ?refresh=1" };
 
   return createJsonOutput_(payload);
+}
+
+function isAdminToken_(token) {
+  const expected = PropertiesService.getScriptProperties().getProperty(CONFIG.ADMIN_TOKEN_PROPERTY);
+  return !!expected && String(token || "") === expected;
 }
 
 function createJsonOutput_(payload) {
