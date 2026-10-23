@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.11
+// @version      0.7.12
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.11';
+  const VERSION = '0.7.12';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -1009,19 +1009,32 @@
     return isPda() || window.innerWidth <= 768 || !!(btn && btn.closest(MOBILE_INFO));
   }
 
+  // The mobile money + icons block. 2026-10 markup: swiperWrapper___ > [div.points-mobile___, ul.statusIcons___.mobile___],
+  // so when the block's own class is unknown, take the swiper's parent (one more step up if that is a swiper too).
+  function mobileInfo(btn) {
+    const um = btn.closest(MOBILE_INFO) || document.querySelector(MOBILE_INFO);
+    if (um) return um;
+    const icons = document.querySelector('ul[class*="statusIcons"][class*="mobile"],[class*="points-mobile"],[class*="pointsMobile"]');
+    if (!icons) return null;
+    let block = icons.closest('[class*="swiperWrapper"],[class*="swiper-wrapper"]') || icons;
+    block = block.parentNode;
+    if (block && /swiper/i.test(block.className || '') && block.parentNode) block = block.parentNode;
+    return block && block !== document.body ? block : null;
+  }
+
   // Torn PDA: no room beside the icon, so the pill gets its own fixed slot on every page,
   // right under the status icons line and above the page title.
   function placeDock(btn) {
     // Real Torn mobile markup: div.content > [div.areas (nav), div.user-information-mobile (money + icons swiper)],
     // then the page. The icons <ul> sits in a horizontal swiper, so the dock must go AFTER the whole block.
-    const um = btn.closest(MOBILE_INFO) || document.querySelector(MOBILE_INFO);
+    const um = mobileInfo(btn);
     let anchor = um && um.parentNode ? { node: um, where: 'afterend' } : null;
     if (!anchor) {
       const title = document.querySelector('.content-wrapper > .content-title') || document.querySelector('.content-title');
       if (title) anchor = { node: title, where: 'beforebegin' };
     }
     if (!anchor) {
-      const row = btn.closest('[class*="status-icons"]') || btn.closest('ul,ol') || btn.parentNode;
+      const row = btn.closest('[class*="status-icons"],[class*="statusIcons"]') || btn.closest('ul,ol') || btn.parentNode;
       if (!row || !row.parentNode || row === document.body) return false;
       anchor = { node: row, where: 'afterend' };
     }
