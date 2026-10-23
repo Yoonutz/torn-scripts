@@ -17,6 +17,7 @@ directly.
 - **Keep it comment-free and lean.** TornPDA silently refuses to load the script once it exceeds
   roughly **120 KB**, and comment lines are what pushed it over before. Do not add comment lines to
   this file; keep it under ~120 KB. (Explain reasoning to the user, not in the script.)
+- **Indent with tabs**, one tab per level. Two-space indents cost ~9 KB of that budget.
 - **`@match` must always be exactly `https://www.torn.com/*`.** Never
   `https://www.torn.com/factions.php?step=your#/tab=crimes*` — `@match` ignores everything after
   `#`, so that pattern never matches and the script never injects. This one line caused most of the
