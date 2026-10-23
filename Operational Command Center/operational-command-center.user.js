@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.8
+// @version      0.7.9
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,14 +17,14 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.8';
+  const VERSION = '0.7.9';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
   const KEY_ANS = 'occ.ans.';
   const KEY_TORN = 'occ.torn_key';
   const KEY_SKILLS = 'occ.skills';
-  const PDA_KEY = '###' + 'PDA-APIKEY' + '###';
+  const PDA_KEY = '###PDA-APIKEY###';
   const RUNNER = 'https://occ-runner.yoonutz.workers.dev';
   const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
   const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
