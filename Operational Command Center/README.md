@@ -127,8 +127,9 @@ and always carry 1:1.
 
 ## Company trains pill
 
-Small `x / 20` badge right of the OCC icon (next to the player name; floating
-above the launcher on pages without a name row). Userscript only, no skill or
+Small badge right of the OCC icon: just the count next to the player name (so
+it fits the sidebar; `x / 20` in the tooltip), `x / 20` in the phone dock and
+floating above the launcher on pages without a name row. Userscript only, no skill or
 Worker involved.
 
 - `GET https://api.torn.com/v2/company/profile` with

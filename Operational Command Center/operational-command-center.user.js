@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.13
+// @version      0.7.14
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.13';
+  const VERSION = '0.7.14';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -168,10 +168,12 @@
     .occ-md strong{color:#fff;font-weight:700}
     .occ-md em{color:#bdbdbd}
     .occ-md hr{border:0;border-top:1px solid #2a2a2a;margin:10px 0}
-    .occ-trains{all:unset;box-sizing:border-box;position:relative;display:inline-flex!important;align-items:center;flex:none;height:14px;margin:0 0 0 4px;padding:0 4px;background:#1f1f1f;border:1px solid #3a3a3a;border-radius:3px;font:700 10px/1 Verdana,Arial,sans-serif;color:#8a8a8a;white-space:nowrap;vertical-align:middle;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+    .occ-trains{all:unset;box-sizing:border-box;position:relative;display:inline-flex!important;align-items:center;flex:none;height:13px;margin:0 0 0 3px;padding:0 3px;background:#1f1f1f;border:1px solid #3a3a3a;border-radius:3px;font:700 9px/1 Verdana,Arial,sans-serif;color:#8a8a8a;white-space:nowrap;vertical-align:middle;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
     .occ-trains .n{color:#d6d6d6}
     .occ-trains .s{margin:0 2px;font-weight:400;color:#8a8a8a}
     .occ-trains .m{font-weight:400;color:#8a8a8a}
+    .occ-trains .s,.occ-trains .m{display:none}
+    .occ-dock .occ-trains .s,.occ-dock .occ-trains .m,.occ-trains.occ-float .s,.occ-trains.occ-float .m{display:inline}
     .occ-trains.hot{border-color:#6b5a26}
     .occ-trains.hot .n{color:#f2c14e}
     .occ-trains.full{border-color:#7a2f2b}
@@ -843,7 +845,7 @@
   function trainsTip() {
     const t = trains || {};
     if (t.nokey) return 'Company trains · ' + t.err;
-    const parts = ['Company trains'];
+    const parts = ['Company trains' + (typeof t.n === 'number' ? ' ' + t.n + ' / ' + TRAINS_MAX : '')];
     parts.push(typeof t.ts === 'number' ? 'refreshed ' + hhmm(t.ts) + ' (' + ago(t.ts) + ')' : 'not refreshed yet');
     if (t.err) parts.push(t.err);
     if (typeof t.n === 'number' && t.n >= TRAINS_MAX) parts.push('FULL: daily trains are being lost');
