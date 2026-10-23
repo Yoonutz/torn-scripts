@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.9
+// @version      0.7.10
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.9';
+  const VERSION = '0.7.10';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -726,24 +726,40 @@
     return homeNameAnchor();
   }
 
+  function inlineButton() {
+    const b = el('button', 'occ-inline', ICON.dash);
+    b.type = 'button';
+    b.title = 'Operational Command Center';
+    return b;
+  }
+
   function mountInline() {
+    const docked = document.querySelector('.occ-dock .occ-inline');
+    if (docked && useDock(docked) && placeDock(docked)) {
+      launch.classList.add('occ-hide');
+      return true;
+    }
     const a = nameAnchor();
-    // No anchor on this page (PDA, or a page without the name row): keep the floating
-    // launcher visible so the panel is always reachable. Never hide it without a mount.
     if (!a || !a.parentNode) {
+      // Phone layout: the dock hangs off the icons block or the page title, not the
+      // name link, so it still mounts when Torn drops or moves the name link.
+      if (useDock(null) && placeDock(inlineButton())) {
+        launch.classList.add('occ-hide');
+        return true;
+      }
+      // Nothing to hang on: keep the floating launcher visible so the panel is always
+      // reachable. Never hide it without a mount.
       launch.classList.remove('occ-hide');
       placeFloatTrains();
       return false;
     }
-    const have = document.querySelector('.occ-dock .occ-inline') || a.parentNode.querySelector('.occ-inline');
+    const have = docked || a.parentNode.querySelector('.occ-inline');
     if (have) {
       launch.classList.add('occ-hide');
       placeTrains(have);
       return true;
     }
-    const b = el('button', 'occ-inline', ICON.dash);
-    b.type = 'button';
-    b.title = 'Operational Command Center';
+    const b = inlineButton();
     // Torn appends badges (donator star, awards) right after the name link. Ionuț wants
     // only his icon there, so those badges are hidden and the button takes their spot.
     let ref = a;
