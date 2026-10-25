@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.17
+// @version      1.0.18
 // @description  Colors Torn's header clock red, orange and green as calendar events approach and go live
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -464,7 +464,7 @@
       .sort((a, b) => RANK[b.st] - RANK[a.st] || a.start - b.start)
       .forEach((x) => {
         if (!best || RANK[x.st] > RANK[best]) best = x.st;
-        const text = x.st === 'green'
+        const text = t >= x.start
           ? `${x.ev.title} live, ${fmtLeft(x.end - t)} left`
           : `${x.ev.title} in ${fmtLeft(x.start - t)}`;
         lines.push(text);
