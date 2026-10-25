@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.11
+// @version      1.0.12
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -585,18 +585,17 @@
     const src = { api: 'auto, API', calendar: 'auto, calendar page', manual: 'yours' }[S.startSource] || 'unknown';
     const status = S.lastError ? `<span class="ter-err">${esc(S.lastError)}</span>`
       : S.lastFetch ? `updated ${fmtDay(S.lastFetch)}` : 'not fetched';
-    // While a key is being set, the key steps replace the whole settings box.
-    if (ui.key) return `<div class="ter-gear">${keyHtml()}</div>`;
     return `
       <div class="ter-gear">
         ${isPda ? '' : keyHtml()}
-        <div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>
+        ${ui.key ? '' : `<div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>`}
         <hr class="ter-hr">
         <label>Your start <input type="text" class="ter-num ter-time" data-k="startTime" data-kind="time" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
         <label><span class="ter-sw ter-red-bg"></span>Red <input type="text" class="ter-num" data-k="redHours" data-kind="hours" inputmode="decimal" value="${S.redHours}"> h before</label>
         <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="text" class="ter-num" data-k="orangeHours" data-kind="hours" inputmode="decimal" value="${S.orangeHours}"> h before</label>
         <label><span class="ter-sw ter-green-bg"></span>Green <input type="text" class="ter-num" data-k="greenHours" data-kind="hours" inputmode="decimal" value="${S.greenHours}"> h, 0 = all event</label>
         <label><input type="checkbox" data-k="showDot" ${S.showDot ? 'checked' : ''}> Dot on clock</label>
+        <hr class="ter-hr">
       </div>`;
   }
 
@@ -610,9 +609,9 @@
         <a href="#" data-act="gear" class="ter-cog${ui.gear ? ' on' : ''}" title="Settings">⚙</a>
       </div>
       ${ui.gear ? gearHtml() : ''}
-      ${ui.gear && ui.key ? '' : `<div class="ter-list">
+      <div class="ter-list">
         ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing to show.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
-      </div>`}
+      </div>
 `;
   }
 
