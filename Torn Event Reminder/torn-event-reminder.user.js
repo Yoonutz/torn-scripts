@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.16
+// @version      1.0.17
 // @description  Colors Torn's header clock red, orange and green as calendar events approach and go live
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -26,7 +26,7 @@
   const DEFAULTS = {
     redHours: 24,        // red from this many hours before the start
     orangeHours: 3,      // orange from this many hours before the start
-    greenHours: 0,       // green for this many hours after the start, 0 = the whole event
+    greenHours: 0,       // green from this many hours before the start, 0 = from the start; always green while live
     showDot: true,       // small colored dot on the clock, visible even if the icon cannot be tinted
     newEventsOn: true,   // events seen for the first time start checked
     startTime: null,     // your personal event start time, 'HH:MM' TCT
@@ -115,12 +115,10 @@
   function stateOf(ev, t) {
     const { start, end } = times(ev);
     if (!start) return null;
-    if (t >= start && t < end) {
-      if (S.greenHours > 0 && t >= start + S.greenHours * HOUR) return null;
-      return 'green';
-    }
+    if (t >= start && t < end) return 'green';
     if (t < start) {
       const left = start - t;
+      if (left <= S.greenHours * HOUR) return 'green';
       if (left <= S.orangeHours * HOUR) return 'orange';
       if (left <= S.redHours * HOUR) return 'red';
     }
@@ -598,7 +596,7 @@
         <label>Your start <input type="text" class="ter-num ter-time" data-k="startTime" data-kind="time" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
         <label><span class="ter-sw ter-red-bg"></span>Red <input type="text" class="ter-num" data-k="redHours" data-kind="hours" inputmode="decimal" value="${S.redHours}"> h before</label>
         <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="text" class="ter-num" data-k="orangeHours" data-kind="hours" inputmode="decimal" value="${S.orangeHours}"> h before</label>
-        <label><span class="ter-sw ter-green-bg"></span>Green <input type="text" class="ter-num" data-k="greenHours" data-kind="hours" inputmode="decimal" value="${S.greenHours}"> h, 0 = all event</label>
+        <label><span class="ter-sw ter-green-bg"></span>Green <input type="text" class="ter-num" data-k="greenHours" data-kind="hours" inputmode="decimal" value="${S.greenHours}"> h before, 0 = at start</label>
         <label><input type="checkbox" data-k="showDot" ${S.showDot ? 'checked' : ''}> Dot on clock</label>
         <hr class="ter-hr">
       </div>`;

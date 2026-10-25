@@ -28,7 +28,7 @@
 <ul>
 <li><b>Red:</b> 24 h or less before an event you watch starts (editable).</li>
 <li><b>Orange:</b> 3 h or less before the start (editable).</li>
-<li><b>Green:</b> the event is live, for the whole event or the hours you set.</li>
+<li><b>Green:</b> the event is live, or from the hours you set before the start (0 = at start).</li>
 <li><b>Ended events:</b> struck through and unticked. Last month's events still running stay in the list.</li>
 </ul>
 </details>

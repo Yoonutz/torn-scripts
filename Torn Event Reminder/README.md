@@ -25,7 +25,7 @@
 | --- | --- |
 | Red | 24 h or less before an event you watch starts (editable) |
 | Orange | 3 h or less before the start (editable) |
-| Green | the event is live, for the whole event or the hours you set |
+| Green | the event is live, or from the hours you set before the start (0 = at start) |
 | Normal | nothing due |
 
 Most Torn events start at the time you picked, not at 00:00 TCT. The script reads it from
