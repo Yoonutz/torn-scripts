@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.6
+// @version      1.0.7
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -727,6 +727,13 @@
       #ter-float .ter-float-dot { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 6px rgba(0,0,0,.7); }
       #ter-float .ter-ui { background: var(--default-bg-panel-color, #333); border-radius: 6px; padding: 6px 8px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
 
+      /* Torn sizes the clock tooltip for one line of text: let it grow around the new rows and sit on top. */
+      ${TOOLTIP}:has(.ter-ui) {
+        height: auto !important; max-height: none !important; min-height: 0 !important;
+        width: auto !important; max-width: none !important; overflow: visible !important;
+        z-index: 2147483000 !important;
+      }
+      ${TOOLTIP} .ter-ui, ${TOOLTIP} .ter-status { position: relative; z-index: 1; }
       .ter-status { white-space: nowrap; margin-top: 3px; font-size: 11px; line-height: 1.4; text-align: left; color: var(--default-color, #ddd); }
       .ter-status .ter-sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
       .ter-status .ter-red-bg { background: ${COLOR.red}; }
