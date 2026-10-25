@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.12
+// @version      1.0.13
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -585,11 +585,15 @@
     const src = { api: 'auto, API', calendar: 'auto, calendar page', manual: 'yours' }[S.startSource] || 'unknown';
     const status = S.lastError ? `<span class="ter-err">${esc(S.lastError)}</span>`
       : S.lastFetch ? `updated ${fmtDay(S.lastFetch)}` : 'not fetched';
+    // The gear opens only the API key part (always open while no key is set);
+    // the reminder settings below are always shown.
+    const keyOpen = ui.gear || ui.key || (!isPda && !apiKey());
     return `
       <div class="ter-gear">
+        ${keyOpen ? `
         ${isPda ? '' : keyHtml()}
         ${ui.key ? '' : `<div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>`}
-        <hr class="ter-hr">
+        <hr class="ter-hr">` : ''}
         <label>Your start <input type="text" class="ter-num ter-time" data-k="startTime" data-kind="time" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
         <label><span class="ter-sw ter-red-bg"></span>Red <input type="text" class="ter-num" data-k="redHours" data-kind="hours" inputmode="decimal" value="${S.redHours}"> h before</label>
         <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="text" class="ter-num" data-k="orangeHours" data-kind="hours" inputmode="decimal" value="${S.orangeHours}"> h before</label>
@@ -606,9 +610,9 @@
         <span class="ter-tabs">
           <a href="#" data-act="view" class="on" title="Switch view">${VIEWS[ui.tab]} ▾</a>
         </span>
-        <a href="#" data-act="gear" class="ter-cog${ui.gear ? ' on' : ''}" title="Settings">⚙</a>
+        <a href="#" data-act="gear" class="ter-cog${ui.gear ? ' on' : ''}" title="API key">⚙</a>
       </div>
-      ${ui.gear ? gearHtml() : ''}
+      ${gearHtml()}
       <div class="ter-list">
         ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing to show.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
       </div>
@@ -697,7 +701,7 @@
     e.preventDefault();
     const act = el.dataset.act;
     if (act === 'view') ui.tab = VIEW_ORDER[(VIEW_ORDER.indexOf(ui.tab) + 1) % VIEW_ORDER.length];
-    else if (act === 'gear') ui.gear = !ui.gear;
+    else if (act === 'gear') { ui.gear = !ui.gear; if (!ui.gear) { ui.key = null; ui.keyMsg = ''; } }
     else if (act === 'refresh') refreshFromApi(true);
     else if (act === 'key-set' || act === 'key-change') {
       ui.keyMsg = '';
