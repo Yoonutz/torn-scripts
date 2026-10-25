@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.8
+// @version      1.0.9
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -493,18 +493,29 @@
     return d >= 1 ? `${Math.round(d * 10) / 10}d` : `${Math.round(sec / HOUR)}h`;
   }
 
+  // The view button cycles through these.
+  const VIEWS = { next: 'Next event', month: "This month's events", year: "This year's events" };
+  const VIEW_ORDER = ['next', 'month', 'year'];
+
   function listRows() {
     const t = now();
     const d = new Date(t * 1000);
-    const mStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
-    const mEnd = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000;
-    return Object.values(EV)
+    const from = ui.tab === 'year' ? Date.UTC(d.getUTCFullYear(), 0, 1) / 1000 : Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
+    const to = ui.tab === 'year' ? Date.UTC(d.getUTCFullYear() + 1, 0, 1) / 1000 : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000;
+    const rows = Object.values(EV)
       .filter((ev) => ev.kind !== 'custom')
       .map((ev) => ({ ev, ...times(ev) }))
       .filter((x) => x.start)
-      .map((x) => Object.assign(x, { carried: x.start < mStart && x.end > t }))
-      .filter((x) => ui.tab === 'all' || (x.start >= mStart && x.start < mEnd) || x.carried)
       .sort((a, b) => a.start - b.start);
+    if (ui.tab === 'next') {
+      // Whatever is live now, plus the next event to start.
+      const live = rows.filter((x) => x.start <= t && x.end > t);
+      const next = rows.find((x) => x.start > t);
+      return live.concat(next ? [next] : []).map((x) => Object.assign(x, { carried: false }));
+    }
+    return rows
+      .map((x) => Object.assign(x, { carried: x.start < from && x.end > t }))
+      .filter((x) => (x.start >= from && x.start < to) || x.carried);
   }
 
   function shortDate(sec) {
@@ -594,14 +605,13 @@
     return `
       <div class="ter-top">
         <span class="ter-tabs">
-          <a href="#" data-act="tab-month" class="${ui.tab === 'month' ? 'on' : ''}">This month's events</a>
-          <a href="#" data-act="tab-all" class="${ui.tab === 'all' ? 'on' : ''}">All</a>
+          <a href="#" data-act="view" class="on" title="Switch view">${VIEWS[ui.tab]} ▾</a>
         </span>
         <a href="#" data-act="gear" class="ter-cog${ui.gear ? ' on' : ''}" title="Settings">⚙</a>
       </div>
       ${ui.gear ? gearHtml() : ''}
       ${ui.gear && ui.key ? '' : `<div class="ter-list">
-        ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing this month.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
+        ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing to show.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
       </div>`}
 `;
   }
@@ -682,7 +692,7 @@
     if (!el || el.matches('input')) return;
     e.preventDefault();
     const act = el.dataset.act;
-    if (act === 'tab-month' || act === 'tab-all') ui.tab = act.slice(4);
+    if (act === 'view') ui.tab = VIEW_ORDER[(VIEW_ORDER.indexOf(ui.tab) + 1) % VIEW_ORDER.length];
     else if (act === 'gear') ui.gear = !ui.gear;
     else if (act === 'refresh') refreshFromApi(true);
     else if (act === 'key-set' || act === 'key-change') {
