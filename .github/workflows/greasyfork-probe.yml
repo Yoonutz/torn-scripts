@@ -1,0 +1,66 @@
+name: greasyfork-probe
+
+# One-off check: can GitHub Actions or a Cloudflare Worker reach greasyfork.org past Cloudflare?
+# No login, no cookies. Removed once answered.
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/greasyfork-probe.yml"]
+  workflow_dispatch:
+
+jobs:
+  actions-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: curl
+        run: |
+          for u in https://greasyfork.org/en https://greasyfork.org/en/users/sign_in https://greasyfork.org/en/import; do
+            code=$(curl -s -o page.html -w '%{http_code}' -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36' "$u")
+            echo "RESULT curl $u -> $code $(grep -o '<title>[^<]*' page.html | head -1)"
+          done
+      - name: browser
+        run: |
+          npm i --silent playwright-core@1.48 playwright@1.48 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+          cat > probe.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const headless = process.argv[2] !== 'headed';
+          const b = await chromium.launch({ headless });
+          const p = await b.newPage();
+          await p.goto('https://greasyfork.org/en/users/sign_in', { waitUntil: 'domcontentloaded' });
+          let t = await p.title();
+          for (let i = 0; i < 25 && /just a moment/i.test(t); i++) { await p.waitForTimeout(1000); t = await p.title(); }
+          console.log(`RESULT browser ${headless ? 'headless' : 'headed(xvfb)'} -> ${t}`);
+          await b.close();
+          JS
+          node probe.mjs headless
+          xvfb-run -a node probe.mjs headed
+
+  cloudflare-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: deploy, call and delete a throwaway worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 3e099d3dab808ce99a0626101a60c610
+        run: |
+          mkdir w && cd w
+          cat > index.mjs <<'JS'
+          export default {
+            async fetch() {
+              const out = [];
+              for (const u of ['https://greasyfork.org/en', 'https://greasyfork.org/en/users/sign_in']) {
+                const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36' } });
+                const title = ((await r.text()).match(/<title>([^<]*)/) || [])[1];
+                out.push(`RESULT worker ${u} -> ${r.status} ${title}`);
+              }
+              return new Response(out.join('\n'));
+            },
+          };
+          JS
+          printf 'name = "gf-probe"\nmain = "index.mjs"\ncompatibility_date = "2026-08-01"\nworkers_dev = true\n' > wrangler.toml
+          npx -y wrangler@4 deploy 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://gf-probe\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1)
+          sleep 10
+          curl -s "$url" || echo "RESULT worker call failed"
+          npx -y wrangler@4 delete --name gf-probe --force || true
