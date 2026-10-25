@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.1
+// @version      1.0.2
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -19,7 +19,9 @@
 
   const K_SETTINGS = 'ter.settings';
   const K_EVENTS = 'ter.events';
-  const K_APIKEY = 'ter.apikey';
+  const K_APIKEY = 'ter.apikey';      // v1.0.0 kept it in plain text, migrated on load
+  const K_APIKEY_ENC = 'ter.apikey.enc';
+  const KEY_PAGE = 'https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=Event%20Reminder&user=calendar&torn=calendar';
 
   const DEFAULTS = {
     redHours: 24,        // red from this many hours before the start
@@ -29,7 +31,6 @@
     newEventsOn: true,   // events seen for the first time start checked
     startTime: null,     // your personal event start time, 'HH:MM' TCT
     startSource: '',     // 'api' | 'calendar' | 'manual'
-    selector: '',        // optional CSS selector for the clock, if Torn moves it
     lastFetch: 0,
     lastError: '',
   };
@@ -120,14 +121,96 @@
     return null;
   }
 
-  // ------------------------------------------------------------- Torn API
+  // ------------------------------------------------------------- API key
+  // Stored AES-GCM encrypted. The AES key itself is a non-extractable
+  // CryptoKey kept in IndexedDB, so the key never sits in localStorage as
+  // plain text where any script or extension scanning it could read it.
+  const IS_PDA = PDA_KEY && PDA_KEY !== PDA_KEY_PLACEHOLDER;
+  const KEY_RX = /^[A-Za-z0-9]{16}$/;
+  let keyCache = '';
+
   function apiKey() {
-    if (PDA_KEY && PDA_KEY !== PDA_KEY_PLACEHOLDER) return PDA_KEY;
-    return (localStorage.getItem(K_APIKEY) || '').trim();
+    return IS_PDA ? PDA_KEY : keyCache;
   }
 
-  async function tornApi(path) {
-    const key = apiKey();
+  function idb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('ter-vault', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('k');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function vaultKey() {
+    const db = await idb();
+    const get = (k) => new Promise((res, rej) => {
+      const r = db.transaction('k').objectStore('k').get(k);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    let key = await get('aes');
+    if (!key) {
+      key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      await new Promise((res, rej) => {
+        const tx = db.transaction('k', 'readwrite');
+        tx.objectStore('k').put(key, 'aes');
+        tx.oncomplete = res;
+        tx.onerror = () => rej(tx.error);
+      });
+    }
+    return key;
+  }
+
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+  async function saveKey(plain) {
+    keyCache = plain || '';
+    localStorage.removeItem(K_APIKEY);
+    if (!plain) { localStorage.removeItem(K_APIKEY_ENC); return; }
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await vaultKey(), new TextEncoder().encode(plain));
+    localStorage.setItem(K_APIKEY_ENC, b64(iv) + '.' + b64(ct));
+  }
+
+  async function loadKey() {
+    if (IS_PDA) return;
+    try {
+      const old = (localStorage.getItem(K_APIKEY) || '').trim();
+      if (old) { await saveKey(old); return; }
+      const enc = localStorage.getItem(K_APIKEY_ENC);
+      if (!enc) return;
+      const [iv, ct] = enc.split('.');
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(iv) }, await vaultKey(), unb64(ct));
+      keyCache = new TextDecoder().decode(pt);
+    } catch (e) {
+      keyCache = ''; // vault cleared or blocked: ask for the key again
+    }
+  }
+
+  // Keys other scripts left in localStorage: plain 16-character values, or
+  // 16-character strings inside JSON values.
+  function scanForKeys() {
+    const found = new Map();
+    const walk = (v, where) => {
+      if (typeof v === 'string') { if (KEY_RX.test(v.trim()) && !found.has(v.trim())) found.set(v.trim(), where); }
+      else if (v && typeof v === 'object') Object.values(v).forEach((x) => walk(x, where));
+    };
+    for (let i = 0; i < localStorage.length; i++) {
+      const name = localStorage.key(i);
+      if (!name || name.startsWith('ter.')) continue;
+      const raw = localStorage.getItem(name) || '';
+      if (raw.length > 20000) continue;
+      walk(raw, name);
+      if (/^[[{]/.test(raw.trim())) { try { walk(JSON.parse(raw), name); } catch (e) { /* not JSON */ } }
+    }
+    return [...found].map(([key, where]) => ({ key, where }));
+  }
+
+  // ------------------------------------------------------------- Torn API
+  async function tornApi(path, withKey) {
+    const key = withKey || apiKey();
     if (!key) throw new Error('No API key');
     const url = `https://api.torn.com/v2/${path}`;
     const headers = { Authorization: `ApiKey ${key}` };
@@ -285,12 +368,6 @@
   }
 
   function findClock() {
-    if (S.selector) {
-      try {
-        const el = document.querySelector(S.selector);
-        if (el) return el;
-      } catch (e) { /* bad selector, fall through */ }
-    }
     for (const sel of CANDIDATES) {
       for (const el of document.querySelectorAll(sel)) {
         if (el.closest(TOOLTIP) || el.closest('.ter-ui, #ter-float') || el.classList.contains('ter-dot')) continue;
@@ -334,7 +411,9 @@
     }
     const float = document.getElementById('ter-float');
     if (!host) {
-      // No clock found: a small floating dot instead, which also opens the settings.
+      // No clock found: a small floating dot instead while something is due,
+      // which also opens the list.
+      if (!color) { if (float) float.remove(); return; }
       let f = float;
       if (!f) {
         f = document.createElement('div');
@@ -347,7 +426,7 @@
         document.body.append(f);
       }
       const d = f.querySelector('.ter-float-dot');
-      d.style.background = color ? COLOR[color] : '#666';
+      d.style.background = COLOR[color];
       d.title = tip || 'Torn Event reminder';
       return;
     }
@@ -400,7 +479,7 @@
   // A new row under the time in Torn's clock dropdown: this month's events,
   // a checkbox each. Event times are Torn's, only the reminder windows are editable.
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const ui = { tab: 'month', gear: false };
+  const ui = { tab: 'month', gear: false, key: null }; // key: null | { step: 'found', list } | { step: 'new' }
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -428,22 +507,66 @@
       .sort((a, b) => a.start - b.start);
   }
 
+  function shortDate(sec) {
+    const d = new Date(sec * 1000);
+    return `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
+  }
+
   function rowHtml({ ev, start, end, carried }) {
     const t = now();
     const st = ev.enabled ? stateOf(ev, t) : null;
     const past = end <= t;
     const when = t >= start && t < end ? `live, ${fmtLeft(end - t)} left`
-      : t < start ? `in ${fmtLeft(start - t)}` : 'ended';
+      : t < start ? `starts in ${fmtLeft(start - t)}` : 'ended';
     const from = carried ? `<span class="ter-tag">from ${MONTHS[new Date(start * 1000).getUTCMonth()]}</span>` : '';
+    const days = shortDate(start) === shortDate(end - 1) ? shortDate(start) : `${shortDate(start)}-${shortDate(end)}`;
+    const tip = `${ev.desc ? ev.desc + '\n' : ''}${fmtTct(start)} until ${fmtTct(end)} TCT\n${when}`;
     return `
-      <label class="ter-ev${ev.enabled ? '' : ' ter-off'}${past ? ' ter-past' : ''}" data-id="${esc(ev.id)}" title="${esc(ev.desc || '')}">
-        <span class="ter-line">
-          <input type="checkbox" data-f="enabled" ${ev.enabled ? 'checked' : ''}>
-          <span class="ter-sw${st ? ' ter-' + st + '-bg' : ''}"></span>
-          <span class="ter-name">${esc(ev.title)}</span>${from}
-        </span>
-        <span class="ter-when">${fmtDay(start)} → ${fmtDay(end)} · ${when}</span>
+      <label class="ter-ev${ev.enabled ? '' : ' ter-off'}${past ? ' ter-past' : ''}" data-id="${esc(ev.id)}" title="${esc(tip)}">
+        <input type="checkbox" data-f="enabled" ${ev.enabled ? 'checked' : ''}>
+        <span class="ter-sw${st ? ' ter-' + st + '-bg' : ''}"></span>
+        <span class="ter-name">${esc(ev.title)}</span>${from}
+        <span class="ter-when">${days}</span>
       </label>`;
+  }
+
+  function keyHtml() {
+    const msg = ui.keyMsg ? `<div class="${ui.keyErr ? 'ter-err' : 'ter-muted'}">${esc(ui.keyMsg)}</div>` : '';
+    if (ui.key && ui.key.step === 'found') {
+      return `<div class="ter-key">
+        <div>Found ${ui.key.list.length > 1 ? 'these API keys' : 'an API key'} saved by another script. Use it?</div>
+        ${ui.key.list.map((k, i) => `<div class="ter-row"><code>••••${esc(k.key.slice(-4))}</code><span class="ter-muted">${esc(k.where)}</span><button data-act="key-use" data-i="${i}">Use</button></div>`).join('')}
+        <div class="ter-row"><button data-act="key-new">Use another</button><button data-act="key-cancel">Cancel</button></div>
+        ${msg}</div>`;
+    }
+    if (ui.key && ui.key.step === 'new') {
+      return `<div class="ter-key">
+        <div>1. <a href="${KEY_PAGE}" target="_blank" rel="noopener">Open Torn's key page</a>, it is filled in for you, press <b>Create</b>.</div>
+        <div>2. Copy the new key and paste it here:</div>
+        <div class="ter-row"><input type="password" data-k="newkey" placeholder="16-character key" autocomplete="off" spellcheck="false"><button data-act="key-save">Save</button><button data-act="key-cancel">Cancel</button></div>
+        ${msg}</div>`;
+    }
+    return apiKey()
+      ? `<div class="ter-row">API key <code>••••${esc(apiKey().slice(-4))}</code><a href="#" data-act="key-change">change</a><a href="#" data-act="key-remove">remove</a></div>${msg}`
+      : `<div class="ter-row"><button data-act="key-set">Set API key</button></div>${msg}`;
+  }
+
+  async function tryKey(key) {
+    ui.keyMsg = 'Checking…';
+    ui.keyErr = false;
+    renderUI();
+    try {
+      await tornApi('user/calendar', key);
+      await saveKey(key);
+      ui.key = null;
+      ui.keyMsg = 'Saved, encrypted.';
+      S.lastFetch = 0;
+      refreshFromApi(true);
+    } catch (e) {
+      ui.keyMsg = `That key did not work: ${e.message || e}`;
+      ui.keyErr = true;
+    }
+    renderUI();
   }
 
   function gearHtml() {
@@ -453,14 +576,13 @@
       : S.lastFetch ? `updated ${fmtDay(S.lastFetch)}` : 'not fetched';
     return `
       <div class="ter-gear">
-        ${isPda ? '' : `<label>API key <input type="password" data-k="apikey" value="${esc(localStorage.getItem(K_APIKEY) || '')}" placeholder="Public key" autocomplete="off" spellcheck="false"></label>`}
+        ${isPda ? '' : keyHtml()}
         <div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>
         <label>Your start <input type="time" data-k="startTime" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
         <label><span class="ter-sw ter-red-bg"></span>Red <input type="number" min="0" step="0.5" data-k="redHours" value="${S.redHours}"> h before</label>
         <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="number" min="0" step="0.25" data-k="orangeHours" value="${S.orangeHours}"> h before</label>
         <label><span class="ter-sw ter-green-bg"></span>Green <input type="number" min="0" step="0.5" data-k="greenHours" value="${S.greenHours}"> h, 0 = all event</label>
         <label><input type="checkbox" data-k="showDot" ${S.showDot ? 'checked' : ''}> Dot on clock</label>
-        <label>Clock selector <input type="text" data-k="selector" value="${esc(S.selector)}" placeholder="auto" spellcheck="false"></label>
       </div>`;
   }
 
@@ -489,7 +611,8 @@
     ['click', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'pointerdown', 'pointerup', 'keydown'].forEach((type) =>
       box.addEventListener(type, (e) => {
         if (type === 'click') onUiClick(e);
-        if (type === 'keydown' && e.key === 'Enter' && e.target.matches('input')) e.target.blur();
+        if (type === 'keydown' && e.key === 'Enter' && e.target.matches('[data-k="newkey"]')) box.querySelector('[data-act="key-save"]')?.click();
+        else if (type === 'keydown' && e.key === 'Enter' && e.target.matches('input')) e.target.blur();
         e.stopPropagation();
       }));
     box.addEventListener('change', (e) => { onUiChange(e); e.stopPropagation(); });
@@ -517,12 +640,7 @@
     const el = e.target;
     const k = el.dataset.k;
     if (k) {
-      if (k === 'apikey') {
-        const v = el.value.trim();
-        if (v) localStorage.setItem(K_APIKEY, v); else localStorage.removeItem(K_APIKEY);
-        refreshFromApi(true);
-        return;
-      }
+      if (k === 'newkey') return; // saved by the Save button
       if (el.type === 'checkbox') S[k] = el.checked;
       else if (el.type === 'number') S[k] = Math.max(0, parseFloat(el.value) || 0);
       else S[k] = el.value.trim();
@@ -552,6 +670,19 @@
     if (act === 'tab-month' || act === 'tab-all') ui.tab = act.slice(4);
     else if (act === 'gear') ui.gear = !ui.gear;
     else if (act === 'refresh') refreshFromApi(true);
+    else if (act === 'key-set' || act === 'key-change') {
+      ui.keyMsg = '';
+      const list = act === 'key-set' ? scanForKeys().filter((k) => k.key !== apiKey()) : [];
+      ui.key = list.length ? { step: 'found', list } : { step: 'new' };
+    } else if (act === 'key-use') { tryKey(ui.key.list[+el.dataset.i].key); return; }
+    else if (act === 'key-new') { ui.key = { step: 'new' }; ui.keyMsg = ''; }
+    else if (act === 'key-cancel') { ui.key = null; ui.keyMsg = ''; }
+    else if (act === 'key-save') {
+      const input = el.closest('.ter-key').querySelector('[data-k="newkey"]');
+      const v = (input && input.value || '').trim();
+      if (!KEY_RX.test(v)) { ui.keyMsg = 'A Torn key is 16 letters and numbers.'; ui.keyErr = true; }
+      else { tryKey(v); return; }
+    } else if (act === 'key-remove') { saveKey(''); ui.keyMsg = 'Key removed.'; ui.keyErr = false; }
     else if (act === 'autostart') { S.startSource = ''; saveSettings(); refreshFromApi(true); }
     else return;
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -592,14 +723,13 @@
       .ter-ui .ter-tabs a.on { color: #eee; font-weight: bold; }
       .ter-ui .ter-cog { color: #999; font-size: 13px; }
       .ter-ui .ter-cog.on { color: #eee; }
-      .ter-ui .ter-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
-      .ter-ui .ter-ev { display: block; cursor: pointer; padding: 3px 4px; border-radius: 4px; background: rgba(255,255,255,.05); }
+      .ter-ui .ter-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+      .ter-ui .ter-ev { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 4px; border-radius: 4px; background: rgba(255,255,255,.05); }
       .ter-ui .ter-off { opacity: .5; }
-      .ter-ui .ter-past .ter-name { text-decoration: line-through; }
-      .ter-ui .ter-line { display: flex; align-items: center; gap: 4px; }
-      .ter-ui .ter-line input { margin: 0; width: 12px; height: 12px; }
+      .ter-ui .ter-past .ter-name, .ter-ui .ter-past .ter-when { text-decoration: line-through; }
+      .ter-ui .ter-ev input { margin: 0; width: 12px; height: 12px; flex: none; }
       .ter-ui .ter-name { font-weight: bold; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .ter-ui .ter-when { display: block; color: #aaa; padding-left: 16px; }
+      .ter-ui .ter-when { margin-left: auto; padding-left: 6px; color: #aaa; white-space: nowrap; }
       .ter-ui input[type=text], .ter-ui input[type=password], .ter-ui input[type=number], .ter-ui input[type=time] {
         background: #1a1a1a; color: #eee; border: 1px solid #555; border-radius: 3px; padding: 2px 4px;
         font-size: 11px; box-sizing: border-box; min-width: 0; color-scheme: dark; height: auto;
@@ -615,6 +745,10 @@
       .ter-ui .ter-orange-bg { background: ${COLOR.orange}; }
       .ter-ui .ter-green-bg { background: ${COLOR.green}; }
       .ter-ui .ter-muted { color: #888; }
+      .ter-ui .ter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      .ter-ui .ter-key { display: flex; flex-direction: column; gap: 4px; }
+      .ter-ui .ter-key input[type=password] { flex: 1; }
+      .ter-ui code { color: #eee; }
       .ter-ui .ter-err { color: #ff7b72; }
     `;
     const style = document.createElement('style');
@@ -643,7 +777,7 @@
     update();
     setInterval(update, TICK_MS);
     setInterval(renderUI, 60 * 1000);
-    refreshFromApi(false);
+    loadKey().then(() => refreshFromApi(false));
     setInterval(() => refreshFromApi(false), 30 * 60 * 1000);
   }
 
