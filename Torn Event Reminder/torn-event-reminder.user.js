@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.5
+// @version      1.0.6
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -384,7 +384,6 @@
   }
 
   let host = null;
-  let hostTitle = null;
   let icon = null;
 
   // The element that gets tinted: the clock's own svg or icon, never the dropdown.
@@ -399,10 +398,7 @@
     if (!host) return;
     host.classList.remove('ter-host', 'ter-red', 'ter-orange', 'ter-green');
     host.querySelectorAll(':scope > .ter-dot').forEach((d) => d.remove());
-    if (hostTitle !== null) host.setAttribute('title', hostTitle);
-    else host.removeAttribute('title');
     host = null;
-    hostTitle = null;
   }
 
   function paint(color, tip) {
@@ -411,7 +407,6 @@
       clearHost();
       if (el) {
         host = el;
-        hostTitle = el.getAttribute('title');
       }
     }
     const float = document.getElementById('ter-float');
@@ -455,9 +450,6 @@
         host.append(dot);
       }
     } else if (dot) dot.remove();
-    if (color) host.setAttribute('title', tip);
-    else if (hostTitle !== null) host.setAttribute('title', hostTitle);
-    else host.removeAttribute('title');
   }
 
   // ------------------------------------------------------------- main loop
@@ -465,6 +457,7 @@
     const t = now();
     let best = null;
     const lines = [];
+    status = [];
     Object.values(EV)
       .filter((ev) => ev.enabled && ev.kind !== 'custom')
       .map((ev) => ({ ev, st: stateOf(ev, t), ...times(ev) }))
@@ -472,9 +465,11 @@
       .sort((a, b) => RANK[b.st] - RANK[a.st] || a.start - b.start)
       .forEach((x) => {
         if (!best || RANK[x.st] > RANK[best]) best = x.st;
-        lines.push(x.st === 'green'
-          ? `${x.ev.title}: live, ends in ${fmtLeft(x.end - t)}`
-          : `${x.ev.title}: starts in ${fmtLeft(x.start - t)} (${fmtTct(x.start)} TCT)`);
+        const text = x.st === 'green'
+          ? `${x.ev.title} live, ${fmtLeft(x.end - t)} left`
+          : `${x.ev.title} in ${fmtLeft(x.start - t)}`;
+        lines.push(text);
+        status.push({ st: x.st, text });
       });
     paint(best, lines.join('\n'));
     mountUI();
@@ -627,8 +622,20 @@
     return box;
   }
 
+  // Torn's time stays the first row; due events go in the row under it.
+  let status = [];
   function mountUI() {
+    const html = status.map((x) => `<div><span class="ter-sw ter-${x.st}-bg"></span>${esc(x.text)}</div>`).join('');
     document.querySelectorAll(TOOLTIP).forEach((tip) => {
+      let row = tip.querySelector(':scope > .ter-status');
+      if (!row) {
+        row = document.createElement('div');
+        row.className = 'ter-status';
+        const time = tip.querySelector(':scope > p') || tip.firstElementChild;
+        if (time) time.after(row); else tip.prepend(row);
+      }
+      if (row.innerHTML !== html) row.innerHTML = html;
+      row.style.display = html ? '' : 'none';
       if (!tip.querySelector(':scope > .ter-ui')) tip.append(makeUI());
     });
   }
@@ -720,6 +727,11 @@
       #ter-float .ter-float-dot { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 6px rgba(0,0,0,.7); }
       #ter-float .ter-ui { background: var(--default-bg-panel-color, #333); border-radius: 6px; padding: 6px 8px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
 
+      .ter-status { white-space: nowrap; margin-top: 3px; font-size: 11px; line-height: 1.4; text-align: left; color: var(--default-color, #ddd); }
+      .ter-status .ter-sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+      .ter-status .ter-red-bg { background: ${COLOR.red}; }
+      .ter-status .ter-orange-bg { background: ${COLOR.orange}; }
+      .ter-status .ter-green-bg { background: ${COLOR.green}; }
       .ter-ui {
         margin-top: 6px; padding-top: 6px;
         border-top: 1px solid var(--divider-dark-color, #222); box-shadow: inset 0 1px 0 var(--divider-light-color, #474747);
