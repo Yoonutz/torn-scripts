@@ -1,0 +1,13 @@
+{
+  "name": "torn-greasyfork",
+  "private": true,
+  "type": "module",
+  "description": "Publish and sync this repo's userscripts on Greasy Fork from a home PC.",
+  "scripts": {
+    "login": "node gf.mjs login",
+    "status": "node gf.mjs status"
+  },
+  "dependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

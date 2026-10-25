@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+// Greasy Fork publisher for this repo. Runs on a home PC (Greasy Fork's Cloudflare blocks cloud IPs).
+//
+//   node tools/greasyfork/gf.mjs login                 one-time: sign in, session kept in a local profile
+//   node tools/greasyfork/gf.mjs status                webhook + every repo script's Greasy Fork state
+//   node tools/greasyfork/gf.mjs publish "<Folder>"    import if new, point sync + additional info at the repo, sync
+//   node tools/greasyfork/gf.mjs sync "<Folder>"       "Update and sync now" for a script already linked
+//
+// Flags: --headed (show the browser), --markup html|markdown (additional info, default markdown).
+// The browser profile lives outside the repo (GF_PROFILE, default ~/.torn-greasyfork-profile).
+// It holds the Greasy Fork session cookie only; nothing is written to the repo.
+
+import { chromium } from 'playwright-core';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { homedir, platform } from 'node:os';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+
+const OWNER = 'Yoonutz';
+const REPO = 'torn-scripts';
+const BRANCH = 'main';
+const GF_HOST = process.env.GF_BASE || 'https://greasyfork.org';
+const GF = `${GF_HOST}/en`;
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PROFILE = process.env.GF_PROFILE || join(homedir(), '.torn-greasyfork-profile');
+const BROWSER = process.env.GF_BROWSER || (platform() === 'win32' ? 'msedge' : 'chrome');
+
+const args = process.argv.slice(2);
+const flag = (name) => args.includes(`--${name}`);
+const opt = (name, def) => {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 && args[i + 1] ? args[i + 1] : def;
+};
+const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1] === '--markup'));
+const [cmd, folderArg] = positional;
+const MARKUP = opt('markup', 'markdown');
+
+const rawUrl = (...parts) =>
+  `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/` +
+  parts.join('/').split('/').map(encodeURIComponent).join('/');
+
+function scriptFile(folder) {
+  const dir = join(ROOT, folder);
+  if (!existsSync(dir)) throw new Error(`No folder "${folder}" in repo root`);
+  const files = readdirSync(dir).filter((f) => f.endsWith('.user.js'));
+  if (files.length !== 1) throw new Error(`"${folder}" must hold exactly one .user.js (found ${files.length})`);
+  return files[0];
+}
+
+function repoScripts() {
+  return readdirSync(ROOT, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+    .flatMap((d) => {
+      const js = readdirSync(join(ROOT, d.name)).filter((f) => f.endsWith('.user.js'));
+      return js.length === 1 ? [{ folder: d.name, file: js[0] }] : [];
+    });
+}
+
+const localVersion = (folder, file) =>
+  (readFileSync(join(ROOT, folder, file), 'utf8').match(/^\/\/\s*@version\s+(\S+)/m) || [])[1];
+
+async function openBrowser(headed) {
+  const ctx = await chromium.launchPersistentContext(PROFILE, {
+    channel: process.env.GF_EXECUTABLE ? undefined : BROWSER,
+    executablePath: process.env.GF_EXECUTABLE,
+    headless: !headed,
+    viewport: { width: 1200, height: 900 },
+  });
+  const page = ctx.pages()[0] || (await ctx.newPage());
+  return { ctx, page };
+}
+
+// Waits out Cloudflare's interstitial. Returns false if it never clears.
+async function go(page, url) {
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  for (let i = 0; i < 30; i++) {
+    if (!/just a moment/i.test(await page.title())) return true;
+    await page.waitForTimeout(1000);
+  }
+  return false;
+}
+
+const signedIn = async (page) => (await page.locator('.sign-out-link').count()) > 0;
+
+async function session(headed) {
+  let b = await openBrowser(headed);
+  if (!(await go(b.page, `${GF}/users/webhook-info`)) && !headed) {
+    console.log('Cloudflare challenge in headless mode, retrying with a visible window...');
+    await b.ctx.close();
+    b = await openBrowser(true);
+    if (!(await go(b.page, `${GF}/users/webhook-info`))) throw new Error('Cloudflare challenge did not clear');
+  }
+  if (!(await signedIn(b.page))) {
+    await b.ctx.close();
+    throw new Error('Not signed in to Greasy Fork. Run: node tools/greasyfork/gf.mjs login');
+  }
+  return b;
+}
+
+async function login() {
+  const { ctx, page } = await openBrowser(true);
+  await go(page, `${GF}/users/sign_in`);
+  if (!(await signedIn(page))) {
+    console.log('Sign in to Greasy Fork in the window that opened (waiting up to 10 minutes)...');
+    const deadline = Date.now() + 10 * 60_000;
+    while (!(await signedIn(page).catch(() => false))) {
+      if (Date.now() > deadline) throw new Error('Timed out waiting for sign-in');
+      await page.waitForTimeout(2000);
+    }
+  }
+  const name = await page.locator('.user-profile-link a').first().textContent();
+  console.log(`Signed in as ${name.trim()}. Session saved in ${PROFILE}`);
+  await ctx.close();
+}
+
+// Scripts Greasy Fork syncs from a git host, read from the webhook-info page (must be open).
+async function syncedScripts(page) {
+  return page.$$eval('li', (lis) =>
+    lis
+      .map((li) => {
+        const links = [...li.querySelectorAll('a')];
+        const script = links.find((a) => /\/scripts\/\d+/.test(a.getAttribute('href') || ''));
+        const sync = links.find((a) => /^https:\/\/(raw\.githubusercontent|github)\.com\//.test(a.href));
+        if (!script || !sync) return null;
+        const type = (li.textContent.match(/\b(Webhook|Automatic|Manual)\b/) || [])[1] || '?';
+        return { name: script.textContent.trim(), url: script.href, sync: sync.href, type };
+      })
+      .filter(Boolean),
+  );
+}
+
+const sameUrl = (a, b) => decodeURIComponent(a).replace(/\+/g, ' ') === decodeURIComponent(b).replace(/\+/g, ' ');
+
+async function webhookState(page) {
+  const secret = (await page.locator('textarea[readonly]').count()) > 0;
+  const payload = await page
+    .locator('dt:has-text("Payload URL") + dd')
+    .first()
+    .textContent()
+    .catch(() => null);
+  return { secret, payload: payload && payload.trim() };
+}
+
+function githubHook(payload) {
+  const r = spawnSync('gh', ['api', `repos/${OWNER}/${REPO}/hooks`], { encoding: 'utf8', shell: platform() === 'win32' });
+  if (r.status !== 0) return 'unknown (gh CLI missing or not signed in)';
+  const hooks = JSON.parse(r.stdout);
+  const hook = hooks.find((h) => (h.config?.url || '').includes('greasyfork.org'));
+  if (!hook) return 'MISSING on GitHub';
+  const bits = [hook.active ? 'active' : 'INACTIVE', hook.events.join(',')];
+  if (payload && hook.config.url !== payload) bits.push(`url differs: ${hook.config.url}`);
+  if (hook.last_response?.code) bits.push(`last delivery ${hook.last_response.code}`);
+  return bits.join(', ');
+}
+
+async function status() {
+  const { ctx, page } = await session(flag('headed'));
+  const wh = await webhookState(page);
+  console.log(`Greasy Fork webhook secret: ${wh.secret ? 'set' : 'NOT SET'}`);
+  console.log(`Payload URL: ${wh.payload || '?'}`);
+  console.log(`GitHub hook: ${githubHook(wh.payload)}`);
+  const synced = await syncedScripts(page);
+  console.log('\nRepo scripts:');
+  for (const { folder, file } of repoScripts()) {
+    const s = synced.find((x) => sameUrl(x.sync, rawUrl(folder, file)));
+    console.log(s ? `  ${folder}: ${s.type}  ${s.url}` : `  ${folder}: not on Greasy Fork (or not linked)`);
+  }
+  const strays = synced.filter((s) => !repoScripts().some(({ folder, file }) => sameUrl(s.sync, rawUrl(folder, file))));
+  if (strays.length) {
+    console.log('\nLinked to URLs no longer in the repo:');
+    for (const s of strays) console.log(`  ${s.name}: ${s.sync}`);
+  }
+  await ctx.close();
+}
+
+async function importScript(page, jsUrl) {
+  await go(page, `${GF}/import`);
+  await page.fill('#sync-urls', jsUrl);
+  await page.check('#sync-type-2');
+  await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form[action*="/import/add"] [type=submit]').click()]);
+  await page.waitForLoadState('domcontentloaded');
+  const href = await page.$$eval('li a', (as) => (as.find((a) => /\/scripts\/\d+/.test(a.href)) || {}).href);
+  if (!href) {
+    const text = (await page.locator('body').innerText()).slice(0, 1500);
+    throw new Error(`Import did not return a script link:\n${text}`);
+  }
+  return href;
+}
+
+async function configureAndSync(page, scriptUrl, jsUrl, mdUrl) {
+  await go(page, `${scriptUrl.replace(/\/$/, '')}/admin`);
+  await page.fill('#script_sync_identifier', jsUrl);
+  const webhook = page.locator('#script_sync_type_webhook');
+  if (!((await webhook.count()) && (await webhook.isChecked()))) await page.check('#script_sync_type_automatic');
+  if (mdUrl) {
+    const idx = await page.$$eval('input[type=hidden][name^="additional_info_sync"][name$="[attribute_default]"]', (els) => {
+      const el = els.find((e) => e.value === 'true');
+      return el ? el.name.match(/\[(\d+)\]/)[1] : null;
+    });
+    if (idx === null) throw new Error('Default additional info field not found on the admin page');
+    await page.fill(`input[name="additional_info_sync[${idx}][sync_identifier]"]`, mdUrl);
+    await page.check(`input[name="additional_info_sync[${idx}][value_markup]"][value="${MARKUP}"]`);
+  }
+  await Promise.all([page.waitForURL((u) => !u.pathname.endsWith('/admin'), { timeout: 60_000 }), page.click('input[name="update-and-sync"]')]);
+  const notice = (await page.locator('p.notice').first().textContent().catch(() => '')) || '(no notice)';
+  return notice.trim();
+}
+
+async function servedVersion(page, scriptUrl) {
+  const id = scriptUrl.match(/\/scripts\/(\d+)/)[1];
+  await go(page, `${GF_HOST}/scripts/${id}/code/script.user.js`);
+  return ((await page.locator('body').innerText()).match(/^\/\/\s*@version\s+(\S+)/m) || [])[1];
+}
+
+async function publish(syncOnly) {
+  if (!folderArg) throw new Error('Pass the script folder name, e.g. "Torn Event Reminder"');
+  const file = scriptFile(folderArg);
+  const jsUrl = rawUrl(folderArg, file);
+  const mdUrl = existsSync(join(ROOT, folderArg, 'greasyfork.md')) ? rawUrl(folderArg, 'greasyfork.md') : null;
+  const head = await fetch(jsUrl);
+  if (!head.ok) throw new Error(`${jsUrl} returns ${head.status}. Push the script to ${BRANCH} first.`);
+
+  const { ctx, page } = await session(flag('headed'));
+  let script = (await syncedScripts(page)).find((s) => sameUrl(s.sync, jsUrl));
+  let scriptUrl = script?.url;
+  if (!scriptUrl) {
+    if (syncOnly) throw new Error(`"${folderArg}" is not linked on Greasy Fork. Use publish.`);
+    console.log(`Importing ${jsUrl}`);
+    scriptUrl = await importScript(page, jsUrl);
+    console.log(`Imported: ${scriptUrl}`);
+  }
+  const notice = await configureAndSync(page, scriptUrl, jsUrl, mdUrl);
+  console.log(`Sync: ${notice}`);
+  if (!mdUrl) console.log('No greasyfork.md in the folder, additional info left as is.');
+  const want = localVersion(folderArg, file);
+  const got = await servedVersion(page, scriptUrl);
+  console.log(`Version: repo ${want}, Greasy Fork ${got}${want === got ? '' : '  (MISMATCH: push pending or raw cache, rerun sync in 5 min)'}`);
+  console.log(`Page: ${scriptUrl}`);
+  await ctx.close();
+  if (/failed/i.test(notice)) process.exitCode = 1;
+}
+
+const commands = { login, status, publish: () => publish(false), sync: () => publish(true) };
+if (!commands[cmd]) {
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 11).join('\n'));
+  process.exit(cmd ? 1 : 0);
+}
+commands[cmd]().catch((e) => {
+  console.error(`ERROR: ${e.message}`);
+  process.exit(1);
+});
