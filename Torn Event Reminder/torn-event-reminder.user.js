@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.2
+// @version      1.0.3
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -574,10 +574,13 @@
     const src = { api: 'auto, API', calendar: 'auto, calendar page', manual: 'yours' }[S.startSource] || 'unknown';
     const status = S.lastError ? `<span class="ter-err">${esc(S.lastError)}</span>`
       : S.lastFetch ? `updated ${fmtDay(S.lastFetch)}` : 'not fetched';
+    // While a key is being set, the key steps replace the whole settings box.
+    if (ui.key) return `<div class="ter-gear">${keyHtml()}</div>`;
     return `
       <div class="ter-gear">
         ${isPda ? '' : keyHtml()}
         <div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>
+        <hr class="ter-hr">
         <label>Your start <input type="time" data-k="startTime" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
         <label><span class="ter-sw ter-red-bg"></span>Red <input type="number" min="0" step="0.5" data-k="redHours" value="${S.redHours}"> h before</label>
         <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="number" min="0" step="0.25" data-k="orangeHours" value="${S.orangeHours}"> h before</label>
@@ -597,9 +600,9 @@
         <a href="#" data-act="gear" class="ter-cog${ui.gear ? ' on' : ''}" title="Settings">⚙</a>
       </div>
       ${ui.gear ? gearHtml() : ''}
-      <div class="ter-list">
+      ${ui.gear && ui.key ? '' : `<div class="ter-list">
         ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing this month.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
-      </div>
+      </div>`}
 `;
   }
 
@@ -749,6 +752,7 @@
       .ter-ui .ter-key { display: flex; flex-direction: column; gap: 4px; }
       .ter-ui .ter-key input[type=password] { flex: 1; }
       .ter-ui code { color: #eee; }
+      .ter-ui .ter-hr { border: 0; border-top: 1px solid rgba(255,255,255,.15); margin: 2px 0; width: 100%; height: 0; }
       .ter-ui .ter-err { color: #ff7b72; }
     `;
     const style = document.createElement('style');
