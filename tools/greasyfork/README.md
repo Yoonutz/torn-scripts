@@ -2,11 +2,11 @@
 
 Puts a userscript from this repo on Greasy Fork and links it to the repo, with no clicks.
 Greasy Fork has no API for creating scripts and its Cloudflare blocks cloud IPs, so this drives
-a real Edge window on a home PC through Playwright.
+a real Chrome (or Edge, if no Chrome) on a home PC through Playwright.
 
 ```sh
-cd tools/greasyfork && npm ci          # once; uses the installed Edge, no browser download
-node gf.mjs login                      # once; sign in in the window that opens
+cd tools/greasyfork && npm ci          # once; uses the installed Chrome/Edge, no browser download
+node gf.mjs login                      # once; tick Remember me, sign in, the window closes itself
 node gf.mjs status                     # webhook state + every repo script's Greasy Fork state
 node gf.mjs publish "Torn Event Reminder"
 node gf.mjs sync "Torn Event Reminder"
@@ -27,5 +27,9 @@ After that every push that modifies the script or `greasyfork.md` syncs through 
 webhook, and the first one flips the listing to Webhook. `status` reads the webhook state on
 Greasy Fork and, when the `gh` CLI is signed in, on GitHub too.
 
-The session lives in `~/.torn-greasyfork-profile` (override with `GF_PROFILE`), never in the repo.
-`GF_BROWSER=chrome` uses Chrome instead of Edge. Background: `docs/greasyfork-github-sync.md`.
+`login` starts the browser normally (not under Playwright), because Google refuses sign-in in an
+automated browser. It only reads the tab list until Greasy Fork shows you signed in, then closes
+the window so the cookies are saved.
+
+The session lives in `~/.torn-greasyfork-chrome` (or `-msedge`; override with `GF_PROFILE`), never
+in the repo. `GF_BROWSER_PATH` picks another browser executable. Background: `docs/greasyfork-github-sync.md`.

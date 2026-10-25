@@ -7,15 +7,16 @@
 //   node tools/greasyfork/gf.mjs sync "<Folder>"       "Update and sync now" for a script already linked
 //
 // Flags: --headed (show the browser), --markup html|markdown (additional info, default markdown).
-// The browser profile lives outside the repo (GF_PROFILE, default ~/.torn-greasyfork-profile).
+// Browser: installed Chrome, else Edge (GF_BROWSER_PATH overrides).
+// The browser profile lives outside the repo (GF_PROFILE, default ~/.torn-greasyfork-chrome or -msedge).
 // It holds the Greasy Fork session cookie only; nothing is written to the repo.
 
 import { chromium } from 'playwright-core';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const OWNER = 'Yoonutz';
 const REPO = 'torn-scripts';
@@ -23,8 +24,22 @@ const BRANCH = 'main';
 const GF_HOST = process.env.GF_BASE || 'https://greasyfork.org';
 const GF = `${GF_HOST}/en`;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PROFILE = process.env.GF_PROFILE || join(homedir(), '.torn-greasyfork-profile');
-const BROWSER = process.env.GF_BROWSER || (platform() === 'win32' ? 'msedge' : 'chrome');
+const DEBUG_PORT = 9339;
+
+// Chrome first, Edge as fallback (every Windows PC has it). GF_BROWSER_PATH overrides.
+function findBrowser() {
+  if (process.env.GF_BROWSER_PATH) return process.env.GF_BROWSER_PATH;
+  const pf = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean);
+  const candidates = platform() === 'win32'
+    ? [...pf.map((d) => join(d, 'Google', 'Chrome', 'Application', 'chrome.exe')), ...pf.map((d) => join(d, 'Microsoft', 'Edge', 'Application', 'msedge.exe'))]
+    : ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/microsoft-edge', '/usr/bin/chromium'];
+  const hit = candidates.find((c) => existsSync(c));
+  if (!hit) throw new Error('No Chrome or Edge found. Set GF_BROWSER_PATH to the browser executable.');
+  return hit;
+}
+
+// One profile per browser: Chrome and Edge cannot share a saved login.
+const profileDir = () => process.env.GF_PROFILE || join(homedir(), `.torn-greasyfork-${basename(findBrowser()).replace(/\.exe$/i, '')}`);
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
@@ -68,9 +83,8 @@ const cmpVersion = (a, b) => {
 };
 
 async function openBrowser(headed) {
-  const ctx = await chromium.launchPersistentContext(PROFILE, {
-    channel: process.env.GF_EXECUTABLE ? undefined : BROWSER,
-    executablePath: process.env.GF_EXECUTABLE,
+  const ctx = await chromium.launchPersistentContext(profileDir(), {
+    executablePath: findBrowser(),
     headless: !headed,
     viewport: { width: 1200, height: 900 },
   });
@@ -105,20 +119,49 @@ async function session(headed) {
   return b;
 }
 
+// Google refuses sign-in inside a Playwright-launched browser, so login starts the browser
+// normally on the tool's profile and only watches the tab list over the DevTools port. It
+// attaches to a page only before sign-in (to tick "Remember me", without which the session
+// dies with the window) and after Greasy Fork shows the user signed in.
 async function login() {
-  const { ctx, page } = await openBrowser(true);
-  await go(page, `${GF}/users/sign_in`);
-  if (!(await signedIn(page))) {
-    console.log('Sign in to Greasy Fork in the window that opened (waiting up to 10 minutes)...');
-    const deadline = Date.now() + 10 * 60_000;
-    while (!(await signedIn(page).catch(() => false))) {
-      if (Date.now() > deadline) throw new Error('Timed out waiting for sign-in');
-      await page.waitForTimeout(2000);
+  const exe = findBrowser();
+  const proc = spawn(exe, [`--user-data-dir=${profileDir()}`, `--remote-debugging-port=${DEBUG_PORT}`, '--no-first-run', '--no-default-browser-check', ...(process.env.GF_LOGIN_ARGS ? process.env.GF_LOGIN_ARGS.split(' ') : []), `${GF}/users/sign_in`], { stdio: 'ignore' });
+  const cdp = `http://127.0.0.1:${DEBUG_PORT}`;
+  const tabs = async () => (await (await fetch(`${cdp}/json/list`)).json()).filter((t) => t.type === 'page');
+  const connect = async () => {
+    for (let i = 0; i < 40; i++) {
+      try { return await chromium.connectOverCDP(cdp); } catch { await new Promise((r) => setTimeout(r, 500)); }
     }
+    throw new Error(`Could not reach ${exe} on port ${DEBUG_PORT}`);
+  };
+
+  let browser = await connect();
+  const signInPage = browser.contexts()[0].pages().find((p) => p.url().startsWith(GF_HOST));
+  if (signInPage) {
+    await signInPage.waitForSelector('#remember_me, .sign-out-link', { timeout: 30_000 }).catch(() => {});
+    await signInPage.check('#remember_me', { timeout: 2000 }).catch(() => {});
   }
-  const name = await page.locator('.user-profile-link a').first().textContent();
-  console.log(`Signed in as ${name.trim()}. Session saved in ${PROFILE}`);
-  await ctx.close();
+  await browser.close(); // disconnects only; the window stays
+  console.log(`Sign in to Greasy Fork in the ${exe.includes('chrome') ? 'Chrome' : 'Edge'} window that opened (waiting up to 10 minutes)...`);
+
+  const deadline = Date.now() + 10 * 60_000;
+  for (;;) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for sign-in');
+    if (proc.exitCode !== null) throw new Error('Browser window closed before sign-in finished');
+    await new Promise((r) => setTimeout(r, 3000));
+    const onGf = (await tabs().catch(() => [])).some((t) => t.url.startsWith(GF_HOST) && !/sign_in|\/auth\//.test(t.url));
+    if (!onGf) continue;
+    browser = await connect();
+    const page = browser.contexts()[0].pages().find((p) => p.url().startsWith(GF_HOST) && !/sign_in|\/auth\//.test(p.url()));
+    const name = page && (await page.locator('.user-profile-link a').first().textContent({ timeout: 2000 }).catch(() => null));
+    if (name) {
+      const session = await browser.newBrowserCDPSession();
+      await session.send('Browser.close').catch(() => {}); // graceful, so cookies are flushed to disk
+      console.log(`Signed in as ${name.trim()}. Session saved in ${profileDir()}`);
+      return;
+    }
+    await browser.close();
+  }
 }
 
 // Scripts Greasy Fork syncs from a git host, read from the webhook-info page (must be open).
@@ -273,7 +316,7 @@ async function publish(syncOnly) {
 
 const commands = { login, status, publish: () => publish(false), sync: () => publish(true) };
 if (!commands[cmd]) {
-  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 11).join('\n'));
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 12).join('\n'));
   process.exit(cmd ? 1 : 0);
 }
 commands[cmd]().catch((e) => {
