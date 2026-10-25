@@ -15,7 +15,9 @@ node gf.mjs sync "Torn Event Reminder"
 `publish` is safe to rerun. It:
 
 1. Checks the raw `.user.js` URL on `main` answers 200 (push first).
-2. Imports it on `/import` with sync type Automatic, unless a listing already syncs from that URL.
+2. Finds the listing: one already syncing from that URL, else one of yours with the same `@name`
+   (linked only if its version is not above the repo's, so users never roll back), else imports
+   it on `/import` with sync type Automatic.
 3. On the listing's Admin page sets the sync URL, points the default additional info at the
    folder's raw `greasyfork.md` (Markdown, `--markup html` to change) and presses
    **Update and sync now**.

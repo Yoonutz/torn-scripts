@@ -57,8 +57,15 @@ function repoScripts() {
     });
 }
 
-const localVersion = (folder, file) =>
-  (readFileSync(join(ROOT, folder, file), 'utf8').match(/^\/\/\s*@version\s+(\S+)/m) || [])[1];
+const meta = (folder, file, key) =>
+  (readFileSync(join(ROOT, folder, file), 'utf8').match(new RegExp(`^//\\s*@${key}\\s+(.+?)\\s*$`, 'm')) || [])[1];
+
+// Numeric compare of dotted versions: <0, 0, >0.
+const cmpVersion = (a, b) => {
+  const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+  return 0;
+};
 
 async function openBrowser(headed) {
   const ctx = await chromium.launchPersistentContext(PROFILE, {
@@ -130,6 +137,15 @@ async function syncedScripts(page) {
   );
 }
 
+// The signed-in account's own listings, from its profile page.
+async function ownListings(page) {
+  const profile = await page.locator('.user-profile-link a').first().evaluate((a) => a.href);
+  await go(page, profile);
+  return page.$$eval('#user-script-list li[data-script-id], li[data-script-id]', (lis) =>
+    lis.map((li) => ({ id: li.dataset.scriptId, name: li.dataset.scriptName, version: li.dataset.scriptVersion })),
+  );
+}
+
 const sameUrl = (a, b) => decodeURIComponent(a).replace(/\+/g, ' ') === decodeURIComponent(b).replace(/\+/g, ' ');
 
 async function webhookState(page) {
@@ -161,10 +177,15 @@ async function status() {
   console.log(`Payload URL: ${wh.payload || '?'}`);
   console.log(`GitHub hook: ${githubHook(wh.payload)}`);
   const synced = await syncedScripts(page);
+  const own = await ownListings(page);
   console.log('\nRepo scripts:');
   for (const { folder, file } of repoScripts()) {
     const s = synced.find((x) => sameUrl(x.sync, rawUrl(folder, file)));
-    console.log(s ? `  ${folder}: ${s.type}  ${s.url}` : `  ${folder}: not on Greasy Fork (or not linked)`);
+    const name = meta(folder, file, 'name');
+    const listing = own.find((l) => l.name?.toLowerCase() === name?.toLowerCase());
+    if (s) console.log(`  ${folder}: ${s.type}  ${s.url}`);
+    else if (listing) console.log(`  ${folder}: on Greasy Fork (v${listing.version}) but NOT linked to the repo  ${GF}/scripts/${listing.id}`);
+    else console.log(`  ${folder}: not on Greasy Fork`);
   }
   const strays = synced.filter((s) => !repoScripts().some(({ folder, file }) => sameUrl(s.sync, rawUrl(folder, file))));
   if (strays.length) {
@@ -224,16 +245,25 @@ async function publish(syncOnly) {
   const { ctx, page } = await session(flag('headed'));
   let script = (await syncedScripts(page)).find((s) => sameUrl(s.sync, jsUrl));
   let scriptUrl = script?.url;
+  const want = meta(folderArg, file, 'version');
   if (!scriptUrl) {
     if (syncOnly) throw new Error(`"${folderArg}" is not linked on Greasy Fork. Use publish.`);
-    console.log(`Importing ${jsUrl}`);
-    scriptUrl = await importScript(page, jsUrl);
-    console.log(`Imported: ${scriptUrl}`);
+    const name = meta(folderArg, file, 'name');
+    const listing = (await ownListings(page)).find((l) => l.name?.toLowerCase() === name?.toLowerCase());
+    if (listing) {
+      // Linking an existing listing to an older repo file would roll users back.
+      if (cmpVersion(want, listing.version) < 0) throw new Error(`Listing is v${listing.version}, repo is v${want}. Raise @version above it first.`);
+      scriptUrl = `${GF}/scripts/${listing.id}`;
+      console.log(`Linking existing listing v${listing.version}: ${scriptUrl}`);
+    } else {
+      console.log(`Importing ${jsUrl}`);
+      scriptUrl = await importScript(page, jsUrl);
+      console.log(`Imported: ${scriptUrl}`);
+    }
   }
   const notice = await configureAndSync(page, scriptUrl, jsUrl, mdUrl);
   console.log(`Sync: ${notice}`);
   if (!mdUrl) console.log('No greasyfork.md in the folder, additional info left as is.');
-  const want = localVersion(folderArg, file);
   const got = await servedVersion(page, scriptUrl);
   console.log(`Version: repo ${want}, Greasy Fork ${got}${want === got ? '' : '  (MISMATCH: push pending or raw cache, rerun sync in 5 min)'}`);
   console.log(`Page: ${scriptUrl}`);
