@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.0
-// @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Pick which events to watch and edit every time and threshold.
+// @version      1.0.1
+// @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
-// @grant        GM_registerMenuCommand
+// @grant        none
 // ==/UserScript==
 
 (function () {
@@ -64,13 +64,6 @@
     return m ? (+m[1] * HOUR + +m[2] * 60) % DAY : 0;
   }
 
-  function toInput(sec) {
-    return sec ? new Date(sec * 1000).toISOString().slice(0, 16) : '';
-  }
-  function fromInput(v) {
-    const t = Date.parse(v + ':00Z');
-    return isNaN(t) ? null : Math.floor(t / 1000);
-  }
   function fmtTct(sec) {
     const d = new Date(sec * 1000);
     const p = (n) => String(n).padStart(2, '0');
@@ -102,9 +95,8 @@
     return { start, end: start + len };
   }
 
-  // Your own edit wins, then what the calendar page showed, then the API.
+  // What the calendar page showed wins over the API estimate.
   function times(ev) {
-    if (ev.userStart) return { start: ev.userStart, end: ev.userEnd || ev.userStart + DAY };
     if (ev.pageStart) return { start: ev.pageStart, end: ev.pageEnd || ev.pageStart + DAY };
     if (ev.rawStart) return apiTimes(ev);
     return { start: 0, end: 0 };
@@ -162,7 +154,6 @@
     if (moved) {
       const t = now();
       if (ev.pageEnd && ev.pageEnd < t) { delete ev.pageStart; delete ev.pageEnd; }
-      if (ev.userEnd && ev.userEnd < t) { delete ev.userStart; delete ev.userEnd; }
     }
     EV[id] = ev;
   }
@@ -193,7 +184,7 @@
         saveEvents();
         fetching = null;
         update();
-        if (panel) renderPanel();
+        renderUI();
       }
     })();
     return fetching;
@@ -225,7 +216,7 @@
   function scrapeCalendar() {
     let changed = false;
     document.querySelectorAll('body *').forEach((el) => {
-      if (el.closest('#ter-panel')) return;
+      if (el.closest('.ter-ui')) return;
       const text = el.textContent || '';
       if (text.length > 200 || !RANGE_RX.test(text)) return;
       if ([...el.children].some((c) => RANGE_RX.test(c.textContent || ''))) return; // only the deepest match
@@ -259,42 +250,38 @@
       saveEvents();
       saveSettings();
       update();
-      if (panel) renderPanel();
+      renderUI();
     }
   }
 
   function watchCalendar() {
     if (!/\/calendar\.php/i.test(location.pathname)) return;
     let timer = null;
-    const run = () => { clearTimeout(timer); timer = setTimeout(() => { scrapeCalendar(); addCalendarButton(); }, 400); };
+    const run = () => { clearTimeout(timer); timer = setTimeout(scrapeCalendar, 400); };
     new MutationObserver(run).observe(document.body, { childList: true, subtree: true });
     run();
   }
 
-  function addCalendarButton() {
-    if (document.getElementById('ter-cal-btn')) return;
-    const btn = document.createElement('button');
-    btn.id = 'ter-cal-btn';
-    btn.type = 'button';
-    btn.textContent = '⏰ Event reminder';
-    btn.addEventListener('click', openPanel);
-    document.body.append(btn);
-  }
-
   // ------------------------------------------------------------- clock icon
+  // Torn's header: a clock icon whose dropdown is
+  // <div class="tc-clock-tooltip"><p><span class="server-date-time">...</span></p></div>.
+  const TOOLTIP = '.tc-clock-tooltip';
   const CANDIDATES = [
-    '#server-time',
-    '[id*="clock" i]',
     '[class*="clock" i]',
+    '[id*="clock" i]',
+    '#server-time',
     '[aria-label*="clock" i]',
     '[title*="clock" i]',
-    '[class*="server-time" i]',
-    '.server-date-time',
   ];
 
-  function nearTop(el) {
+  function shown(el) {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && r.top + window.scrollY < 260;
+  }
+
+  function hasIcon(el) {
+    if (el.tagName.toLowerCase() === 'svg' || el.tagName === 'I') return true;
+    return [...el.querySelectorAll('svg, i')].some((s) => !s.closest(TOOLTIP));
   }
 
   function findClock() {
@@ -306,8 +293,9 @@
     }
     for (const sel of CANDIDATES) {
       for (const el of document.querySelectorAll(sel)) {
-        if (el.closest('#ter-panel, #ter-float') || el.classList.contains('ter-dot')) continue;
-        if (nearTop(el)) return el;
+        if (el.closest(TOOLTIP) || el.closest('.ter-ui, #ter-float') || el.classList.contains('ter-dot')) continue;
+        if (el.querySelector(TOOLTIP) && !hasIcon(el)) continue;
+        if (shown(el) && hasIcon(el)) return el;
       }
     }
     return null;
@@ -315,8 +303,17 @@
 
   let host = null;
   let hostTitle = null;
+  let icon = null;
+
+  // The element that gets tinted: the clock's own svg or icon, never the dropdown.
+  function iconOf(el) {
+    if (el.tagName.toLowerCase() === 'svg' || el.tagName === 'I') return el;
+    return [...el.querySelectorAll('svg, i')].find((s) => !s.closest(TOOLTIP)) || el;
+  }
 
   function clearHost() {
+    if (icon) icon.classList.remove('ter-tint', 'ter-red', 'ter-orange', 'ter-green');
+    icon = null;
     if (!host) return;
     host.classList.remove('ter-host', 'ter-red', 'ter-orange', 'ter-green');
     host.querySelectorAll(':scope > .ter-dot').forEach((d) => d.remove());
@@ -327,36 +324,45 @@
   }
 
   function paint(color, tip) {
-    let el = findClock();
+    const el = findClock();
     if (el !== host) {
       clearHost();
       if (el) {
         host = el;
         hostTitle = el.getAttribute('title');
-        if (!el.dataset.terBound) {
-          el.dataset.terBound = '1';
-          el.addEventListener('dblclick', openPanel);
-        }
       }
     }
     const float = document.getElementById('ter-float');
     if (!host) {
-      // No clock found: show a small floating badge instead, only while something is due.
-      if (!color) { if (float) float.remove(); return; }
+      // No clock found: a small floating dot instead, which also opens the settings.
       let f = float;
       if (!f) {
         f = document.createElement('div');
         f.id = 'ter-float';
-        f.addEventListener('click', openPanel);
+        f.innerHTML = '<div class="ter-float-dot"></div>';
+        f.querySelector('.ter-float-dot').addEventListener('click', () => {
+          const box = f.querySelector('.ter-ui');
+          if (box) box.remove(); else f.append(makeUI());
+        });
         document.body.append(f);
       }
-      f.style.background = COLOR[color];
-      f.title = tip;
+      const d = f.querySelector('.ter-float-dot');
+      d.style.background = color ? COLOR[color] : '#666';
+      d.title = tip || 'Torn Event reminder';
       return;
     }
     if (float) float.remove();
+    const ic = iconOf(host);
+    if (ic !== icon) {
+      if (icon) icon.classList.remove('ter-tint', 'ter-red', 'ter-orange', 'ter-green');
+      icon = ic;
+    }
     host.classList.add('ter-host');
-    ['red', 'orange', 'green'].forEach((c) => host.classList.toggle('ter-' + c, c === color));
+    icon.classList.add('ter-tint');
+    ['red', 'orange', 'green'].forEach((c) => {
+      host.classList.toggle('ter-' + c, c === color);
+      icon.classList.toggle('ter-' + c, c === color);
+    });
     let dot = host.querySelector(':scope > .ter-dot');
     if (color && S.showDot) {
       if (!dot) {
@@ -376,7 +382,7 @@
     let best = null;
     const lines = [];
     Object.values(EV)
-      .filter((ev) => ev.enabled)
+      .filter((ev) => ev.enabled && ev.kind !== 'custom')
       .map((ev) => ({ ev, st: stateOf(ev, t), ...times(ev) }))
       .filter((x) => x.st)
       .sort((a, b) => RANK[b.st] - RANK[a.st] || a.start - b.start)
@@ -387,109 +393,127 @@
           : `${x.ev.title}: starts in ${fmtLeft(x.start - t)} (${fmtTct(x.start)} TCT)`);
       });
     paint(best, lines.join('\n'));
+    mountUI();
   }
 
-  // ------------------------------------------------------------- settings panel
-  let panel = null;
-  let showPast = false;
+  // ------------------------------------------------------------- clock dropdown row
+  // A new row under the time in Torn's clock dropdown: this month's events,
+  // a checkbox each. Event times are Torn's, only the reminder windows are editable.
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const ui = { tab: 'month', gear: false };
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  function openPanel(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    if (panel) return;
-    panel = document.createElement('div');
-    panel.id = 'ter-panel';
-    panel.addEventListener('click', (ev) => { if (ev.target === panel) closePanel(); });
-    document.body.append(panel);
-    renderPanel();
-    refreshFromApi(false);
+  function fmtDay(sec) {
+    const d = new Date(sec * 1000);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+  }
+  function fmtLen(sec) {
+    const d = Math.round(sec / HOUR) / 24;
+    return d >= 1 ? `${Math.round(d * 10) / 10}d` : `${Math.round(sec / HOUR)}h`;
   }
 
-  function closePanel() {
-    if (panel) panel.remove();
-    panel = null;
-  }
-
-  function renderPanel() {
-    if (!panel) return;
+  function listRows() {
     const t = now();
-    const isPda = PDA_KEY && PDA_KEY !== PDA_KEY_PLACEHOLDER;
-    const rows = Object.values(EV)
+    const d = new Date(t * 1000);
+    const mStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
+    const mEnd = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000;
+    return Object.values(EV)
+      .filter((ev) => ev.kind !== 'custom')
       .map((ev) => ({ ev, ...times(ev) }))
-      .filter((x) => showPast || !x.end || x.end > t)
-      .sort((a, b) => (a.start || 9e12) - (b.start || 9e12));
+      .filter((x) => x.start)
+      .map((x) => Object.assign(x, { carried: x.start < mStart && x.end > t }))
+      .filter((x) => ui.tab === 'all' || (x.start >= mStart && x.start < mEnd) || x.carried)
+      .sort((a, b) => a.start - b.start);
+  }
 
-    const src = { api: 'from API', calendar: 'from calendar page', manual: 'set by you' }[S.startSource] || 'unknown, assumed 00:00';
+  function rowHtml({ ev, start, end, carried }) {
+    const t = now();
+    const st = ev.enabled ? stateOf(ev, t) : null;
+    const past = end <= t;
+    const when = t >= start && t < end ? `live, ${fmtLeft(end - t)} left`
+      : t < start ? `in ${fmtLeft(start - t)}` : 'ended';
+    const from = carried ? `<span class="ter-tag">from ${MONTHS[new Date(start * 1000).getUTCMonth()]}</span>` : '';
+    return `
+      <label class="ter-ev${ev.enabled ? '' : ' ter-off'}${past ? ' ter-past' : ''}" data-id="${esc(ev.id)}" title="${esc(ev.desc || '')}">
+        <span class="ter-line">
+          <input type="checkbox" data-f="enabled" ${ev.enabled ? 'checked' : ''}>
+          <span class="ter-sw${st ? ' ter-' + st + '-bg' : ''}"></span>
+          <span class="ter-name">${esc(ev.title)}</span>${from}
+        </span>
+        <span class="ter-when">${fmtDay(start)} → ${fmtDay(end)} · ${when}</span>
+      </label>`;
+  }
+
+  function gearHtml() {
+    const isPda = PDA_KEY && PDA_KEY !== PDA_KEY_PLACEHOLDER;
+    const src = { api: 'auto, API', calendar: 'auto, calendar page', manual: 'yours' }[S.startSource] || 'unknown';
     const status = S.lastError ? `<span class="ter-err">${esc(S.lastError)}</span>`
-      : S.lastFetch ? `Updated ${fmtTct(S.lastFetch)} TCT` : 'Not fetched yet';
-
-    panel.innerHTML = `
-      <div class="ter-box">
-        <div class="ter-head"><b>Torn Event reminder</b><button class="ter-x" data-act="close" title="Close">✕</button></div>
-        <div class="ter-sec">
-          ${isPda ? '<div>API key: from Torn PDA</div>' : `
-          <label>API key (Public is enough)
-            <input type="password" data-k="apikey" value="${esc(localStorage.getItem(K_APIKEY) || '')}" autocomplete="off" spellcheck="false">
-          </label>`}
-          <div class="ter-row"><button data-act="refresh">Refresh from API</button><span class="ter-muted">${status}</span></div>
-          <div class="ter-muted">No key? Open the <a href="/calendar.php">calendar</a> once and the times are read from the page.</div>
-        </div>
-        <div class="ter-sec ter-grid">
-          <label>Your event start (TCT)
-            <input type="time" data-k="startTime" value="${esc(S.startTime || '')}">
-            <span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">use auto</a>' : ''}</span>
-          </label>
-          <label><span><span class="ter-sw ter-red-bg"></span>Red, hours before start</span>
-            <input type="number" min="0" step="0.5" data-k="redHours" value="${S.redHours}"></label>
-          <label><span><span class="ter-sw ter-orange-bg"></span>Orange, hours before start</span>
-            <input type="number" min="0" step="0.25" data-k="orangeHours" value="${S.orangeHours}"></label>
-          <label><span><span class="ter-sw ter-green-bg"></span>Green, hours after start (0 = whole event)</span>
-            <input type="number" min="0" step="0.5" data-k="greenHours" value="${S.greenHours}"></label>
-          <label class="ter-chk"><input type="checkbox" data-k="showDot" ${S.showDot ? 'checked' : ''}> Dot on the clock</label>
-          <label class="ter-chk"><input type="checkbox" data-k="newEventsOn" ${S.newEventsOn ? 'checked' : ''}> New events start checked</label>
-        </div>
-        <div class="ter-sec">
-          <div class="ter-row">
-            <b>Events</b>
-            <span class="ter-muted">times in TCT</span>
-            <label class="ter-chk ter-right"><input type="checkbox" data-act="past" ${showPast ? 'checked' : ''}> Show past</label>
-          </div>
-          <div class="ter-list">
-            ${rows.length ? rows.map(({ ev, start, end }) => {
-              const st = ev.enabled ? stateOf(ev, t) : null;
-              const edited = !!ev.userStart;
-              return `
-              <div class="ter-ev${ev.enabled ? '' : ' ter-off'}" data-id="${esc(ev.id)}">
-                <label class="ter-chk ter-title" title="${esc(ev.desc || '')}">
-                  <input type="checkbox" data-f="enabled" ${ev.enabled ? 'checked' : ''}>
-                  ${st ? `<span class="ter-sw ter-${st}-bg"></span>` : ''}
-                  ${ev.kind === 'custom' ? `<input type="text" data-f="title" value="${esc(ev.title)}">` : esc(ev.title)}
-                  ${ev.kind === 'competition' ? '<span class="ter-tag">competition</span>' : ''}
-                  ${ev.kind === 'custom' ? '<span class="ter-tag">custom</span>' : ''}
-                  ${edited && ev.kind !== 'custom' ? '<span class="ter-tag">edited</span>' : ''}
-                </label>
-                <div class="ter-times">
-                  <input type="datetime-local" data-f="start" value="${toInput(start)}">
-                  <span>→</span>
-                  <input type="datetime-local" data-f="end" value="${toInput(end)}">
-                  ${edited && ev.kind !== 'custom' ? '<button data-f="reset" title="Back to Torn times">↺</button>' : ''}
-                  ${ev.kind === 'custom' ? '<button data-f="delete" title="Delete">🗑</button>' : ''}
-                </div>
-              </div>`;
-            }).join('') : '<div class="ter-muted">No events yet. Add an API key or open the calendar page.</div>'}
-          </div>
-          <div class="ter-row"><button data-act="add">+ Add own event</button></div>
-        </div>
-        <div class="ter-sec">
-          <label>Clock selector (only if the clock is not found)
-            <input type="text" data-k="selector" value="${esc(S.selector)}" placeholder="auto" spellcheck="false"></label>
-          <div class="ter-muted">Clock ${host ? 'found' : 'not found, a floating dot is used'}. Double-click the clock to open this panel.</div>
-        </div>
+      : S.lastFetch ? `updated ${fmtDay(S.lastFetch)}` : 'not fetched';
+    return `
+      <div class="ter-gear">
+        ${isPda ? '' : `<label>API key <input type="password" data-k="apikey" value="${esc(localStorage.getItem(K_APIKEY) || '')}" placeholder="Public key" autocomplete="off" spellcheck="false"></label>`}
+        <div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>
+        <label>Your start <input type="time" data-k="startTime" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
+        <label><span class="ter-sw ter-red-bg"></span>Red <input type="number" min="0" step="0.5" data-k="redHours" value="${S.redHours}"> h before</label>
+        <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="number" min="0" step="0.25" data-k="orangeHours" value="${S.orangeHours}"> h before</label>
+        <label><span class="ter-sw ter-green-bg"></span>Green <input type="number" min="0" step="0.5" data-k="greenHours" value="${S.greenHours}"> h, 0 = all event</label>
+        <label><input type="checkbox" data-k="showDot" ${S.showDot ? 'checked' : ''}> Dot on clock</label>
+        <label>Clock selector <input type="text" data-k="selector" value="${esc(S.selector)}" placeholder="auto" spellcheck="false"></label>
       </div>`;
   }
 
-  function onPanelChange(e) {
+  function uiHtml() {
+    const rows = listRows();
+    return `
+      <div class="ter-top">
+        <span class="ter-tabs">
+          <a href="#" data-act="tab-month" class="${ui.tab === 'month' ? 'on' : ''}">This month's events</a>
+          <a href="#" data-act="tab-all" class="${ui.tab === 'all' ? 'on' : ''}">All</a>
+        </span>
+        <a href="#" data-act="gear" class="ter-cog${ui.gear ? ' on' : ''}" title="Settings">⚙</a>
+      </div>
+      ${ui.gear ? gearHtml() : ''}
+      <div class="ter-list">
+        ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing this month.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
+      </div>
+`;
+  }
+
+  function makeUI() {
+    const box = document.createElement('div');
+    box.className = 'ter-ui';
+    box.innerHTML = uiHtml();
+    // Keep Torn from closing the dropdown while the row is used.
+    ['click', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'pointerdown', 'pointerup', 'keydown'].forEach((type) =>
+      box.addEventListener(type, (e) => {
+        if (type === 'click') onUiClick(e);
+        if (type === 'keydown' && e.key === 'Enter' && e.target.matches('input')) e.target.blur();
+        e.stopPropagation();
+      }));
+    box.addEventListener('change', (e) => { onUiChange(e); e.stopPropagation(); });
+    return box;
+  }
+
+  function mountUI() {
+    document.querySelectorAll(TOOLTIP).forEach((tip) => {
+      if (!tip.querySelector(':scope > .ter-ui')) tip.append(makeUI());
+    });
+  }
+
+  function renderUI() {
+    document.querySelectorAll('.ter-ui').forEach((box) => {
+      // Never redraw under the user's fingers while a field is focused.
+      if (box.contains(document.activeElement) && document.activeElement.matches('input:not([type=checkbox])')) return;
+      const scroll = box.querySelector('.ter-list')?.scrollTop || 0;
+      box.innerHTML = uiHtml();
+      const list = box.querySelector('.ter-list');
+      if (list) list.scrollTop = scroll;
+    });
+  }
+
+  function onUiChange(e) {
     const el = e.target;
     const k = el.dataset.k;
     if (k) {
@@ -502,126 +526,96 @@
       if (el.type === 'checkbox') S[k] = el.checked;
       else if (el.type === 'number') S[k] = Math.max(0, parseFloat(el.value) || 0);
       else S[k] = el.value.trim();
-      if (k === 'startTime') { S.startSource = S.startTime ? 'manual' : ''; }
+      if (k === 'startTime') S.startSource = S.startTime ? 'manual' : '';
       saveSettings();
+      el.blur();
       update();
-      if (k === 'startTime' || k === 'selector') renderPanel();
-      return;
-    }
-    if (el.dataset.act === 'past') { showPast = el.checked; renderPanel(); return; }
-    const row = el.closest('.ter-ev');
-    if (!row) return;
-    const ev = EV[row.dataset.id];
-    if (!ev) return;
-    const f = el.dataset.f;
-    if (f === 'enabled') ev.enabled = el.checked;
-    if (f === 'title') ev.title = el.value.trim() || 'My event';
-    if (f === 'start' || f === 'end') {
-      const cur = times(ev);
-      const v = fromInput(el.value);
-      if (!v) return;
-      let start = f === 'start' ? v : cur.start;
-      let end = f === 'end' ? v : cur.end;
-      if (f === 'start' && cur.end > cur.start) end = start + (cur.end - cur.start); // keep the length when moving the start
-      if (end <= start) end = start + DAY;
-      ev.userStart = start;
-      ev.userEnd = end;
-    }
-    saveEvents();
-    update();
-    renderPanel();
-  }
-
-  function onPanelClick(e) {
-    const el = e.target.closest('[data-act], [data-f]');
-    if (!el || !panel || !panel.contains(el)) return;
-    const act = el.dataset.act;
-    if (act === 'close') return closePanel();
-    if (act === 'refresh') { e.preventDefault(); refreshFromApi(true); return; }
-    if (act === 'autostart') { e.preventDefault(); S.startSource = ''; S.lastFetch = 0; saveSettings(); refreshFromApi(true); renderPanel(); return; }
-    if (act === 'add') {
-      const t = now();
-      const id = 'u:' + t + Math.random().toString(36).slice(2, 6);
-      const start = Math.ceil(t / HOUR) * HOUR + DAY;
-      EV[id] = { id, title: 'My event', kind: 'custom', enabled: true, userStart: start, userEnd: start + DAY };
-      saveEvents();
-      renderPanel();
-      const input = panel.querySelector(`[data-id="${CSS.escape(id)}"] input[data-f="title"]`);
-      if (input) { input.scrollIntoView({ block: 'nearest' }); input.select(); }
+      renderUI();
       return;
     }
     const row = el.closest('.ter-ev');
     const ev = row && EV[row.dataset.id];
     if (!ev) return;
-    if (el.dataset.f === 'reset') { delete ev.userStart; delete ev.userEnd; }
-    else if (el.dataset.f === 'delete') { delete EV[ev.id]; }
-    else return;
+    const f = el.dataset.f;
+    if (f === 'enabled') ev.enabled = el.checked;
     saveEvents();
+    el.blur();
     update();
-    renderPanel();
+    renderUI();
+  }
+
+  function onUiClick(e) {
+    const el = e.target.closest('[data-act]');
+    if (!el || el.matches('input')) return;
+    e.preventDefault();
+    const act = el.dataset.act;
+    if (act === 'tab-month' || act === 'tab-all') ui.tab = act.slice(4);
+    else if (act === 'gear') ui.gear = !ui.gear;
+    else if (act === 'refresh') refreshFromApi(true);
+    else if (act === 'autostart') { S.startSource = ''; saveSettings(); refreshFromApi(true); }
+    else return;
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    renderUI();
   }
 
   // ------------------------------------------------------------- styles
   function addStyles() {
     const css = `
       .ter-host { position: relative; }
-      .ter-host.ter-red { --ter: ${COLOR.red}; }
-      .ter-host.ter-orange { --ter: ${COLOR.orange}; }
-      .ter-host.ter-green { --ter: ${COLOR.green}; }
-      .ter-host.ter-red, .ter-host.ter-orange, .ter-host.ter-green {
+      .ter-red { --ter: ${COLOR.red}; }
+      .ter-orange { --ter: ${COLOR.orange}; }
+      .ter-green { --ter: ${COLOR.green}; }
+      .ter-tint.ter-red, .ter-tint.ter-orange, .ter-tint.ter-green {
         color: var(--ter) !important;
         filter: drop-shadow(0 0 3px var(--ter));
       }
-      .ter-host.ter-red svg *:not([fill="none"]), .ter-host.ter-orange svg *:not([fill="none"]), .ter-host.ter-green svg *:not([fill="none"]) { fill: var(--ter) !important; }
-      .ter-host.ter-red svg [stroke]:not([stroke="none"]), .ter-host.ter-orange svg [stroke]:not([stroke="none"]), .ter-host.ter-green svg [stroke]:not([stroke="none"]) { stroke: var(--ter) !important; }
-      .ter-host.ter-red svg stop, .ter-host.ter-orange svg stop, .ter-host.ter-green svg stop { stop-color: var(--ter) !important; }
+      .ter-tint.ter-red *:not([fill="none"]), .ter-tint.ter-orange *:not([fill="none"]), .ter-tint.ter-green *:not([fill="none"]),
+      svg.ter-tint.ter-red:not([fill="none"]), svg.ter-tint.ter-orange:not([fill="none"]), svg.ter-tint.ter-green:not([fill="none"]) { fill: var(--ter) !important; }
+      .ter-tint.ter-red [stroke]:not([stroke="none"]), .ter-tint.ter-orange [stroke]:not([stroke="none"]), .ter-tint.ter-green [stroke]:not([stroke="none"]) { stroke: var(--ter) !important; }
+      .ter-tint.ter-red stop, .ter-tint.ter-orange stop, .ter-tint.ter-green stop { stop-color: var(--ter) !important; }
       .ter-dot {
         position: absolute; top: -2px; right: -2px; width: 7px; height: 7px; border-radius: 50%;
         background: var(--ter); box-shadow: 0 0 0 1px rgba(0,0,0,.6); pointer-events: none; z-index: 5;
       }
-      #ter-float {
-        position: fixed; right: 10px; bottom: 10px; width: 14px; height: 14px; border-radius: 50%;
-        z-index: 2147483646; cursor: pointer; box-shadow: 0 0 6px rgba(0,0,0,.7);
+      #ter-float { position: fixed; right: 10px; bottom: 10px; z-index: 2147483646; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 6px; }
+      #ter-float .ter-float-dot { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 6px rgba(0,0,0,.7); }
+      #ter-float .ter-ui { background: #222; border-radius: 6px; padding: 6px 8px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
+
+      .ter-ui {
+        margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.15);
+        width: 250px; max-width: 80vw; text-align: left; color: #ddd; cursor: default;
+        font: 11px/1.35 Arial, sans-serif; white-space: normal; filter: none !important;
       }
-      #ter-cal-btn {
-        position: fixed; right: 12px; bottom: 12px; z-index: 2147483645; padding: 8px 12px;
-        border-radius: 6px; border: 1px solid #555; background: #2b2b2b; color: #eee; cursor: pointer;
-        font: 13px Arial, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+      .ter-ui a { color: #8ab4f8; text-decoration: none; cursor: pointer; }
+      .ter-ui .ter-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+      .ter-ui .ter-tabs a { color: #999; margin-right: 8px; }
+      .ter-ui .ter-tabs a.on { color: #eee; font-weight: bold; }
+      .ter-ui .ter-cog { color: #999; font-size: 13px; }
+      .ter-ui .ter-cog.on { color: #eee; }
+      .ter-ui .ter-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+      .ter-ui .ter-ev { display: block; cursor: pointer; padding: 3px 4px; border-radius: 4px; background: rgba(255,255,255,.05); }
+      .ter-ui .ter-off { opacity: .5; }
+      .ter-ui .ter-past .ter-name { text-decoration: line-through; }
+      .ter-ui .ter-line { display: flex; align-items: center; gap: 4px; }
+      .ter-ui .ter-line input { margin: 0; width: 12px; height: 12px; }
+      .ter-ui .ter-name { font-weight: bold; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ter-ui .ter-when { display: block; color: #aaa; padding-left: 16px; }
+      .ter-ui input[type=text], .ter-ui input[type=password], .ter-ui input[type=number], .ter-ui input[type=time] {
+        background: #1a1a1a; color: #eee; border: 1px solid #555; border-radius: 3px; padding: 2px 4px;
+        font-size: 11px; box-sizing: border-box; min-width: 0; color-scheme: dark; height: auto;
       }
-      #ter-panel {
-        position: fixed; inset: 0; z-index: 2147483647; background: rgba(0,0,0,.6);
-        display: flex; align-items: flex-start; justify-content: center; padding: 16px; overflow: auto;
-        font: 13px/1.4 Arial, sans-serif; color: #e8e8e8;
-      }
-      #ter-panel .ter-box { background: #2b2b2b; border-radius: 8px; width: 100%; max-width: 560px; box-shadow: 0 4px 24px rgba(0,0,0,.5); }
-      #ter-panel .ter-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #444; font-size: 15px; }
-      #ter-panel .ter-sec { padding: 10px 14px; border-bottom: 1px solid #3a3a3a; display: flex; flex-direction: column; gap: 6px; }
-      #ter-panel .ter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
-      #ter-panel label { display: flex; flex-direction: column; gap: 3px; }
-      #ter-panel .ter-chk { flex-direction: row; align-items: center; gap: 6px; }
-      #ter-panel input[type=text], #ter-panel input[type=password], #ter-panel input[type=number], #ter-panel input[type=time], #ter-panel input[type=datetime-local] {
-        background: #1e1e1e; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 5px 6px; font-size: 13px; box-sizing: border-box; min-width: 0; color-scheme: dark;
-      }
-      #ter-panel button { background: #3a3a3a; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
-      #ter-panel button:hover { background: #474747; }
-      #ter-panel .ter-x { padding: 2px 8px; }
-      #ter-panel .ter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-      #ter-panel .ter-right { margin-left: auto; }
-      #ter-panel .ter-muted { color: #9a9a9a; font-size: 12px; }
-      #ter-panel .ter-err { color: #ff7b72; font-size: 12px; }
-      #ter-panel a { color: #8ab4f8; }
-      #ter-panel .ter-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; }
-      #ter-panel .ter-ev { background: #333; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
-      #ter-panel .ter-off { opacity: .55; }
-      #ter-panel .ter-title { font-weight: bold; }
-      #ter-panel .ter-times { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-      #ter-panel .ter-times input { flex: 1 1 150px; }
-      #ter-panel .ter-tag { font-weight: normal; font-size: 11px; color: #bbb; background: #444; border-radius: 3px; padding: 0 5px; }
-      #ter-panel .ter-sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 2px; vertical-align: middle; }
-      #ter-panel .ter-red-bg { background: ${COLOR.red}; }
-      #ter-panel .ter-orange-bg { background: ${COLOR.orange}; }
-      #ter-panel .ter-green-bg { background: ${COLOR.green}; }
-      @media (max-width: 480px) { #ter-panel .ter-grid { grid-template-columns: 1fr; } }
+      .ter-ui input[type=number] { width: 48px; }
+      .ter-ui button { background: #3a3a3a; color: #ddd; border: 1px solid #555; border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px; }
+      .ter-ui .ter-gear { display: flex; flex-direction: column; gap: 4px; padding: 4px; margin-bottom: 4px; border-radius: 4px; background: rgba(255,255,255,.05); }
+      .ter-ui .ter-gear label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+      .ter-ui .ter-gear input[type=password], .ter-ui .ter-gear input[type=text] { flex: 1; }
+      .ter-ui .ter-tag { font-size: 10px; color: #bbb; background: #444; border-radius: 3px; padding: 0 4px; white-space: nowrap; }
+      .ter-ui .ter-sw { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #555; }
+      .ter-ui .ter-red-bg { background: ${COLOR.red}; }
+      .ter-ui .ter-orange-bg { background: ${COLOR.orange}; }
+      .ter-ui .ter-green-bg { background: ${COLOR.green}; }
+      .ter-ui .ter-muted { color: #888; }
+      .ter-ui .ter-err { color: #ff7b72; }
     `;
     const style = document.createElement('style');
     style.id = 'ter-style';
@@ -632,19 +626,23 @@
   // ------------------------------------------------------------- start
   function init() {
     addStyles();
-    document.addEventListener('change', (e) => { if (panel && panel.contains(e.target)) onPanelChange(e); });
-    document.addEventListener('click', (e) => { if (panel && panel.contains(e.target)) onPanelClick(e); });
-    document.addEventListener('keydown', (e) => { if (panel && e.key === 'Escape') closePanel(); });
-    if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('Event reminder settings', openPanel);
     // Keep tabs in sync when settings change elsewhere.
     window.addEventListener('storage', (e) => {
       if (e.key === K_SETTINGS) S = Object.assign({}, DEFAULTS, load(K_SETTINGS, {}));
       if (e.key === K_EVENTS) EV = load(K_EVENTS, {});
-      if (e.key === K_SETTINGS || e.key === K_EVENTS) { update(); if (panel) renderPanel(); }
+      if (e.key === K_SETTINGS || e.key === K_EVENTS) { update(); renderUI(); }
     });
+    // The dropdown is drawn by Torn when the clock opens, so add the row as soon as it appears.
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; mountUI(); });
+    }).observe(document.body, { childList: true, subtree: true });
     watchCalendar();
     update();
     setInterval(update, TICK_MS);
+    setInterval(renderUI, 60 * 1000);
     refreshFromApi(false);
     setInterval(() => refreshFromApi(false), 30 * 60 * 1000);
   }

@@ -23,14 +23,12 @@ Most Torn events start at the time you picked, not at 00:00 TCT. The script read
 
 ## Settings
 
-Double-click the clock, use the **Event reminder** button on the calendar page, or the
-userscript manager menu.
+Open Torn's clock. A new row under the time lists **This month's events** (or **All**). Events
+that started last month and are still running stay in the list, marked *from Oct* etc.
 
-- Check or uncheck each event to watch it or not.
-- Edit any start or end time (TCT). ↺ puts it back to Torn's time.
-- Add your own events.
-- Change your start time, the red / orange windows, and how long green stays (0 = whole event).
-- Clock selector: only needed if Torn moves the clock. If the clock is not found, a small
-  floating dot shows the color instead.
+- Check or uncheck each event to be reminded or not. Event times are Torn's own and are not edited.
+- ⚙ API key, your start time (auto), the red / orange / green windows (0 = green for the whole
+  event), the dot, and a clock selector in case Torn moves the clock.
+- If the clock is not found, a small floating dot shows the color and opens the same list.
 
 Everything is stored in this browser only.
