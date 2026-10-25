@@ -40,4 +40,10 @@ still running stay in the list, marked *from Oct* etc. Hover a line for full tim
 - ⚙ API key, your start time (auto), the red / orange / green windows (0 = green for the whole
   event) and the dot on the clock.
 
+### Your own reminders
+
+**+ Add your own reminder** under the list: a name, then **All day** (pick one date) or
+**Custom time** (from and to, date and time, TCT). They get the same red / orange / green
+reminders and show in the list with ✎ edit and ✕ delete.
+
 Settings are stored in this browser only.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.13
+// @version      1.0.14
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -98,6 +98,7 @@
 
   // What the calendar page showed wins over the API estimate.
   function times(ev) {
+    if (ev.kind === 'custom') return { start: ev.userStart || 0, end: ev.userEnd || (ev.userStart || 0) + DAY };
     if (ev.pageStart) return { start: ev.pageStart, end: ev.pageEnd || ev.pageStart + DAY };
     if (ev.rawStart) return apiTimes(ev);
     return { start: 0, end: 0 };
@@ -459,7 +460,7 @@
     const lines = [];
     status = [];
     Object.values(EV)
-      .filter((ev) => ev.enabled && ev.kind !== 'custom')
+      .filter((ev) => ev.enabled)
       .map((ev) => ({ ev, st: stateOf(ev, t), ...times(ev) }))
       .filter((x) => x.st)
       .sort((a, b) => RANK[b.st] - RANK[a.st] || a.start - b.start)
@@ -503,7 +504,6 @@
     const from = ui.tab === 'year' ? Date.UTC(d.getUTCFullYear(), 0, 1) / 1000 : Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / 1000;
     const to = ui.tab === 'year' ? Date.UTC(d.getUTCFullYear() + 1, 0, 1) / 1000 : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / 1000;
     const rows = Object.values(EV)
-      .filter((ev) => ev.kind !== 'custom')
       .map((ev) => ({ ev, ...times(ev) }))
       .filter((x) => x.start)
       .sort((a, b) => a.start - b.start);
@@ -538,6 +538,7 @@
         <span class="ter-sw${st ? ' ter-' + st + '-bg' : ''}"></span>
         <span class="ter-name">${esc(ev.title)}</span>${from}
         <span class="ter-when">${days}</span>
+        ${ev.kind === 'custom' ? `<a href="#" class="ter-ico" data-act="c-edit" data-id="${esc(ev.id)}" title="Edit">✎</a><a href="#" class="ter-ico" data-act="c-del" data-id="${esc(ev.id)}" title="Delete">✕</a>` : ''}
       </label>`;
   }
 
@@ -603,6 +604,84 @@
       </div>`;
   }
 
+  // ------------------------------------------------------------- own reminders
+  // Name, then either one whole day or a start and end date with times (DD/MM/YY, TCT).
+  // Plain themed text fields, no browser date or time pickers.
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function dateText(sec) { const d = new Date(sec * 1000); return `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}/${String(d.getUTCFullYear()).slice(2)}`; }
+  function timeText(sec) { const d = new Date(sec * 1000); return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`; }
+
+  function parseDate(v) {
+    const m = /^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2}|\d{4}))?$/.exec(String(v || '').trim());
+    if (!m) return null;
+    const y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : new Date().getUTCFullYear();
+    const t = Date.UTC(y, +m[2] - 1, +m[1]) / 1000;
+    const d = new Date(t * 1000);
+    return d.getUTCDate() === +m[1] && d.getUTCMonth() === +m[2] - 1 ? t : null;
+  }
+  function parseTime(v) {
+    const m = /^(\d{1,2})(?:[:.h](\d{2}))?$/.exec(String(v || '').trim());
+    if (!m || +m[1] > 23 || +(m[2] || 0) > 59) return null;
+    return +m[1] * HOUR + +(m[2] || 0) * 60;
+  }
+
+  function newForm(ev) {
+    if (ev) {
+      const allDay = ev.userStart % DAY === 0 && ev.userEnd - ev.userStart === DAY;
+      return { id: ev.id, name: ev.title, allDay, from: dateText(ev.userStart), to: dateText(allDay ? ev.userEnd - DAY : ev.userEnd), fromT: timeText(ev.userStart), toT: timeText(ev.userEnd), err: '' };
+    }
+    const today = dateText(now());
+    return { id: null, name: '', allDay: true, from: today, to: today, fromT: '', toT: '', err: '' };
+  }
+
+  function formHtml() {
+    const f = ui.form;
+    if (!f) return '<div class="ter-foot"><a href="#" data-act="c-add">+ Add your own reminder</a></div>';
+    const field = (c, ph, cls = '') => `<input type="text" class="${cls}" data-c="${c}" value="${esc(f[c])}" placeholder="${ph}" autocomplete="off" spellcheck="false">`;
+    return `
+      <div class="ter-form">
+        ${field('name', 'Reminder name', 'ter-cname')}
+        <div class="ter-seg">
+          <button data-act="c-allday" class="${f.allDay ? 'on' : ''}">All day</button><button data-act="c-custom" class="${f.allDay ? '' : 'on'}">Custom time</button>
+        </div>
+        ${f.allDay
+          ? `<div class="ter-row"><span class="ter-lbl">Day</span>${field('from', 'DD/MM/YY', 'ter-date')}</div>`
+          : `<div class="ter-row"><span class="ter-lbl">From</span>${field('from', 'DD/MM/YY', 'ter-date')}${field('fromT', 'HH:MM', 'ter-tm')}</div>
+        <div class="ter-row"><span class="ter-lbl">To</span>${field('to', 'DD/MM/YY', 'ter-date')}${field('toT', 'HH:MM', 'ter-tm')}</div>`}
+        <div class="ter-muted">Times in TCT.</div>
+        ${f.err ? `<div class="ter-err">${esc(f.err)}</div>` : ''}
+        <div class="ter-row ter-right-row"><button data-act="c-cancel">Cancel</button><button data-act="c-save">${f.id ? 'Save' : 'Add'}</button></div>
+      </div>`;
+  }
+
+  function saveForm() {
+    const f = ui.form;
+    const name = f.name.trim();
+    const d1 = parseDate(f.from);
+    const d2 = f.allDay ? d1 : parseDate(f.to || f.from);
+    if (!name) return (f.err = 'Give it a name.');
+    if (d1 == null || d2 == null) return (f.err = 'Dates as DD/MM/YY, for example 31/10/26.');
+    let start;
+    let end;
+    if (f.allDay) {
+      start = d1;
+      end = d1 + DAY;
+    } else {
+      const t1 = parseTime(f.fromT);
+      const t2 = parseTime(f.toT);
+      if (t1 == null || t2 == null) return (f.err = 'Times as HH:MM, for example 18:30.');
+      start = d1 + t1;
+      end = d2 + t2;
+    }
+    if (end <= start) return (f.err = 'The end has to be after the start.');
+    const id = f.id || 'u:' + now() + Math.random().toString(36).slice(2, 6);
+    EV[id] = Object.assign(EV[id] || { enabled: true }, { id, title: name, kind: 'custom', userStart: start, userEnd: end });
+    ui.form = null;
+    saveEvents();
+    update();
+    return null;
+  }
+
   function uiHtml() {
     const rows = listRows();
     return `
@@ -616,7 +695,7 @@
       <div class="ter-list">
         ${rows.length ? rows.map(rowHtml).join('') : `<div class="ter-muted">${Object.keys(EV).length ? 'Nothing to show.' : 'No events yet. Add an API key (⚙) or open the <a href="/calendar.php">calendar</a> once.'}</div>`}
       </div>
-`;
+      ${formHtml()}`;
   }
 
   function makeUI() {
@@ -627,7 +706,8 @@
     ['click', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'pointerdown', 'pointerup', 'keydown'].forEach((type) =>
       box.addEventListener(type, (e) => {
         if (type === 'click') onUiClick(e);
-        if (type === 'keydown' && e.key === 'Enter' && e.target.matches('[data-k="newkey"]')) box.querySelector('[data-act="key-save"]')?.click();
+        if (type === 'keydown' && e.key === 'Enter' && e.target.matches('[data-c]')) box.querySelector('[data-act="c-save"]')?.click();
+        else if (type === 'keydown' && e.key === 'Enter' && e.target.matches('[data-k="newkey"]')) box.querySelector('[data-act="key-save"]')?.click();
         else if (type === 'keydown' && e.key === 'Enter' && e.target.matches('input')) e.target.blur();
         e.stopPropagation();
       }));
@@ -666,6 +746,7 @@
 
   function onUiChange(e) {
     const el = e.target;
+    if (el.dataset.c && ui.form) { ui.form[el.dataset.c] = el.value; return; } // kept until Add/Save
     const k = el.dataset.k;
     if (k) {
       if (k === 'newkey') return; // saved by the Save button
@@ -717,6 +798,16 @@
       else { tryKey(v); return; }
     } else if (act === 'key-remove') { saveKey(''); ui.keyMsg = 'Key removed.'; ui.keyErr = false; }
     else if (act === 'autostart') { S.startSource = ''; saveSettings(); refreshFromApi(true); }
+    else if (act === 'c-add') ui.form = newForm();
+    else if (act === 'c-edit') ui.form = newForm(EV[el.dataset.id]);
+    else if (act === 'c-del') { delete EV[el.dataset.id]; if (ui.form && ui.form.id === el.dataset.id) ui.form = null; saveEvents(); update(); }
+    else if (act === 'c-cancel') ui.form = null;
+    else if (act === 'c-allday' || act === 'c-custom' || act === 'c-save') {
+      // Typed values that have not fired a change event yet.
+      el.closest('.ter-form').querySelectorAll('[data-c]').forEach((i) => { ui.form[i.dataset.c] = i.value; });
+      if (act === 'c-save') saveForm();
+      else ui.form.allDay = act === 'c-allday';
+    }
     else return;
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     renderUI();
@@ -847,6 +938,23 @@
       .ter-ui .ter-key input[type=password] { flex: 1; }
       .ter-ui code { color: var(--default-color, #ddd); }
       .ter-ui .ter-hr { border: 0; height: 0; width: 100%; margin: 2px 0; border-top: 1px solid var(--divider-dark-color, #222); border-bottom: 1px solid var(--divider-light-color, #474747); }
+      .ter-ui .ter-foot { margin-top: 5px; }
+      .ter-ui .ter-ico { color: var(--default-content-title-color, #999); padding: 0 1px; }
+      .ter-ui .ter-ico:hover { color: var(--default-white-color, #fff); }
+      .ter-ui .ter-form { display: flex; flex-direction: column; gap: 5px; margin-top: 5px; padding: 6px; background: var(--default-bg-panel-color, #333); }
+      .ter-ui .ter-form input.ter-cname { width: 100%; }
+      .ter-ui .ter-form input.ter-date { width: 74px; text-align: center; }
+      .ter-ui .ter-form input.ter-tm { width: 52px; text-align: center; }
+      .ter-ui .ter-lbl { width: 32px; color: var(--default-content-title-color, #999); }
+      .ter-ui .ter-right-row { justify-content: flex-end; }
+      .ter-ui .ter-seg { display: flex; }
+      .ter-ui .ter-seg button { flex: 1; border-radius: 0; }
+      .ter-ui .ter-seg button:first-child { border-radius: 5px 0 0 5px; }
+      .ter-ui .ter-seg button:last-child { border-radius: 0 5px 5px 0; }
+      .ter-ui .ter-seg button.on {
+        color: var(--btn-active-color, #ddd); background: var(--btn-active-background, linear-gradient(180deg, #000 0%, #333 100%));
+        box-shadow: var(--btn-active-box-shadow, inset 0 -1px 0 #ffffff12);
+      }
       .ter-ui .ter-err { color: var(--default-red-color, #e54c19); }
     `;
     const style = document.createElement('style');
