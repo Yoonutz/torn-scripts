@@ -25,6 +25,8 @@ const GF_HOST = process.env.GF_BASE || 'https://greasyfork.org';
 const GF = `${GF_HOST}/en`;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEBUG_PORT = 9339;
+// Public author name. Google sign-in can overwrite it with the real name, so every write checks it first.
+const GF_NAME = 'Kami Ren';
 
 // Chrome first, Edge as fallback (every Windows PC has it). GF_BROWSER_PATH overrides.
 function findBrowser() {
@@ -164,6 +166,26 @@ async function login() {
   }
 }
 
+// Turns off name syncing from Google/GitHub sign-in and resets the display name to GF_NAME.
+async function ensureName(page) {
+  await go(page, `${GF}/users/edit_sign_in`);
+  for (let i = 0; i < 5; i++) {
+    const stop = page.locator('form:has(input[name="syncing"][value="0"]) [type=submit]').first();
+    if (!(await stop.count())) break;
+    await Promise.all([page.waitForLoadState('domcontentloaded'), stop.click()]);
+    await page.waitForLoadState('domcontentloaded');
+  }
+  const current = (await page.locator('.user-profile-link a').first().textContent()).trim();
+  if (current === GF_NAME) return;
+  await go(page, `${GF}/users/edit`);
+  await page.fill('#user_name', GF_NAME);
+  await Promise.all([page.waitForLoadState('domcontentloaded'), page.locator('form:has(#user_name) [type=submit]').last().click()]);
+  await page.waitForLoadState('domcontentloaded');
+  const now = (await page.locator('.user-profile-link a').first().textContent()).trim();
+  if (now !== GF_NAME) throw new Error(`Account name is "${now}", could not change it to "${GF_NAME}". Nothing published.`);
+  console.log(`Account name changed from "${current}" to "${GF_NAME}"`);
+}
+
 // Scripts Greasy Fork syncs from a git host, read from the webhook-info page (must be open).
 async function syncedScripts(page) {
   return page.$$eval('li', (lis) =>
@@ -215,6 +237,8 @@ function githubHook(payload) {
 
 async function status() {
   const { ctx, page } = await session(flag('headed'));
+  const name = (await page.locator('.user-profile-link a').first().textContent()).trim();
+  console.log(`Account name: ${name}${name === GF_NAME ? '' : `  (NOT "${GF_NAME}", publish/sync will fix it first)`}`);
   const wh = await webhookState(page);
   console.log(`Greasy Fork webhook secret: ${wh.secret ? 'set' : 'NOT SET'}`);
   console.log(`Payload URL: ${wh.payload || '?'}`);
@@ -286,6 +310,8 @@ async function publish(syncOnly) {
   if (!head.ok) throw new Error(`${jsUrl} returns ${head.status}. Push the script to ${BRANCH} first.`);
 
   const { ctx, page } = await session(flag('headed'));
+  await ensureName(page);
+  await go(page, `${GF}/users/webhook-info`);
   let script = (await syncedScripts(page)).find((s) => sameUrl(s.sync, jsUrl));
   let scriptUrl = script?.url;
   const want = meta(folderArg, file, 'version');

@@ -14,6 +14,8 @@ node gf.mjs sync "Torn Event Reminder"
 
 `publish` is safe to rerun. It:
 
+1. Makes sure the account shows as **Kami Ren**: turns off name syncing from Google sign-in and
+   renames the account if Google set the real name back. Stops if that fails.
 1. Checks the raw `.user.js` URL on `main` answers 200 (push first).
 2. Finds the listing: one already syncing from that URL, else one of yours with the same `@name`
    (linked only if its version is not above the repo's, so users never roll back), else imports
