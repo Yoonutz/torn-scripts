@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.3
+// @version      1.0.4
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -104,7 +104,12 @@
   }
 
   const RANK = { red: 1, orange: 2, green: 3 };
-  const COLOR = { red: '#e53935', orange: '#fb8c00', green: '#43a047' };
+  // Torn's own palette, with its dark-mode values as fallbacks.
+  const COLOR = {
+    red: 'var(--default-red-color, #e54c19)',
+    orange: 'var(--default-orange-color, #f08c00)',
+    green: 'var(--default-green-color, #82c91e)',
+  };
 
   function stateOf(ev, t) {
     const { start, end } = times(ev);
@@ -713,47 +718,73 @@
       }
       #ter-float { position: fixed; right: 10px; bottom: 10px; z-index: 2147483646; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 6px; }
       #ter-float .ter-float-dot { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 6px rgba(0,0,0,.7); }
-      #ter-float .ter-ui { background: #222; border-radius: 6px; padding: 6px 8px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
+      #ter-float .ter-ui { background: var(--default-bg-panel-color, #333); border-radius: 6px; padding: 6px 8px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
 
       .ter-ui {
-        margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.15);
-        width: 250px; max-width: 80vw; text-align: left; color: #ddd; cursor: default;
-        font: 11px/1.35 Arial, sans-serif; white-space: normal; filter: none !important;
+        margin-top: 6px; padding-top: 6px;
+        border-top: 1px solid var(--divider-dark-color, #222); box-shadow: inset 0 1px 0 var(--divider-light-color, #474747);
+        width: 250px; max-width: 80vw; text-align: left; color: var(--default-color, #ddd); cursor: default;
+        font-size: 11px; line-height: 1.4; white-space: normal; filter: none !important;
       }
-      .ter-ui a { color: #8ab4f8; text-decoration: none; cursor: pointer; }
+      .ter-ui a { color: var(--default-blue-color, #74c0fc); text-decoration: none; cursor: pointer; }
+      .ter-ui a:hover { color: var(--default-blue-hover-color, #a5d8ff); }
       .ter-ui .ter-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-      .ter-ui .ter-tabs a { color: #999; margin-right: 8px; }
-      .ter-ui .ter-tabs a.on { color: #eee; font-weight: bold; }
-      .ter-ui .ter-cog { color: #999; font-size: 13px; }
-      .ter-ui .ter-cog.on { color: #eee; }
-      .ter-ui .ter-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-      .ter-ui .ter-ev { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 2px 4px; border-radius: 4px; background: rgba(255,255,255,.05); }
+      .ter-ui .ter-tabs a { color: var(--default-content-title-color, #999); margin-right: 8px; }
+      .ter-ui .ter-tabs a.on { color: var(--tabs-color, #fff); text-shadow: var(--tabs-text-shadow, 0 0 2px #000); font-weight: bold; }
+      .ter-ui .ter-cog { color: var(--default-content-title-color, #999); font-size: 13px; }
+      .ter-ui .ter-cog.on, .ter-ui .ter-cog:hover { color: var(--default-white-color, #fff); }
+      .ter-ui .ter-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+      .ter-ui .ter-ev {
+        display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 3px 5px;
+        background: var(--default-bg-panel-color, #333); border-bottom: 1px solid var(--panel-border-bottom-color, #3b3b3b);
+      }
+      .ter-ui .ter-ev:hover { background: var(--default-bg-panel-active-color, #444); }
       .ter-ui .ter-off { opacity: .5; }
       .ter-ui .ter-past .ter-name, .ter-ui .ter-past .ter-when { text-decoration: line-through; }
-      .ter-ui .ter-ev input { margin: 0; width: 12px; height: 12px; flex: none; }
-      .ter-ui .ter-name { font-weight: bold; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .ter-ui .ter-when { margin-left: auto; padding-left: 6px; color: #aaa; white-space: nowrap; }
+      .ter-ui input[type=checkbox] { margin: 0; width: 12px; height: 12px; flex: none; accent-color: var(--checkbox-bg-color, #aaa); cursor: pointer; }
+      .ter-ui .ter-name { font-weight: bold; color: var(--default-color, #ddd); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ter-ui .ter-when { margin-left: auto; padding-left: 6px; color: var(--default-content-title-color, #999); white-space: nowrap; }
       .ter-ui input[type=text], .ter-ui input[type=password], .ter-ui input[type=number], .ter-ui input[type=time] {
-        background: #1a1a1a; color: #eee; border: 1px solid #555; border-radius: 3px; padding: 2px 4px;
-        font-size: 11px; box-sizing: border-box; min-width: 0; color-scheme: dark; height: auto;
+        color: var(--input-color, #fff); background: var(--input-background-color, linear-gradient(0deg, #111 0%, #000 100%));
+        border: 1px solid var(--input-border-color, #444); border-radius: 5px; padding: 2px 5px;
+        font-size: 11px; box-sizing: border-box; min-width: 0; color-scheme: dark; height: 22px; outline: none;
+      }
+      .ter-ui input[type=text]:hover, .ter-ui input[type=password]:hover, .ter-ui input[type=number]:hover, .ter-ui input[type=time]:hover {
+        border-color: var(--input-hover-border-color, #666); box-shadow: var(--input-hover-box-shadow, 0 0 2px #ffffff40);
+      }
+      .ter-ui input[type=text]:focus, .ter-ui input[type=password]:focus, .ter-ui input[type=number]:focus, .ter-ui input[type=time]:focus {
+        border-color: var(--input-focus-border-color, #1864ab80); box-shadow: var(--input-focus-box-shadow, 0 0 2px #1c7ed6a6);
       }
       .ter-ui input[type=number] { width: 48px; }
-      .ter-ui button { background: #3a3a3a; color: #ddd; border: 1px solid #555; border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px; }
-      .ter-ui .ter-gear { display: flex; flex-direction: column; gap: 4px; padding: 4px; margin-bottom: 4px; border-radius: 4px; background: rgba(255,255,255,.05); }
+      .ter-ui button {
+        color: var(--btn-color, #eee); text-shadow: var(--btn-text-shadow, 0 0 5px #000);
+        background: var(--btn-background, linear-gradient(180deg, #111 0%, #555 25%, #333 60%, #333 78%, #111 100%));
+        border: var(--btn-border, 1px solid #111); border-radius: 5px; padding: 0 10px; height: 22px;
+        font-size: 11px; font-weight: bold; text-transform: uppercase; cursor: pointer;
+      }
+      .ter-ui button:hover {
+        color: var(--btn-hover-color, #fff); text-shadow: var(--btn-hover-text-shadow, 0 0 5px #ffffff40);
+        background: var(--btn-hover-background, linear-gradient(180deg, #333 0%, #777 25%, #333 59%, #666 78%, #333 100%));
+      }
+      .ter-ui button:active {
+        color: var(--btn-active-color, #ddd); background: var(--btn-active-background, linear-gradient(180deg, #000 0%, #333 100%));
+        box-shadow: var(--btn-active-box-shadow, inset 0 -1px 0 #ffffff12);
+      }
+      .ter-ui .ter-gear { display: flex; flex-direction: column; gap: 5px; padding: 6px; margin-bottom: 4px; background: var(--default-bg-panel-color, #333); }
       .ter-ui .ter-gear label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
       .ter-ui .ter-gear input[type=password], .ter-ui .ter-gear input[type=text] { flex: 1; }
-      .ter-ui .ter-tag { font-size: 10px; color: #bbb; background: #444; border-radius: 3px; padding: 0 4px; white-space: nowrap; }
-      .ter-ui .ter-sw { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #555; }
+      .ter-ui .ter-tag { font-size: 10px; color: var(--default-full-text-color, #ccc); background: var(--default-bg-gray-color, rgba(221,221,221,.15)); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
+      .ter-ui .ter-sw { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--default-gray-e4-color, #444); }
       .ter-ui .ter-red-bg { background: ${COLOR.red}; }
       .ter-ui .ter-orange-bg { background: ${COLOR.orange}; }
       .ter-ui .ter-green-bg { background: ${COLOR.green}; }
-      .ter-ui .ter-muted { color: #888; }
+      .ter-ui .ter-muted { color: var(--default-content-title-color, #999); }
       .ter-ui .ter-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-      .ter-ui .ter-key { display: flex; flex-direction: column; gap: 4px; }
+      .ter-ui .ter-key { display: flex; flex-direction: column; gap: 5px; }
       .ter-ui .ter-key input[type=password] { flex: 1; }
-      .ter-ui code { color: #eee; }
-      .ter-ui .ter-hr { border: 0; border-top: 1px solid rgba(255,255,255,.15); margin: 2px 0; width: 100%; height: 0; }
-      .ter-ui .ter-err { color: #ff7b72; }
+      .ter-ui code { color: var(--default-color, #ddd); }
+      .ter-ui .ter-hr { border: 0; height: 0; width: 100%; margin: 2px 0; border-top: 1px solid var(--divider-dark-color, #222); border-bottom: 1px solid var(--divider-light-color, #474747); }
+      .ter-ui .ter-err { color: var(--default-red-color, #e54c19); }
     `;
     const style = document.createElement('style');
     style.id = 'ter-style';
