@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.14
+// @version      1.0.15
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -634,25 +634,75 @@
     return { id: null, name: '', allDay: true, from: today, to: today, fromT: '', toT: '', err: '' };
   }
 
+  const ICON_CAL = '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M4 0h2v2h4V0h2v2h2.5c.8 0 1.5.7 1.5 1.5v11c0 .8-.7 1.5-1.5 1.5h-13C.7 16 0 15.3 0 14.5v-11C0 2.7.7 2 1.5 2H4V0Zm-2 6v8h12V6H2Zm2 2h2v2H4V8Zm3 0h2v2H7V8Zm3 0h2v2h-2V8Zm-6 3h2v2H4v-2Zm3 0h2v2H7v-2Z"/></svg>';
+  const ICON_CLOCK = '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2Zm-1 2h2v3.6l2.7 2.7-1.4 1.4L7 8.4V4Z"/></svg>';
+  const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+
+  // Themed pickers, drawn under the row of the field they belong to.
+  function datePickerHtml(c) {
+    const p = ui.pick;
+    const sel = parseDate(ui.form[c]);
+    const today = Math.floor(now() / DAY) * DAY;
+    const first = Date.UTC(p.y, p.m, 1) / 1000;
+    const lead = (new Date(first * 1000).getUTCDay() + 6) % 7; // Monday first
+    const days = new Date(Date.UTC(p.y, p.m + 1, 0)).getUTCDate();
+    let cells = '';
+    for (let i = 0; i < lead; i++) cells += '<span></span>';
+    for (let d = 1; d <= days; d++) {
+      const t = first + (d - 1) * DAY;
+      cells += `<a href="#" data-act="p-day" data-v="${t}" class="${t === sel ? 'sel' : ''}${t === today ? ' today' : ''}">${d}</a>`;
+    }
+    return `
+      <div class="ter-pick">
+        <div class="ter-pick-head"><a href="#" data-act="p-prev">‹</a><b>${MONTHS[p.m]} ${p.y}</b><a href="#" data-act="p-next">›</a></div>
+        <div class="ter-cal">${WEEKDAYS.map((w) => `<i>${w}</i>`).join('')}${cells}</div>
+      </div>`;
+  }
+
+  function timePickerHtml(c) {
+    const cur = parseTime(ui.form[c]);
+    const h = ui.pick.h != null ? ui.pick.h : cur != null ? Math.floor(cur / HOUR) : null;
+    const mins = cur != null && ui.pick.h == null ? Math.floor((cur % HOUR) / 60) : null;
+    let hours = '';
+    for (let i = 0; i < 24; i++) hours += `<a href="#" data-act="p-hour" data-v="${i}" class="${i === h ? 'sel' : ''}">${pad2(i)}</a>`;
+    let minutes = '';
+    for (let i = 0; i < 60; i += 5) minutes += `<a href="#" data-act="p-min" data-v="${i}" class="${i === mins ? 'sel' : ''}">:${pad2(i)}</a>`;
+    return `
+      <div class="ter-pick">
+        <div class="ter-muted">Hour</div><div class="ter-grid6">${hours}</div>
+        <div class="ter-muted">Minute</div><div class="ter-grid6">${minutes}</div>
+      </div>`;
+  }
+
   function formHtml() {
     const f = ui.form;
-    if (!f) return '<div class="ter-foot"><a href="#" data-act="c-add">+ Add your own reminder</a></div>';
+    if (!f) return '<div class="ter-foot"><a href="#" data-act="c-add">+ Add custom event</a></div>';
+    const open = (c) => ui.pick && ui.pick.c === c;
     const field = (c, ph, cls = '') => `<input type="text" class="${cls}" data-c="${c}" value="${esc(f[c])}" placeholder="${ph}" autocomplete="off" spellcheck="false">`;
+    const date = (c) => `<span class="ter-fld">${field(c, 'DD/MM/YY', 'ter-date')}<a href="#" class="ter-fico${open(c) ? ' on' : ''}" data-act="p-open" data-c="${c}" title="Pick a date">${ICON_CAL}</a></span>`;
+    const time = (c) => `<span class="ter-fld">${field(c, 'HH:MM', 'ter-tm')}<a href="#" class="ter-fico${open(c) ? ' on' : ''}" data-act="p-open" data-c="${c}" title="Pick a time">${ICON_CLOCK}</a></span>`;
+    const picker = (cs) => {
+      const c = cs.find(open);
+      if (!c) return '';
+      return /T$/.test(c) ? timePickerHtml(c) : datePickerHtml(c);
+    };
     return `
       <div class="ter-form">
-        ${field('name', 'Reminder name', 'ter-cname')}
+        <div class="ter-ftitle">${f.id ? 'Edit custom event' : 'Add custom event'}</div>
+        ${field('name', 'Event name', 'ter-cname')}
         <div class="ter-seg">
           <button data-act="c-allday" class="${f.allDay ? 'on' : ''}">All day</button><button data-act="c-custom" class="${f.allDay ? '' : 'on'}">Custom time</button>
         </div>
         ${f.allDay
-          ? `<div class="ter-row"><span class="ter-lbl">Day</span>${field('from', 'DD/MM/YY', 'ter-date')}</div>`
-          : `<div class="ter-row"><span class="ter-lbl">From</span>${field('from', 'DD/MM/YY', 'ter-date')}${field('fromT', 'HH:MM', 'ter-tm')}</div>
-        <div class="ter-row"><span class="ter-lbl">To</span>${field('to', 'DD/MM/YY', 'ter-date')}${field('toT', 'HH:MM', 'ter-tm')}</div>`}
+          ? `<div class="ter-row"><span class="ter-lbl">Day</span>${date('from')}</div>${picker(['from'])}`
+          : `<div class="ter-row"><span class="ter-lbl">From</span>${date('from')}${time('fromT')}</div>${picker(['from', 'fromT'])}
+        <div class="ter-row"><span class="ter-lbl">To</span>${date('to')}${time('toT')}</div>${picker(['to', 'toT'])}`}
         <div class="ter-muted">Times in TCT.</div>
         ${f.err ? `<div class="ter-err">${esc(f.err)}</div>` : ''}
         <div class="ter-row ter-right-row"><button data-act="c-cancel">Cancel</button><button data-act="c-save">${f.id ? 'Save' : 'Add'}</button></div>
       </div>`;
   }
+
 
   function saveForm() {
     const f = ui.form;
@@ -798,15 +848,41 @@
       else { tryKey(v); return; }
     } else if (act === 'key-remove') { saveKey(''); ui.keyMsg = 'Key removed.'; ui.keyErr = false; }
     else if (act === 'autostart') { S.startSource = ''; saveSettings(); refreshFromApi(true); }
-    else if (act === 'c-add') ui.form = newForm();
-    else if (act === 'c-edit') ui.form = newForm(EV[el.dataset.id]);
+    else if (act === 'c-add') { ui.form = newForm(); ui.pick = null; }
+    else if (act === 'c-edit') { ui.form = newForm(EV[el.dataset.id]); ui.pick = null; }
     else if (act === 'c-del') { delete EV[el.dataset.id]; if (ui.form && ui.form.id === el.dataset.id) ui.form = null; saveEvents(); update(); }
-    else if (act === 'c-cancel') ui.form = null;
-    else if (act === 'c-allday' || act === 'c-custom' || act === 'c-save') {
+    else if (act === 'c-cancel') { ui.form = null; ui.pick = null; }
+    else if (act === 'c-allday' || act === 'c-custom' || act === 'c-save' || act.startsWith('p-')) {
       // Typed values that have not fired a change event yet.
-      el.closest('.ter-form').querySelectorAll('[data-c]').forEach((i) => { ui.form[i.dataset.c] = i.value; });
-      if (act === 'c-save') saveForm();
-      else ui.form.allDay = act === 'c-allday';
+      el.closest('.ter-form').querySelectorAll('input[data-c]').forEach((i) => { ui.form[i.dataset.c] = i.value; });
+      if (act === 'c-save') { ui.pick = null; saveForm(); }
+      else if (act === 'c-allday' || act === 'c-custom') { ui.pick = null; ui.form.allDay = act === 'c-allday'; }
+      else if (act === 'p-open') {
+        const c = el.dataset.c;
+        if (ui.pick && ui.pick.c === c) ui.pick = null;
+        else {
+          const d = new Date((parseDate(ui.form[c]) ?? now()) * 1000);
+          ui.pick = { c, y: d.getUTCFullYear(), m: d.getUTCMonth(), h: null };
+        }
+      } else if (act === 'p-prev' || act === 'p-next') {
+        const m = ui.pick.m + (act === 'p-next' ? 1 : -1);
+        ui.pick.y += Math.floor(m / 12);
+        ui.pick.m = (m + 12) % 12;
+      } else if (act === 'p-day') {
+        ui.form[ui.pick.c] = dateText(+el.dataset.v);
+        // Keep the end on or after a newly picked start.
+        if (ui.pick.c === 'from' && !((parseDate(ui.form.to) ?? 0) >= +el.dataset.v)) ui.form.to = ui.form.from;
+        ui.pick = null;
+      } else if (act === 'p-hour') {
+        ui.pick.h = +el.dataset.v;
+        const cur = parseTime(ui.form[ui.pick.c]);
+        ui.form[ui.pick.c] = `${pad2(ui.pick.h)}:${pad2(cur != null ? Math.floor((cur % HOUR) / 60) : 0)}`;
+      } else if (act === 'p-min') {
+        const cur = parseTime(ui.form[ui.pick.c]);
+        const h = ui.pick.h != null ? ui.pick.h : cur != null ? Math.floor(cur / HOUR) : 0;
+        ui.form[ui.pick.c] = `${pad2(h)}:${pad2(+el.dataset.v)}`;
+        ui.pick = null;
+      }
     }
     else return;
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -955,6 +1031,24 @@
         color: var(--btn-active-color, #ddd); background: var(--btn-active-background, linear-gradient(180deg, #000 0%, #333 100%));
         box-shadow: var(--btn-active-box-shadow, inset 0 -1px 0 #ffffff12);
       }
+      .ter-ui .ter-ftitle { font-weight: bold; color: var(--default-color, #ddd); }
+      .ter-ui .ter-fld { position: relative; display: inline-flex; align-items: center; }
+      .ter-ui .ter-fld input { padding-right: 20px !important; }
+      .ter-ui .ter-fico { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); display: flex; color: var(--default-content-title-color, #999); }
+      .ter-ui .ter-fico:hover, .ter-ui .ter-fico.on { color: var(--default-white-color, #fff); }
+      .ter-ui .ter-form input.ter-date { width: 86px; }
+      .ter-ui .ter-form input.ter-tm { width: 64px; }
+      .ter-ui .ter-pick { background: var(--default-bg-panel-active-color, #444); border: 1px solid var(--divider-dark-color, #222); border-radius: 5px; padding: 5px; display: flex; flex-direction: column; gap: 3px; }
+      .ter-ui .ter-pick-head { display: flex; justify-content: space-between; align-items: center; }
+      .ter-ui .ter-pick-head a { padding: 0 6px; font-size: 14px; color: var(--default-color, #ddd); }
+      .ter-ui .ter-cal, .ter-ui .ter-grid6 { display: grid; gap: 2px; text-align: center; }
+      .ter-ui .ter-cal { grid-template-columns: repeat(7, 1fr); }
+      .ter-ui .ter-grid6 { grid-template-columns: repeat(6, 1fr); }
+      .ter-ui .ter-cal i { font-style: normal; color: var(--default-content-title-color, #999); font-size: 10px; }
+      .ter-ui .ter-cal a, .ter-ui .ter-grid6 a { color: var(--default-color, #ddd); border-radius: 3px; padding: 2px 0; }
+      .ter-ui .ter-cal a:hover, .ter-ui .ter-grid6 a:hover { background: var(--default-bg-panel-color, #333); color: var(--default-white-color, #fff); }
+      .ter-ui .ter-cal a.today { box-shadow: inset 0 0 0 1px var(--default-content-title-color, #999); }
+      .ter-ui .ter-cal a.sel, .ter-ui .ter-grid6 a.sel { background: var(--default-blue-dark-color, #00a9f9); color: #fff; }
       .ter-ui .ter-err { color: var(--default-red-color, #e54c19); }
     `;
     const style = document.createElement('style');

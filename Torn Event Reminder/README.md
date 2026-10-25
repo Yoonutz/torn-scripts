@@ -42,8 +42,8 @@ still running stay in the list, marked *from Oct* etc. Hover a line for full tim
 
 ### Your own reminders
 
-**+ Add your own reminder** under the list: a name, then **All day** (pick one date) or
-**Custom time** (from and to, date and time, TCT). They get the same red / orange / green
+**+ Add custom event** under the list: a name, then **All day** (pick one date) or
+**Custom time** (from and to, date and time, TCT). The calendar and clock icons open themed pickers. They get the same red / orange / green
 reminders and show in the list with ✎ edit and ✕ delete.
 
 Settings are stored in this browser only.
