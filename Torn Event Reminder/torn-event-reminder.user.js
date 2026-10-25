@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.4
+// @version      1.0.5
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -680,7 +680,7 @@
     else if (act === 'refresh') refreshFromApi(true);
     else if (act === 'key-set' || act === 'key-change') {
       ui.keyMsg = '';
-      const list = act === 'key-set' ? scanForKeys().filter((k) => k.key !== apiKey()) : [];
+      const list = scanForKeys().filter((k) => k.key !== apiKey());
       ui.key = list.length ? { step: 'found', list } : { step: 'new' };
     } else if (act === 'key-use') { tryKey(ui.key.list[+el.dataset.i].key); return; }
     else if (act === 'key-new') { ui.key = { step: 'new' }; ui.keyMsg = ''; }
