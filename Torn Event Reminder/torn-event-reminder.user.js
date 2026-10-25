@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.9
+// @version      1.0.10
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -763,6 +763,14 @@
       .ter-ui .ter-cog { color: var(--default-content-title-color, #999); font-size: 13px; }
       .ter-ui .ter-cog.on, .ter-ui .ter-cog:hover { color: var(--default-white-color, #fff); }
       .ter-ui .ter-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+      /* Torn's header dropdown scrollbar colors */
+      .ter-ui .ter-list {
+        scrollbar-width: thin;
+        scrollbar-color: var(--appheader-dropdown-list-scrollbar-thumb-color, #666) var(--appheader-dropdown-list-scrollbar-track-color, #222);
+      }
+      .ter-ui .ter-list::-webkit-scrollbar { width: 6px; }
+      .ter-ui .ter-list::-webkit-scrollbar-track { background: var(--appheader-dropdown-list-scrollbar-track-color, #222); border-radius: 3px; }
+      .ter-ui .ter-list::-webkit-scrollbar-thumb { background: var(--appheader-dropdown-list-scrollbar-thumb-color, #666); border-radius: 3px; }
       .ter-ui .ter-ev {
         display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 3px 5px;
         background: var(--default-bg-panel-color, #333); border-bottom: 1px solid var(--panel-border-bottom-color, #3b3b3b);
