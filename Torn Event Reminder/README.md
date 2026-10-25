@@ -6,7 +6,7 @@
   <img src="screenshot.png" alt="Torn Event reminder on desktop" width="720">
   <img src="screenshot-mobile.png" alt="Torn Event reminder on mobile" width="200">
 </p>
-<p align="center"><sub>Desktop and phone. Demo data.</sub></p>
+<p align="center"><sub>Desktop and phone, on the live Torn page. Avatar and key blurred.</sub></p>
 
 ## Features
 - **Colored clock.** Red, orange and green on Torn's own clock icon, with the next event under the time.

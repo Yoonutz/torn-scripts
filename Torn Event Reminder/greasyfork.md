@@ -3,7 +3,7 @@
 <a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Event%20Reminder/screenshot.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Event%20Reminder/screenshot.png" alt="Torn Event reminder on desktop" width="620"></a>
 <a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Event%20Reminder/screenshot-mobile.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Event%20Reminder/screenshot-mobile.png" alt="Torn Event reminder on a phone" width="190"></a>
 </center>
-<center><small>Desktop and phone. Demo data.</small></center>
+<center><small>Desktop and phone, on the live Torn page. Avatar and key blurred.</small></center>
 <h2>What it does</h2>
 <ul>
 <li><b>Colored clock.</b> Red, orange and green on Torn's own clock icon, with the next event under the time.</li>
