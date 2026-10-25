@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.15
-// @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
+// @version      1.0.16
+// @description  Colors Torn's header clock red, orange and green as calendar events approach and go live
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
