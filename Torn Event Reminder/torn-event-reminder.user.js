@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.10
+// @version      1.0.11
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -592,10 +592,10 @@
         ${isPda ? '' : keyHtml()}
         <div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>
         <hr class="ter-hr">
-        <label>Your start <input type="time" data-k="startTime" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
-        <label><span class="ter-sw ter-red-bg"></span>Red <input type="number" min="0" step="0.5" data-k="redHours" value="${S.redHours}"> h before</label>
-        <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="number" min="0" step="0.25" data-k="orangeHours" value="${S.orangeHours}"> h before</label>
-        <label><span class="ter-sw ter-green-bg"></span>Green <input type="number" min="0" step="0.5" data-k="greenHours" value="${S.greenHours}"> h, 0 = all event</label>
+        <label>Your start <input type="text" class="ter-num ter-time" data-k="startTime" data-kind="time" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
+        <label><span class="ter-sw ter-red-bg"></span>Red <input type="text" class="ter-num" data-k="redHours" data-kind="hours" inputmode="decimal" value="${S.redHours}"> h before</label>
+        <label><span class="ter-sw ter-orange-bg"></span>Orange <input type="text" class="ter-num" data-k="orangeHours" data-kind="hours" inputmode="decimal" value="${S.orangeHours}"> h before</label>
+        <label><span class="ter-sw ter-green-bg"></span>Green <input type="text" class="ter-num" data-k="greenHours" data-kind="hours" inputmode="decimal" value="${S.greenHours}"> h, 0 = all event</label>
         <label><input type="checkbox" data-k="showDot" ${S.showDot ? 'checked' : ''}> Dot on clock</label>
       </div>`;
   }
@@ -667,7 +667,12 @@
     if (k) {
       if (k === 'newkey') return; // saved by the Save button
       if (el.type === 'checkbox') S[k] = el.checked;
-      else if (el.type === 'number') S[k] = Math.max(0, parseFloat(el.value) || 0);
+      else if (el.dataset.kind === 'hours') S[k] = Math.max(0, parseFloat(String(el.value).replace(',', '.')) || 0);
+      else if (el.dataset.kind === 'time') {
+        const m = /^(\d{1,2})[:.h]?(\d{2})?$/.exec(el.value.trim());
+        if (el.value.trim() && (!m || +m[1] > 23 || +(m[2] || 0) > 59)) { renderUI(); return; } // invalid: put the old value back
+        S[k] = m ? `${m[1].padStart(2, '0')}:${m[2] || '00'}` : '';
+      }
       else S[k] = el.value.trim();
       if (k === 'startTime') S.startSource = S.startTime ? 'manual' : '';
       saveSettings();
@@ -780,21 +785,37 @@
       .ter-ui .ter-past { cursor: default; }
       .ter-ui .ter-past input[type=checkbox] { cursor: default; }
       .ter-ui .ter-past .ter-name, .ter-ui .ter-past .ter-when { text-decoration: line-through; }
-      .ter-ui input[type=checkbox] { margin: 0; width: 12px; height: 12px; flex: none; accent-color: var(--checkbox-bg-color, #aaa); cursor: pointer; }
+      /* Torn-style checkbox instead of the browser's */
+      .ter-ui input[type=checkbox] {
+        -webkit-appearance: none; appearance: none; position: relative; margin: 0; flex: none;
+        width: 12px; height: 12px; border-radius: 2px; cursor: pointer;
+        border: 1px solid var(--checkbox-border-color, #aaa); background: var(--input-background-color, #000);
+      }
+      .ter-ui input[type=checkbox]:hover { border-color: var(--checkbox-hover-border-color, #fff); }
+      .ter-ui input[type=checkbox]:checked::after {
+        content: ''; position: absolute; left: 3px; top: 0; width: 3px; height: 7px;
+        border: solid var(--checkbox-color, #ddd); border-width: 0 2px 2px 0; transform: rotate(45deg);
+      }
+      .ter-ui input[type=checkbox]:checked:hover::after { border-color: var(--checkbox-hover-color, #fff); }
+      .ter-ui input[type=checkbox]:disabled { border-color: var(--checkbox-disabled-border-color, #555); cursor: default; }
       .ter-ui .ter-name { font-weight: bold; color: var(--default-color, #ddd); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .ter-ui .ter-when { margin-left: auto; padding-left: 6px; color: var(--default-content-title-color, #999); white-space: nowrap; }
-      .ter-ui input[type=text], .ter-ui input[type=password], .ter-ui input[type=number], .ter-ui input[type=time] {
+      .ter-ui input[type=text], .ter-ui input[type=password] {
         color: var(--input-color, #fff); background: var(--input-background-color, linear-gradient(0deg, #111 0%, #000 100%));
         border: 1px solid var(--input-border-color, #444); border-radius: 5px; padding: 2px 5px;
-        font-size: 11px; box-sizing: border-box; min-width: 0; color-scheme: dark; height: 22px; outline: none;
+        font-size: 11px; box-sizing: border-box; min-width: 0; height: 22px; outline: none;
       }
-      .ter-ui input[type=text]:hover, .ter-ui input[type=password]:hover, .ter-ui input[type=number]:hover, .ter-ui input[type=time]:hover {
+      .ter-ui input[type=text]:hover, .ter-ui input[type=password]:hover:hover {
         border-color: var(--input-hover-border-color, #666); box-shadow: var(--input-hover-box-shadow, 0 0 2px #ffffff40);
       }
-      .ter-ui input[type=text]:focus, .ter-ui input[type=password]:focus, .ter-ui input[type=number]:focus, .ter-ui input[type=time]:focus {
+      .ter-ui input[type=text]:focus, .ter-ui input[type=password]:focus:focus {
         border-color: var(--input-focus-border-color, #1864ab80); box-shadow: var(--input-focus-box-shadow, 0 0 2px #1c7ed6a6);
       }
-      .ter-ui input[type=number] { width: 48px; }
+      .ter-ui .ter-gear input[type=text].ter-num { flex: none; width: 44px; text-align: center; }
+      .ter-ui .ter-gear input[type=text].ter-time { width: 52px; }
+      .ter-ui input::-ms-reveal, .ter-ui input::-ms-clear { display: none; }
+      .ter-ui input:-webkit-autofill { -webkit-text-fill-color: var(--input-color, #fff); box-shadow: 0 0 0 30px #000 inset; }
+      .ter-ui input::placeholder { color: var(--input-disabled-color, #666); }
       .ter-ui button {
         color: var(--btn-color, #eee); text-shadow: var(--btn-text-shadow, 0 0 5px #000);
         background: var(--btn-background, linear-gradient(180deg, #111 0%, #555 25%, #333 60%, #333 78%, #111 100%));
