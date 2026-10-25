@@ -195,7 +195,7 @@ async function syncedScripts(page) {
         const script = links.find((a) => /\/scripts\/\d+/.test(a.getAttribute('href') || ''));
         const sync = links.find((a) => /^https:\/\/(raw\.githubusercontent|github)\.com\//.test(a.href));
         if (!script || !sync) return null;
-        const type = (li.textContent.match(/\b(Webhook|Automatic|Manual)\b/) || [])[1] || '?';
+        const type = (li.textContent.match(/\b(Webhook|Automatic|Manual)\b/i) || [])[1] || li.textContent.replace(/\s+/g, ' ').trim();
         return { name: script.textContent.trim(), url: script.href, sync: sync.href, type };
       })
       .filter(Boolean),
@@ -211,7 +211,13 @@ async function ownListings(page) {
   );
 }
 
-const sameUrl = (a, b) => decodeURIComponent(a).replace(/\+/g, ' ') === decodeURIComponent(b).replace(/\+/g, ' ');
+// Greasy Fork accepts several URL forms for the same raw file; compare them in one form.
+const canonical = (u) =>
+  decodeURIComponent(u)
+    .replace(/\+/g, ' ')
+    .replace(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/raw\//, 'https://raw.githubusercontent.com/$1/$2/')
+    .replace(/(raw\.githubusercontent\.com\/[^/]+\/[^/]+\/)refs\/heads\//, '$1');
+const sameUrl = (a, b) => canonical(a) === canonical(b);
 
 async function webhookState(page) {
   const secret = (await page.locator('textarea[readonly]').count()) > 0;
