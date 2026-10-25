@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.7
+// @version      1.0.8
 // @description  Colors Torn's header clock as calendar events approach: red 1 day before, orange when soon, green while live. Reads your personal event start time from the API or the calendar page. Settings sit in a new row under the time in the clock dropdown.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -522,8 +522,8 @@
     const days = shortDate(start) === shortDate(end - 1) ? shortDate(start) : `${shortDate(start)}-${shortDate(end)}`;
     const tip = `${ev.desc ? ev.desc + '\n' : ''}${fmtTct(start)} until ${fmtTct(end)} TCT\n${when}`;
     return `
-      <label class="ter-ev${ev.enabled ? '' : ' ter-off'}${past ? ' ter-past' : ''}" data-id="${esc(ev.id)}" title="${esc(tip)}">
-        <input type="checkbox" data-f="enabled" ${ev.enabled ? 'checked' : ''}>
+      <label class="ter-ev${ev.enabled && !past ? '' : ' ter-off'}${past ? ' ter-past' : ''}" data-id="${esc(ev.id)}" title="${esc(tip)}">
+        <input type="checkbox" data-f="enabled" ${ev.enabled && !past ? 'checked' : ''}${past ? ' disabled' : ''}>
         <span class="ter-sw${st ? ' ter-' + st + '-bg' : ''}"></span>
         <span class="ter-name">${esc(ev.title)}</span>${from}
         <span class="ter-when">${days}</span>
@@ -759,6 +759,8 @@
       }
       .ter-ui .ter-ev:hover { background: var(--default-bg-panel-active-color, #444); }
       .ter-ui .ter-off { opacity: .5; }
+      .ter-ui .ter-past { cursor: default; }
+      .ter-ui .ter-past input[type=checkbox] { cursor: default; }
       .ter-ui .ter-past .ter-name, .ter-ui .ter-past .ter-when { text-decoration: line-through; }
       .ter-ui input[type=checkbox] { margin: 0; width: 12px; height: 12px; flex: none; accent-color: var(--checkbox-bg-color, #aaa); cursor: pointer; }
       .ter-ui .ter-name { font-weight: bold; color: var(--default-color, #ddd); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
