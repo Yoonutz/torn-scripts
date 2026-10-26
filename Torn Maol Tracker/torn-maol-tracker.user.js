@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.1
+// @version      1.0.2
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -307,9 +307,41 @@
         <div class="tmt-foot"><span>${err ? '⚠ ' + esc(err) : 'Updated ' + tct(D.t) + ' TCT'}</span>
           ${IS_PDA ? '' : '<a href="#" data-act="forget-key">change key</a>'}</div>`;
     }
+    const docked = !!btnHost && btnHost.isConnected;
+    root.classList.toggle('tmt-docked', docked);
     root.innerHTML = `
-      <div class="tmt-head" data-act="toggle"><span>M'aol</span><span class="tmt-pill">${D ? pill() : ''}</span><span class="tmt-caret">${UI.open ? '▾' : '▸'}</span></div>
+      <div class="tmt-head" data-act="toggle"><span>M'aol</span><span class="tmt-pill">${D ? pill() : ''}</span><span class="tmt-caret">${docked ? '✕' : UI.open ? '▾' : '▸'}</span></div>
       ${UI.open ? `<div class="tmt-body">${body}</div>` : ''}`;
+    root.style.display = docked && !UI.open ? 'none' : '';
+    if (docked) {
+      const b = btnHost.getBoundingClientRect();
+      root.style.top = `${Math.round(b.bottom + 4)}px`;
+      root.style.left = `${Math.round(Math.max(10, Math.min(b.right - 300, window.innerWidth - 310)))}px`;
+      const dot = btnHost.querySelector('.tmt-dot');
+      const lvl = !D ? '' : advice().some((x) => x.c === 'go') ? 'go' : pill() === 'dormant' ? '' : 'warn';
+      dot.className = `tmt-dot ${lvl}`;
+      btnHost.querySelector('button').title = D ? `M'aol: ${pill()}` : "M'aol tracker";
+    }
+  }
+
+  // ------------------------------------------------------------- header button
+  // Torn's header toolbar: <ul class="toolbar"><li class="find-wrapper">(search)</li>...
+  // The button sits just left of the search magnifier and opens the panel as a dropdown.
+  const ICON = '<svg width="24" height="25" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 3c-3.9 0-7 2.9-7 6.6 0 2 1 3.8 2.5 5-.3 1.5-1.2 2.8-2.5 3.6.9.5 2.4.4 3.6-.6.3 1.4.1 2.7-.6 3.9 1.4-.2 2.6-1.3 3.1-2.8.4.9.4 2-.1 2.9 1.2-.4 2-1.5 2.1-2.8.5.9 1.4 1.6 2.5 1.8-.6-1.1-.8-2.4-.5-3.6 1 .9 2.3 1.3 3.5 1-1.2-.8-2-2.1-2.3-3.5C19 13.4 19 11.6 19 9.6 19 5.9 15.9 3 12 3Zm-3 5.2a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Zm6 0a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Z"/></svg>';
+  let btnHost = null;
+  function mountButton() {
+    if (btnHost && btnHost.isConnected) return;
+    const find = document.querySelector('ul.toolbar > li.find-wrapper');
+    if (!find) return;
+    btnHost = document.createElement('li');
+    btnHost.className = 'tmt-host';
+    btnHost.innerHTML = `<button type="button" class="top_header_button button" aria-label="Open M'aol tracker">${ICON}</button><span class="tmt-dot"></span>`;
+    btnHost.querySelector('button').addEventListener('click', (e) => {
+      e.stopPropagation();
+      UI.open = !UI.open; saveUi(); render();
+    });
+    find.parentNode.insertBefore(btnHost, find);
+    render();
   }
 
   function pill() {
@@ -335,6 +367,12 @@
   function css() {
     const s = document.createElement('style');
     s.textContent = `
+      .tmt-host { position: relative; }
+      .tmt-host .tmt-dot { position: absolute; top: 9px; right: 4px; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; display: none;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+      .tmt-host .tmt-dot.go { display: block; background: var(--default-green-color, #82c91e); }
+      .tmt-host .tmt-dot.warn { display: block; background: var(--default-orange-color, #f08c00); }
+      #tmt.tmt-docked { bottom: auto; }
       #tmt { position: fixed; left: 10px; bottom: 10px; z-index: 99999; width: 300px; max-width: calc(100vw - 20px);
         font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: dark;
         background: var(--default-bg-panel-color, #333); border-radius: 5px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
@@ -384,6 +422,15 @@
     root.id = 'tmt';
     root.addEventListener('click', onClick);
     document.body.appendChild(root);
+    // Close the dropdown like Torn's own: click outside or Escape.
+    document.addEventListener('click', (e) => {
+      if (UI.open && btnHost?.isConnected && !root.contains(e.target) && !btnHost.contains(e.target)) { UI.open = false; saveUi(); render(); }
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && UI.open && btnHost?.isConnected) { UI.open = false; saveUi(); render(); } });
+    window.addEventListener('resize', () => { if (UI.open) render(); });
+    // Torn re-renders its header on some pages: put the button back when it goes missing.
+    new MutationObserver(() => { if (!btnHost || !btnHost.isConnected) mountButton(); }).observe(document.body, { childList: true, subtree: true });
+    mountButton();
     render();
     refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 15 * 1000);
