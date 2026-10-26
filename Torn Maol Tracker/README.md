@@ -4,10 +4,10 @@
 A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 
 <p align="center">
-  <img src="screenshot.png" alt="Torn M'aol tracker on desktop" width="720">
-  <img src="screenshot-mobile.png" alt="Torn M'aol tracker on mobile" width="200">
+  <img src="screenshot.png" alt="Torn M'aol tracker on desktop" width="300">
+  <img src="screenshot-mobile.png" alt="Torn M'aol tracker on mobile" width="300">
 </p>
-<p align="center"><sub>Desktop and phone. Demo numbers, mocked API.</sub></p>
+<p align="center"><sub>Desktop and phone, replaying 26 Oct 2026 at 15:53: M'aol is coming to Mexico.</sub></p>
 
 ## Features
 - **Header button.** Next to the binoculars on desktop, left of the magnifier on phones. Red while M'aol is summoned. Green dot: something to do now. Orange: action on, nothing reachable.

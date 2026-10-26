@@ -1,9 +1,9 @@
 <p><b>Where are M'aol's Praetorians, can you still reach them, and what should you do next?</b> A button in Torn's header shows all six Halloween NPCs live, with flight times for your own travel perks.</p>
 <center>
-<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot.png" alt="Torn M'aol tracker on desktop" width="620"></a>
-<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot-mobile.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot-mobile.png" alt="Torn M'aol tracker on a phone" width="190"></a>
+<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot.png" alt="Torn M'aol tracker on desktop" width="300"></a>
+<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot-mobile.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Maol%20Tracker/screenshot-mobile.png" alt="Torn M'aol tracker on a phone" width="300"></a>
 </center>
-<center><small>Desktop and phone. Demo numbers.</small></center>
+<center><small>Desktop and phone, replaying the 2026 event.</small></center>
 <h2>What it does</h2>
 <ul>
 <li><b>Header button.</b> Next to the binoculars (left of the magnifier on phones), red while M'aol is summoned. Green dot: something to do now. Orange: action on, nothing reachable.</li>
