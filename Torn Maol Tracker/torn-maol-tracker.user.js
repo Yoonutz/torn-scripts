@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.13
+// @version      1.0.14
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -334,7 +334,10 @@
     if (docked) {
       const b = btnHost.getBoundingClientRect();
       root.style.top = `${Math.round(b.bottom + 4)}px`;
-      root.style.left = `${Math.round(Math.max(10, Math.min(b.right - 300, window.innerWidth - 310)))}px`;
+      // Phones: full width under the header, so rows don't wrap.
+      const narrow = window.innerWidth < 500;
+      root.style.width = narrow ? `${window.innerWidth - 20}px` : '';
+      root.style.left = narrow ? '10px' : `${Math.round(Math.max(10, Math.min(b.right - 300, window.innerWidth - 310)))}px`;
       const dot = btnHost.querySelector('.tmt-dot');
       const lvl = !D ? '' : advice().some((x) => x.c === 'go') ? 'go' : pill() === 'dormant' ? '' : 'warn';
       dot.className = `tmt-dot ${lvl}`;
