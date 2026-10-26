@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.8
+// @version      1.0.9
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -368,10 +368,11 @@
   }
 
   // Desktop search row holds two boxes side by side (search, "Forum posts").
-  // Torn lays the toolbar out at fixed spots, so each box gives up the button's full width.
+  // Torn anchors the boxes on the right, so they shrink from the left: shrink both by the
+  // button's width in total, then slide the whole row left by that width so it clears the button.
   let shrunk = [];
   function restoreRoom() {
-    shrunk.forEach(({ el, w, mw, fl }) => { el.style.width = w; el.style.minWidth = mw; el.style.flex = fl; });
+    shrunk.forEach(({ el, w, mw, fl, tf }) => { el.style.width = w; el.style.minWidth = mw; el.style.flex = fl; if (tf !== undefined) el.style.transform = tf; });
     shrunk = [];
   }
   function makeRoom(find) {
@@ -385,7 +386,9 @@
       if (kids.length >= 2) row = { el, kids };
     });
     if (!row) return;
-    const each = need;
+    const each = Math.ceil(need / row.kids.length);
+    shrunk.push({ el: find, w: find.style.width, mw: find.style.minWidth, fl: find.style.flex, tf: find.style.transform });
+    find.style.transform = `translateX(-${need}px)`;
     row.kids.forEach((el) => {
       const w = el.getBoundingClientRect().width;
       shrunk.push({ el, w: el.style.width, mw: el.style.minWidth, fl: el.style.flex });
