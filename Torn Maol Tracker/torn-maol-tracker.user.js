@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.14
+// @version      1.0.15
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -121,11 +121,11 @@
   }
   // You can only fly Torn <-> abroad, so going from one country to another means flying home first.
   function tripMin(me, country, method) {
-    if (me.where === country) return 0;
+    const wait = me.busyUntil ? Math.max(0, (me.busyUntil - now()) / 60) : 0;
+    if (me.where === country) return wait;
     let t = flightMin(country, method);
     if (me.where && me.where !== 'Torn') t += flightMin(me.where, method);
-    if (me.busyUntil) t += Math.max(0, (me.busyUntil - now()) / 60);
-    return t;
+    return t + wait;
   }
 
   // ------------------------------------------------------------- data
@@ -290,10 +290,11 @@
     const where = n.country || (n.id === MAOL.id ? (n.state === 'Awoken' ? 'Awoken' : 'Dormant') : '?');
     const sub = dead ? (ST.deaths[n.id] ? `down ${tct(ST.deaths[n.id].t)}` : 'down')
       : isFinite(eta) ? `~${fmtMin(eta)} left` : '';
-    const trip = D && n.country && !dead ? fmtMin(tripMin(D.me, n.country, bestMethod())) : '';
+    const tm = D && n.country && !dead ? tripMin(D.me, n.country, bestMethod()) : null;
+    const trip = tm == null ? '' : tm < 1 && D.me.where === n.country ? 'here' : fmtMin(tm);
     return `<a class="tmt-row${dead ? ' tmt-dead' : ''}" href="https://www.torn.com/profiles.php?XID=${n.id}">
       <span class="tmt-name">${esc(n.name)}</span>
-      <span class="tmt-where">${esc(where)}${trip ? ` · ✈ ${trip}` : ''}</span>
+      <span class="tmt-where">${esc(where)}${trip ? ` · ${trip === 'here' ? 'you are here' : `✈ ${trip}`}` : ''}</span>
       <span class="tmt-hp"><i style="width:${pct.toFixed(1)}%"></i><b>${dead ? '0' : fmtHp(n.hp)} / ${fmtHp(n.max)}</b></span>
       <span class="tmt-sub">${esc(sub)}</span>
     </a>`;

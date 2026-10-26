@@ -33,4 +33,14 @@
 <li><b>Bond:</b> M'aol can't be hit until all 5 Praetorians fall, then he hops every 15 min through their countries in defeat order.</li>
 </ul>
 </details>
+<details>
+<summary><b>API key use (Torn API ToS)</b></summary>
+<ul>
+<li><b>Data storage:</b> only locally, in this browser.</li>
+<li><b>Data sharing:</b> nobody.</li>
+<li><b>Purpose of use:</b> personal M'aol and Praetorian tracking.</li>
+<li><b>Key storage and sharing:</b> stored locally, never shared.</li>
+<li><b>Key access level:</b> Minimal.</li>
+</ul>
+</details>
 <p>Source and issues: <a href="https://github.com/Yoonutz/torn-scripts/tree/main/Torn%20Maol%20Tracker">GitHub</a></p>

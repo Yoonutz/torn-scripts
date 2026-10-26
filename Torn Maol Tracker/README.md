@@ -40,4 +40,12 @@ Reads the Torn API with your own key, about 28 calls a minute only while a Torn 
 and a dropdown; never clicks, attacks or travels for you. Links take you to the attack or travel page, you act yourself.
 The key and the last snapshot stay in this browser's localStorage.
 
+| Torn API ToS | |
+| --- | --- |
+| Data storage | Only locally, in this browser |
+| Data sharing | Nobody |
+| Purpose of use | Personal M'aol and Praetorian tracking |
+| Key storage & sharing | Stored locally, never shared |
+| Key access level | Minimal |
+
 </details>
