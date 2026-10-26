@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.17
+// @version      1.0.18
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -352,9 +352,7 @@
     }
 
     if (maol.state === 'Dormant' && !alive.length) {
-      tips.push({ c: 'info', t: sleeping()
-        ? "M'aol and his Praetorians are dormant. The script sleeps until Halloween week (26 Oct): no API calls until then."
-        : "M'aol and his Praetorians are dormant. Checking M'aol once every 10 min in case someone summons him again." });
+      tips.push({ c: 'info', t: "M'aol and his Praetorians are dormant. Nothing to fight right now." });
       return tips;
     }
 
