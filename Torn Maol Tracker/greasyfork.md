@@ -6,7 +6,7 @@
 <center><small>Desktop and phone. Demo numbers.</small></center>
 <h2>What it does</h2>
 <ul>
-<li><b>Header button.</b> Left of Torn's search. Green dot: something to do now. Orange: action on, nothing reachable.</li>
+<li><b>Header button.</b> Next to the binoculars (left of the magnifier on phones), red while M'aol is summoned. Green dot: something to do now. Orange: action on, nothing reachable.</li>
 <li><b>All six NPCs.</b> Country, HP bar and time until each one falls, from the HP drop over the last 15 min.</li>
 <li><b>Your flight times.</b> Reads your airstrip, WLT and travel book perks, adds the trip home and any hospital, jail or flight time left.</li>
 <li><b>What to do next.</b> Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land, then M'aol's 15-minute route.</li>

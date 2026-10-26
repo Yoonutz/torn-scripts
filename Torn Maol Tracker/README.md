@@ -10,7 +10,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 <p align="center"><sub>Desktop and phone. Demo numbers, mocked API.</sub></p>
 
 ## Features
-- **Header button.** Sits left of Torn's search. Green dot: something to do now. Orange: action on, nothing reachable.
+- **Header button.** Next to the binoculars on desktop, left of the magnifier on phones. Red while M'aol is summoned. Green dot: something to do now. Orange: action on, nothing reachable.
 - **All six NPCs.** Country, HP bar and time until each one falls, from the HP drop over the last 15 min.
 - **Your flight times.** Reads your travel perks (airstrip, WLT, travel book), adds the trip home when you are abroad
   and any hospital, jail or flight you are still in. Toggle *business ticket* to see those times.

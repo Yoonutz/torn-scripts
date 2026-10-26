@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.5
+// @version      1.0.6
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -322,6 +322,8 @@
       const lvl = !D ? '' : advice().some((x) => x.c === 'go') ? 'go' : pill() === 'dormant' ? '' : 'warn';
       dot.className = `tmt-dot ${lvl}`;
       btnHost.querySelector('button').title = D ? `M'aol: ${pill()}` : "M'aol tracker";
+      // Red while M'aol is summoned (awake or his guards up), Torn's own grey when dormant.
+      btnHost.classList.toggle('tmt-live', !!D && (D.maol.state === 'Awoken' || D.guards.some((g) => g.state === 'Awoken')));
     }
   }
 
@@ -352,6 +354,18 @@
     }
   }
 
+  // Desktop shows a wide search box: sit right after it, next to the binoculars.
+  // Phone shows only a magnifier button: sit left of it.
+  function place() {
+    const find = document.querySelector('ul.toolbar > li.find-wrapper');
+    if (!find || !btnHost) return;
+    const wide = find.getBoundingClientRect().width > 80;
+    const ext = find.parentNode.querySelector(':scope > li.find-extend');
+    const before = wide && ext ? ext : find;
+    if (btnHost.nextElementSibling !== before) find.parentNode.insertBefore(btnHost, before);
+    matchNeighbour();
+  }
+
   // ------------------------------------------------------------- header button
   // Torn's header toolbar: <ul class="toolbar"><li class="find-wrapper">(search)</li>...
   // The button sits just left of the search magnifier and opens the panel as a dropdown.
@@ -368,8 +382,7 @@
       e.stopPropagation();
       UI.open = !UI.open; saveUi(); render();
     });
-    find.parentNode.insertBefore(btnHost, find);
-    matchNeighbour();
+    place();
     render();
   }
 
@@ -398,6 +411,7 @@
     s.textContent = `
       .tmt-host { position: relative; }
       .tmt-host button:hover svg { filter: brightness(1.6) !important; }
+      .tmt-host.tmt-live svg, .tmt-host.tmt-live svg path { fill: #e53935 !important; }
       .tmt-host .tmt-dot { position: absolute; top: 9px; right: 4px; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; display: none;
         box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
       .tmt-host .tmt-dot.go { display: block; background: var(--default-green-color, #82c91e); }
@@ -457,7 +471,7 @@
       if (UI.open && btnHost?.isConnected && !root.contains(e.target) && !btnHost.contains(e.target)) { UI.open = false; saveUi(); render(); }
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && UI.open && btnHost?.isConnected) { UI.open = false; saveUi(); render(); } });
-    window.addEventListener('resize', () => { if (UI.open) render(); });
+    window.addEventListener('resize', () => { place(); if (UI.open) render(); });
     // Torn re-renders its header on some pages: put the button back when it goes missing.
     new MutationObserver(() => { if (!btnHost || !btnHost.isConnected) mountButton(); }).observe(document.body, { childList: true, subtree: true });
     mountButton();
