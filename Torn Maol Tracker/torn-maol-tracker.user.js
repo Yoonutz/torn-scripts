@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.6
+// @version      1.0.7
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -364,6 +364,36 @@
     const before = wide && ext ? ext : find;
     if (btnHost.nextElementSibling !== before) find.parentNode.insertBefore(btnHost, before);
     matchNeighbour();
+    if (wide) makeRoom(find); else restoreRoom();
+  }
+
+  // Desktop search row holds two boxes side by side (search, "Forum posts").
+  // Give each half of the button's width back so the header keeps its old length.
+  let shrunk = [];
+  function restoreRoom() {
+    shrunk.forEach(({ el, w, mw, fl }) => { el.style.width = w; el.style.minWidth = mw; el.style.flex = fl; });
+    shrunk = [];
+  }
+  function makeRoom(find) {
+    restoreRoom();
+    const need = Math.ceil(btnHost.getBoundingClientRect().width);
+    if (!need) return;
+    // The deepest element whose visible children include two boxes wider than 80px.
+    let row = null;
+    find.querySelectorAll('*').forEach((el) => {
+      const kids = [...el.children].filter((c) => c.getBoundingClientRect().width > 80);
+      if (kids.length >= 2) row = { el, kids };
+    });
+    if (!row) return;
+    const each = Math.ceil(need / row.kids.length);
+    row.kids.forEach((el) => {
+      const w = el.getBoundingClientRect().width;
+      shrunk.push({ el, w: el.style.width, mw: el.style.minWidth, fl: el.style.flex });
+      el.style.minWidth = '0';
+      el.style.flex = '0 0 auto';
+      el.style.width = `${Math.round(w - each)}px`;
+      el.querySelectorAll('input').forEach((i) => { i.style.minWidth = '0'; i.style.maxWidth = '100%'; });
+    });
   }
 
   // ------------------------------------------------------------- header button
@@ -471,7 +501,7 @@
       if (UI.open && btnHost?.isConnected && !root.contains(e.target) && !btnHost.contains(e.target)) { UI.open = false; saveUi(); render(); }
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && UI.open && btnHost?.isConnected) { UI.open = false; saveUi(); render(); } });
-    window.addEventListener('resize', () => { place(); if (UI.open) render(); });
+    window.addEventListener('resize', () => { restoreRoom(); place(); if (UI.open) render(); });
     // Torn re-renders its header on some pages: put the button back when it goes missing.
     new MutationObserver(() => { if (!btnHost || !btnHost.isConnected) mountButton(); }).observe(document.body, { childList: true, subtree: true });
     mountButton();
