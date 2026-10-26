@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.0
+// @version      1.0.1
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -13,6 +13,7 @@
   'use strict';
 
   const POLL_S = 60;
+  const IDLE_POLL_S = 600;          // everything dormant: check every 10 min
   const PERKS_S = 6 * 3600;
   const RATE_WINDOW_S = 15 * 60;   // HP samples kept for the kill-rate estimate
   const HOP_MIN = 15;              // M'aol moves to the next defeat-order country every 15 min
@@ -141,15 +142,23 @@
 
   async function refresh() {
     if (!apiKey()) { render(); return; }
+    // Several Torn tabs share one snapshot: only the first tab due polls the API.
+    const fresh = load(K.state, {});
+    const dormant = fresh.snap && fresh.snap.maol.state === 'Dormant' && fresh.snap.guards.every((g) => g.state === 'Dormant');
+    if (fresh.snap && now() - fresh.snap.t < (dormant ? IDLE_POLL_S : POLL_S) - 5) {
+      ST = Object.assign(ST, fresh);
+      D = fresh.snap;
+      render();
+      return;
+    }
     try {
       const t = now();
       if (!ST.perks || t - ST.perksAt > PERKS_S) {
         ST.perks = (await tornApi('user/perks')).perks || null;
         ST.perksAt = t;
       }
-      const [meB, meT, ...npcs] = await Promise.all([
+      const [meB, ...npcs] = await Promise.all([
         tornApi('user/basic'),
-        tornApi('user/travel'),
         ...[MAOL, ...GUARDS].map((n) => tornApi(`user/${n.id}/profile`)),
       ]);
       const list = npcs.map((r, i) => {
@@ -173,7 +182,7 @@
         ST.samples[n.id] = arr;
       });
       const st = meB.profile?.status || {};
-      const tr = meT.travel || {};
+      const tr = st.state === 'Traveling' ? ((await tornApi('user/travel')).travel || {}) : {};
       const me = { state: st.state, desc: st.description || '', where: 'Torn', busyUntil: 0, landing: 0 };
       if (st.state === 'Abroad') me.where = countryOf(st.description);
       if (st.state === 'Traveling') {
@@ -187,6 +196,7 @@
         if (adj && DEMONYM[adj[1]]) me.where = DEMONYM[adj[1]];
       }
       D = { t, maol: list[0], guards: list.slice(1), me };
+      ST.snap = D;
       err = '';
       saveState();
     } catch (e) {
@@ -277,7 +287,7 @@
     const p = perkMethods(ST.perks);
     let body;
     if (!apiKey()) {
-      body = `<div class="tmt-key">Public API key needed to read the NPCs.<br>
+      body = `<div class="tmt-key">Minimal access API key needed (NPCs, your status, perks, travel).<br>
         <input id="tmt-key" maxlength="16" placeholder="16-character key" autocomplete="off">
         <a href="#" class="tmt-btn" data-act="save-key">Save</a></div>`;
     } else if (!D) {
@@ -376,7 +386,7 @@
     document.body.appendChild(root);
     render();
     refresh();
-    setInterval(() => { if (!document.hidden) refresh(); }, POLL_S * 1000);
+    setInterval(() => { if (!document.hidden) refresh(); }, 15 * 1000);
   }
 
   if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);

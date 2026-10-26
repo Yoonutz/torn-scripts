@@ -15,13 +15,14 @@ A small Torn-styled panel in the bottom-left corner of every Torn page.
 ## Install
 1. Get a userscript manager ([Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)).
 2. Install `torn-maol-tracker.user.js` from this folder.
-3. Paste a Public API key in the panel. Torn PDA fills it in by itself.
+3. Paste a Minimal access API key in the panel. Torn PDA fills it in by itself.
 
 <details><summary><b>How it works</b></summary>
 
 - NPC IDs: M'aol 23, Dyno'salam 100, Nol'dasaym 101, Asmol'yand 102, Sylo'nadam 103, Ladso'myna 104.
-- Polls `user/{id}/profile` for each, plus your own `user/basic` and `user/travel`, once a minute while the tab is visible.
-  `user/perks` every 6 h.
+- API use: 7 calls a minute (`user/{id}/profile` for the six NPCs, your `user/basic`), +1 `user/travel` only while you fly,
+  `user/perks` every 6 h. About 7% of Torn's 100/min key limit. Only while a Torn tab is visible, shared across tabs,
+  and once every 10 min when everything is dormant.
 - Flight times: standard minutes from the [wiki](https://wiki.torn.com/wiki/Travel), airstrip ×0.7, WLT ×0.5,
   business ×0.3, travel book ×0.75. Real flights vary about 3%.
 - Defeat order is only known for guards the script saw die. Earlier ones: [tornstats.com/maol](https://www.tornstats.com/maol).
