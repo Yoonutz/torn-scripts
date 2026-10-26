@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.15
+// @version      1.0.16
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -12,11 +12,13 @@
 (function () {
   'use strict';
 
-  const POLL_S = 15;               // 7 calls each: 28 of Torn's 100 calls/min per key
-  const IDLE_POLL_S = 600;          // everything dormant: check every 10 min
+  const POLL_S = 15;               // you + live NPCs: at most 7 calls, 28 of Torn's 100 calls/min per key
+  const IDLE_POLL_S = 600;          // dead NPCs, or M'aol alone while everything sleeps: every 10 min
   const PERKS_S = 6 * 3600;
-  const RATE_WINDOW_S = 15 * 60;   // HP samples kept for the kill-rate estimate
-  const HOP_MIN = 15;              // M'aol moves to the next defeat-order country every 15 min
+  const RATE_WINDOW_S = 15 * 60;   // HP samples kept
+  const ETA_WINDOW_S = 5 * 60;     // kill rate from the last 5 min: damage speeds up as guards fall
+  const SHIELD_PCT = 0.05;         // below 5% HP M'aol's shield slows the kill too much to extrapolate
+  const HOP_S = 15 * 60;           // M'aol moves on every quarter hour (:00 :15 :30 :45 TCT)
 
   const K = { key: 'tmt.apikey', state: 'tmt.state', ui: 'tmt.ui' };
   const PDA_KEY_PLACEHOLDER = '###' + 'PDA-APIKEY' + '###';
@@ -44,6 +46,7 @@
     Mexican: 'Mexico', Caymanian: 'Cayman Islands', Canadian: 'Canada', Hawaiian: 'Hawaii', British: 'United Kingdom',
     Argentinian: 'Argentina', Swiss: 'Switzerland', Japanese: 'Japan', Chinese: 'China', Emirati: 'UAE', 'South African': 'South Africa',
   };
+  const SHORT = { 'Cayman Islands': 'Cayman', 'United Kingdom': 'UK', 'South Africa': 'S. Africa' };
   const METHOD = { standard: 1, airstrip: 0.7, wlt: 0.5, business: 0.3 };
   const METHOD_NAME = { standard: 'Standard', airstrip: 'Airstrip', wlt: 'WLT jet', business: 'Business ticket' };
 
@@ -55,8 +58,9 @@
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage full or blocked */ }
   }
 
-  // samples: { id: [[t, hp], ...] }, deaths: { id: { t, country } }, perks: {...}
-  let ST = Object.assign({ samples: {}, deaths: {}, perks: null, perksAt: 0 }, load(K.state, {}));
+  // samples: { id: [[t, hp], ...] }, deaths: { id: { t, country } }, hops: [[t, country], ...] (M'aol's moves),
+  // polled: { id: t }, perks: {...}, snap: last snapshot
+  let ST = Object.assign({ samples: {}, deaths: {}, hops: [], polled: {}, perks: null, perksAt: 0 }, load(K.state, {}));
   let UI = Object.assign({ open: true, biz: false }, load(K.ui, {}));
   const saveState = () => store(K.state, ST);
   const saveUi = () => store(K.ui, UI);
@@ -70,7 +74,9 @@
     return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`;
   };
   const fmtHp = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(0) + 'k' : String(n));
-  const tct = (t) => new Date(t * 1000).toISOString().slice(11, 16);
+  // Times show in the viewer's own clock; TCT is UTC.
+  const hm = (t) => { const d = new Date(t * 1000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const tzLabel = () => { const o = -new Date().getTimezoneOffset() / 60; return o ? `TCT${o > 0 ? '+' : ''}${o}` : 'TCT'; };
 
   // ------------------------------------------------------------- Torn API
   async function tornApi(path) {
@@ -93,7 +99,7 @@
   }
 
   function countryOf(desc) {
-    const m = /(?:in|to|from)\s+([A-Z][A-Za-z ]+?)\s*$/.exec(String(desc || '').trim());
+    const m = /(?:[Ii]n|[Tt]o|[Ff]rom)\s+([A-Z][A-Za-z ]+?)\s*$/.exec(String(desc || '').trim());
     if (!m) return null;
     const c = ALIAS[m[1]] || m[1];
     return FLIGHT[c] ? c : null;
@@ -129,20 +135,63 @@
   }
 
   // ------------------------------------------------------------- data
-  let D = null;        // last snapshot
+  let D = ST.snap || null;   // last snapshot: shown straight away, kept on screen when a refresh fails
   let err = '';
 
-  function killEta(id, hp) {
-    const s = (ST.samples[id] || []).filter(([t]) => now() - t <= RATE_WINDOW_S);
-    if (s.length < 2 || hp <= 0) return Infinity;
+  // Minutes until the NPC falls, from the HP lost over the last 5 min.
+  // Infinity: no drop yet, or M'aol under 5% where his shield makes the pace meaningless.
+  function killEta(id, hp, max) {
+    if (hp <= 0) return Infinity;
+    if (id === MAOL.id && max && hp / max < SHIELD_PCT) return Infinity;
+    const s = (ST.samples[id] || []).filter(([t]) => now() - t <= ETA_WINDOW_S);
+    if (s.length < 2) return Infinity;
     const [t0, h0] = s[0];
     const [t1, h1] = s[s.length - 1];
     const perMin = (h0 - h1) / Math.max(1, (t1 - t0) / 60);
     return perMin > 0 ? hp / perMin : Infinity;
   }
+  const shielded = (n) => n.id === MAOL.id && n.hp > 0 && n.max && n.hp / n.max < SHIELD_PCT;
 
+  // Dead NPCs don't change while the event runs, so they're only re-checked every 10 min. While everything
+  // sleeps in Halloween week, only M'aol is checked (1 call per 10 min) to catch a new summon.
+  function due(n, t) {
+    if (!D) return true;
+    if (!anyAwake(D)) return n.id === MAOL.id && t - (ST.polled[n.id] || 0) >= IDLE_POLL_S;
+    const prev = [D.maol, ...D.guards].find((x) => x.id === n.id);
+    if (!prev || prev.hp > 0 || prev.state !== 'Dormant') return true;
+    return t - (ST.polled[n.id] || 0) >= IDLE_POLL_S;
+  }
+
+  function parseNpc(base, r) {
+    const p = r.profile || {};
+    return {
+      ...base,
+      state: /^dormant/i.test(p.status?.description || '') ? 'Dormant' : 'Awoken',
+      desc: p.status?.description || '',
+      country: countryOf(p.status?.description),
+      hp: p.life?.current ?? 0,
+      max: p.life?.maximum ?? 0,
+    };
+  }
+
+  // Summons are only possible in Halloween week (26 Oct 10:00 – 31 Oct 23:59 TCT). Outside it, and with
+  // nothing awake in the last snapshot, the script sleeps: no API calls at all.
+  function inSummonWindow(t) {
+    const d = new Date(t * 1000);
+    const y = d.getUTCFullYear();
+    return t >= Date.UTC(y, 9, 26, 10) / 1000 && t < Date.UTC(y, 10, 1) / 1000;
+  }
+  const anyAwake = (snap) => !!snap && [snap.maol, ...snap.guards].some((n) => n.state === 'Awoken');
+  const sleeping = () => !inSummonWindow(now()) && !anyAwake(D);
+
+  let inFlight = false;   // a slow API must not stack refreshes (the timer ticks every 5 s)
   async function refresh() {
-    if (!apiKey()) { render(); return; }
+    if (inFlight) return;
+    inFlight = true;
+    try { await poll(); } finally { inFlight = false; }
+  }
+  async function poll() {
+    if (!apiKey() || sleeping()) { render(); return; }
     // Several Torn tabs share one snapshot: only the first tab due polls the API.
     const fresh = load(K.state, {});
     const dormant = fresh.snap && fresh.snap.maol.state === 'Dormant' && fresh.snap.guards.every((g) => g.state === 'Dormant');
@@ -152,39 +201,58 @@
       render();
       return;
     }
-    try {
-      const t = now();
-      if (!ST.perks || t - ST.perksAt > PERKS_S) {
-        ST.perks = (await tornApi('user/perks')).perks || null;
-        ST.perksAt = t;
-      }
-      const [meB, ...npcs] = await Promise.all([
-        tornApi('user/basic'),
-        ...[MAOL, ...GUARDS].map((n) => tornApi(`user/${n.id}/profile`)),
-      ]);
-      const list = npcs.map((r, i) => {
-        const p = r.profile || {};
-        const base = i === 0 ? MAOL : GUARDS[i - 1];
-        return {
-          ...base,
-          state: /^dormant/i.test(p.status?.description || '') ? 'Dormant' : 'Awoken',
-          desc: p.status?.description || '',
-          country: countryOf(p.status?.description),
-          hp: p.life?.current ?? 0,
-          max: p.life?.maximum ?? 0,
-        };
-      });
-      list.forEach((n) => {
-        const arr = (ST.samples[n.id] || []).filter(([ts]) => t - ts <= RATE_WINDOW_S);
-        const prev = arr[arr.length - 1];
-        if (prev && prev[1] > 0 && n.hp <= 0 && !ST.deaths[n.id]) ST.deaths[n.id] = { t, country: n.country };
-        if (n.hp > 0 && ST.deaths[n.id] && n.state === 'Awoken') delete ST.deaths[n.id]; // new summon
-        arr.push([t, n.hp]);
-        ST.samples[n.id] = arr;
-      });
-      const st = meB.profile?.status || {};
-      const tr = st.state === 'Traveling' ? ((await tornApi('user/travel')).travel || {}) : {};
-      const me = { state: st.state, desc: st.description || '', where: 'Torn', busyUntil: 0, landing: 0 };
+    const t = now();
+    const all = [MAOL, ...GUARDS];
+    const ask = all.filter((n) => due(n, t));
+    if (!ask.length) { render(); return; }
+    const quiet = D && !anyAwake(D);
+    // allSettled: one failed call keeps the last known value instead of failing the whole refresh.
+    const res = await Promise.allSettled([
+      quiet ? Promise.resolve(null) : tornApi('user/basic'),
+      ...ask.map((n) => tornApi(`user/${n.id}/profile`)),
+      !quiet && (!ST.perks || t - ST.perksAt > PERKS_S) ? tornApi('user/perks') : Promise.resolve(null),
+    ]);
+    const failed = res.filter((r) => r.status === 'rejected');
+    if (failed.length === res.length) {
+      const msg = failed[0].reason?.message || String(failed[0].reason);
+      err = /^Torn API error|^No API key/.test(msg) ? msg : "Can't reach the Torn API, retrying";
+      render();
+      return;
+    }
+    const perksRes = res[res.length - 1];
+    if (perksRes.status === 'fulfilled' && perksRes.value) { ST.perks = perksRes.value.perks || null; ST.perksAt = t; }
+
+    const list = all.map((base) => {
+      const i = ask.indexOf(base);
+      const r = i >= 0 ? res[i + 1] : null;
+      if (r && r.status === 'fulfilled') { ST.polled[base.id] = t; return parseNpc(base, r.value); }
+      return D && [D.maol, ...D.guards].find((x) => x.id === base.id);
+    });
+    if (list.some((n) => !n)) {   // nothing to fall back on yet
+      err = failed[0]?.reason?.message || 'Incomplete API response';
+      render();
+      return;
+    }
+    list.forEach((n) => {
+      const asked = ask.some((a) => a.id === n.id);
+      const arr = (ST.samples[n.id] || []).filter(([ts]) => t - ts <= RATE_WINDOW_S);
+      const prev = arr[arr.length - 1];
+      if (prev && prev[1] > 0 && n.hp <= 0 && !ST.deaths[n.id]) ST.deaths[n.id] = { t, country: n.country };
+      if (n.hp > 0 && ST.deaths[n.id] && n.state === 'Awoken') delete ST.deaths[n.id]; // new summon
+      if (asked) { arr.push([t, n.hp]); ST.samples[n.id] = arr; }
+    });
+    // M'aol's moves: every country change is one hop. They teach the loop order when deaths were missed.
+    const m = list[0];
+    if (quiet && m.state === 'Awoken' && ask.some((a) => a.id === MAOL.id)) ST.polled = {};   // new summon: check everyone on the next refresh
+    if (m.state === 'Awoken' && !m.country) ST.hops = [];   // summoned, not moving yet
+    const last = ST.hops[ST.hops.length - 1];
+    if (m.state === 'Awoken' && m.country && (!last || last[1] !== m.country)) ST.hops = [...ST.hops, [t, m.country]].slice(-40);
+
+    let me = D?.me || { state: 'Okay', desc: '', where: 'Torn', busyUntil: 0, landing: 0 };
+    if (res[0].status === 'fulfilled' && res[0].value) {
+      const st = res[0].value.profile?.status || {};
+      const tr = st.state === 'Traveling' ? await tornApi('user/travel').then((x) => x.travel || {}, () => ({})) : {};
+      me = { state: st.state, desc: st.description || '', where: 'Torn', busyUntil: 0, landing: 0 };
       if (st.state === 'Abroad') me.where = countryOf(st.description);
       if (st.state === 'Traveling') {
         me.where = tr.destination === 'Torn' ? 'Torn' : tr.destination;
@@ -196,14 +264,76 @@
         const adj = /^In an? (\w+(?: \w+)?) (?:hospital|jail)/i.exec(st.description || '');
         if (adj && DEMONYM[adj[1]]) me.where = DEMONYM[adj[1]];
       }
-      D = { t, maol: list[0], guards: list.slice(1), me };
-      ST.snap = D;
-      err = '';
-      saveState();
-    } catch (e) {
-      err = e.message || String(e);
     }
+    D = { t, maol: m, guards: list.slice(1), me };
+    ST.snap = D;
+    err = failed.length ? 'Some API calls failed, retrying' : '';
+    saveState();
     render();
+  }
+
+  // ------------------------------------------------------------- M'aol's route
+  // He loops through the dead guards' countries in the order they died, one stop per quarter hour,
+  // with no flight in between. A guard that dies later joins the end of the loop. He starts looping
+  // while the bond still holds (seen 2026: moving with 2 guards alive).
+
+  // Loop order learnt from his own moves: two moves ~15 min apart are neighbours on the loop.
+  function hopNext() {
+    const next = {};
+    for (let i = 1; i < ST.hops.length; i++) {
+      const [ta, a] = ST.hops[i - 1];
+      const [tb, b] = ST.hops[i];
+      if (tb - ta >= 10 * 60 && tb - ta <= 20 * 60) next[a] = b;
+    }
+    return next;
+  }
+
+  // Dead guards' countries in death order. exact: every death was seen, or his moves filled the gaps.
+  function deathOrder(guards) {
+    const dead = guards.filter((g) => g.hp <= 0 && g.country);
+    const seen = dead.filter((g) => ST.deaths[g.id]).sort((a, b) => ST.deaths[a.id].t - ST.deaths[b.id].t);
+    if (seen.length === dead.length) return { loop: seen.map((g) => ST.deaths[g.id].country || g.country), exact: true };
+    const want = new Set(dead.map((g) => g.country));
+    const next = hopNext();
+    const start = dead[0].country;
+    const cycle = [start];
+    for (let c = next[start]; c && c !== start && cycle.length <= want.size; c = next[c]) cycle.push(c);
+    if (next[cycle[cycle.length - 1]] === start && cycle.length === want.size && cycle.every((c) => want.has(c))) {
+      // Rotate so the latest death he was seen dying is last: new deaths go after it.
+      const lastSeen = seen.length ? seen[seen.length - 1].country : null;
+      const k = lastSeen ? cycle.indexOf(lastSeen) : cycle.length - 1;
+      return { loop: [...cycle.slice(k + 1), ...cycle.slice(0, k + 1)], exact: !!lastSeen };
+    }
+    const unseen = dead.filter((g) => !ST.deaths[g.id]).map((g) => g.country);
+    return { loop: [...unseen, ...seen.map((g) => g.country)], exact: false, unknown: unseen };
+  }
+
+  // Where M'aol is now and his next stops, each with its arrival time.
+  function plan(D) {
+    const { maol, guards } = D;
+    const t = now();
+    const order = deathOrder(guards);
+    const alive = guards.filter((g) => g.hp > 0 && g.state === 'Awoken');
+    const pend = alive.map((g) => { const e = killEta(g.id, g.hp, g.max); return { g, at: isFinite(e) ? t + e * 60 : Infinity }; })
+      .sort((a, b) => (a.at - b.at) || (a.g.hp / a.g.max - b.g.hp / b.g.max));
+    const bondAt = !alive.length ? 0 : Math.max(...pend.map((p) => p.at));
+    const loopAt = (T) => [...order.loop, ...pend.filter((p) => p.at <= T).map((p) => p.g.country)];
+    const meta = { order, pend, bondAt, stops: [] };
+    if (maol.state !== 'Awoken' || !maol.country) return meta;
+    const seen = order.exact ? {} : hopNext();   // order partly guessed: his own moves win
+    let c = maol.country;
+    let T = Math.floor(t / HOP_S) * HOP_S + HOP_S;
+    meta.leaves = T;
+    // Enough stops to cover the bond break plus one more loop, so stay-or-fly can look past it.
+    const until = (isFinite(bondAt) ? Math.max(bondAt, t) : t) + 6 * HOP_S;
+    for (let k = 0; k < 40 && T <= until; k++, T += HOP_S) {
+      const L = loopAt(T);
+      const i = L.indexOf(c);
+      if (i < 0 || L.length < 2) break;
+      c = seen[c] && L.includes(seen[c]) ? seen[c] : L[(i + 1) % L.length];
+      meta.stops.push({ c, at: T });
+    }
+    return meta;
   }
 
   // ------------------------------------------------------------- what to do next
@@ -212,29 +342,30 @@
     const { maol, guards, me } = D;
     const method = bestMethod();
     const tips = [];
+    const t = now();
     const alive = guards.filter((g) => g.state === 'Awoken' && g.hp > 0);
-    const order = guards
-      .filter((g) => g.hp <= 0 && ST.deaths[g.id])
-      .sort((a, b) => ST.deaths[a.id].t - ST.deaths[b.id].t);
+    const busy = me.busyUntil > t;
 
-    if (me.busyUntil > now()) {
-      const what = me.state === 'Traveling' ? `Landing in ${me.where} at ${tct(me.busyUntil)} TCT` : `${me.state} until ${tct(me.busyUntil)} TCT`;
+    if (busy) {
+      const what = me.state === 'Traveling' ? `Landing in ${me.where} at ${hm(me.busyUntil)}` : `${me.state} until ${hm(me.busyUntil)}`;
       tips.push({ c: 'info', t: `${what}. Times below already count that wait.` });
     }
 
     if (maol.state === 'Dormant' && !alive.length) {
-      tips.push({ c: 'info', t: "M'aol and his Praetorians are dormant. Nothing to fight right now." });
+      tips.push({ c: 'info', t: sleeping()
+        ? "M'aol and his Praetorians are dormant. The script sleeps until Halloween week (26 Oct): no API calls until then."
+        : "M'aol and his Praetorians are dormant. Checking M'aol once every 10 min in case someone summons him again." });
       return tips;
     }
 
     if (alive.length) {
       const here = alive.find((g) => g.country === me.where);
-      if (here && !(me.busyUntil > now())) {
+      if (here && !busy) {
         tips.push({ c: 'go', t: `${here.name} is in ${here.country} with you. Hit now.`, href: `https://www.torn.com/loader.php?sid=attack&user2ID=${here.id}` });
       }
       const scored = alive.map((g) => {
         const trip = tripMin(me, g.country, method);
-        const eta = killEta(g.id, g.hp);
+        const eta = killEta(g.id, g.hp, g.max);
         return { g, trip, eta, ok: trip + 3 < eta };
       }).sort((a, b) => a.trip - b.trip);
       const pick = scored.find((s) => s.ok && s.g !== here);
@@ -244,41 +375,60 @@
       scored.filter((s) => !s.ok).forEach((s) => {
         tips.push({ c: 'warn', t: `Skip ${s.g.name} in ${s.g.country}: dies in ~${fmtMin(s.eta)}, you need ${fmtMin(s.trip)}.` });
       });
-      tips.push({ c: 'info', t: `Bond holds: M'aol can't be hit until all 5 guards fall (${5 - alive.length}/5 down).` });
-      tips.push({ c: 'info', t: predictRoute(guards, alive) });
     }
 
-    if (!alive.length && maol.state === 'Awoken' && maol.hp > 0) {
-      if (maol.country === me.where && !(me.busyUntil > now())) {
-        tips.push({ c: 'go', t: `M'aol is in ${me.where} with you. Hit now.`, href: `https://www.torn.com/loader.php?sid=attack&user2ID=${MAOL.id}` });
-      }
-      if (order.length) {
-        const route = order.map((g) => ST.deaths[g.id].country || g.country).filter(Boolean);
-        const best = route.map((c) => ({ c, trip: tripMin(me, c, method) })).sort((a, b) => a.trip - b.trip)[0];
-        tips.push({ c: 'info', t: `He hops every ${HOP_MIN} min in defeat order: ${route.join(' → ')}.` });
-        if (best && best.c !== me.where) tips.push({ c: 'go', t: `Closest stop on his route: ${best.c} (${fmtMin(best.trip)}). Wait there for him.`, href: 'https://www.torn.com/page.php?sid=travel' });
-      } else {
-        tips.push({ c: 'warn', t: 'Guards died before this script saw them, so their order is unknown. Check tornstats.com/maol for the route.', href: 'https://www.tornstats.com/maol' });
-      }
+    const P = plan(D);
+    if (P.order.unknown && P.order.unknown.length > 1) {
+      tips.push({ c: 'warn', t: `Missed ${P.order.unknown.length} guard deaths, so his order is partly a guess until he's been watched for one loop. tornstats.com/maol has it now.`, href: 'https://www.tornstats.com/maol' });
     }
+
+    if (maol.state === 'Awoken' && maol.hp > 0) {
+      const bonded = alive.length > 0;
+      if (maol.country) {
+        const line = P.stops.slice(0, 4).map((s) => `${SHORT[s.c] || s.c} ${hm(s.at)}`).join(' → ');
+        tips.push({ c: 'info', t: `M'aol is in ${maol.country} until ${hm(P.leaves)}` + (line ? `, then ${line}.` : '.') + ' One stop every 15 min, no flight.' });
+      } else if (P.order.loop.length) {
+        tips.push({ c: 'info', t: `M'aol hasn't started moving. He'll loop: ${P.order.loop.join(' → ')}${alive.length ? ', then guards still up as they fall' : ''}.` });
+      }
+      if (bonded) {
+        tips.push({ c: 'info', t: `Bond holds: M'aol can't be hit until all 5 guards fall (${5 - alive.length}/5 down` + (isFinite(P.bondAt) ? `, ~${hm(P.bondAt)}).` : ').') });
+      } else if (maol.country === me.where && !busy) {
+        tips.push({ c: 'go', t: `M'aol is in ${me.where} with you until ${hm(P.leaves)}. Hit now.`, href: `https://www.torn.com/loader.php?sid=attack&user2ID=${MAOL.id}` });
+      }
+      if (maol.country && isFinite(P.bondAt)) tips.push(stayOrFly(P, maol, me, method, bonded));
+    }
+
+    tips.push({ c: 'info', t: 'Loot is a lottery: every turn you land damage is a ticket, however small the hit. Tickets last until the kill, so keep hitting.' });
     tips.push({ c: 'info', t: 'Bring a Small First Aid Kit or First Aid Kit, not Blood Bags: they hit for ~4k, so a small heal gets you out of hospital and saves medical cooldown.' });
     return tips;
   }
 
-  // M'aol's route is his guards' countries in death order. Dead ones are fixed; the rest are
-  // ordered by kill ETA at the current pace (untouched guards last, by HP left), so it's an estimate.
-  function predictRoute(guards, alive) {
-    const dead = guards.filter((g) => !alive.includes(g));
-    const seen = dead.filter((g) => ST.deaths[g.id]).sort((a, b) => ST.deaths[a.id].t - ST.deaths[b.id].t);
-    const unseen = dead.filter((g) => !ST.deaths[g.id]);
-    const fixed = [...unseen, ...seen].map((g) => `${g.country || '?'} ✓`);
-    if (unseen.length > 1) fixed[0] = `(${unseen.map((g) => g.country).join(' / ')} in unknown order)`, fixed.splice(1, unseen.length - 1);
+  // Stay where you are or fly: the first stop you can reach while he's still there (and alive).
+  function stayOrFly(P, maol, me, method, bonded) {
     const t = now();
-    const next = alive
-      .map((g) => ({ g, eta: killEta(g.id, g.hp) }))
-      .sort((a, b) => (a.eta - b.eta) || (a.g.hp / a.g.max - b.g.hp / b.g.max))
-      .map(({ g, eta }) => `${g.country}${isFinite(eta) ? ' ~' + tct(t + eta * 60) : ' ?'}`);
-    return `Predicted route (estimate, times = guard death TCT): ${[...fixed, ...next].join(' → ')}. Then a hop every ${HOP_MIN} min.`;
+    const eta = killEta(MAOL.id, maol.hp, maol.max);
+    const deathAt = bonded || !isFinite(eta) ? Infinity : t + eta * 60;
+    const opens = bonded ? P.bondAt : t;
+    const windows = [{ c: maol.country, from: t, to: P.leaves }, ...P.stops.map((s) => ({ c: s.c, from: s.at, to: s.at + HOP_S }))];
+    const fits = windows.map((w) => {
+      const arrive = t + tripMin(me, w.c, method) * 60 + 60;
+      const start = Math.max(w.from, arrive, opens);
+      return { ...w, arrive, start, ok: start < Math.min(w.to, deathAt) - 60 };
+    }).filter((w) => w.ok);
+    const lowHp = shielded(maol) ? ' He is under 5% and his shield slows the kill, so the end time is uncertain.' : '';
+    if (!fits.length) {
+      return { c: 'warn', t: (isFinite(deathAt) ? `At this pace he dies ~${hm(deathAt)}, before you can reach any stop. ` : "You can't reach any of his next stops in time. ") + 'Stay put.' + lowHp };
+    }
+    // Earliest hit wins, but a stop only 15 min later with a shorter trip (or no trip) is the better deal.
+    const first = Math.min(...fits.map((w) => w.start));
+    const best = fits.filter((w) => w.start <= first + HOP_S)
+      .sort((a, b) => ((b.c === me.where) - (a.c === me.where)) || (a.arrive - b.arrive) || (a.start - b.start))[0];
+    const win = `${hm(best.from)}–${hm(best.to)}`;
+    if (best.c === me.where && me.where !== 'Torn') {
+      return { c: 'go', t: `Stay in ${best.c}: M'aol is here ${win}` + (best.from > t ? ` (in ${fmtMin((best.from - t) / 60)}).` : '.') + (bonded ? ' Bond must break first.' : '') + lowHp };
+    }
+    const home = me.where && me.where !== 'Torn' && fits.some((w) => w.c === me.where) ? ` Or stay: he's back in ${me.where} ${hm(fits.find((w) => w.c === me.where).from)}.` : '';
+    return { c: 'go', t: `Fly to ${best.c} (${METHOD_NAME[method]}, ${fmtMin(tripMin(me, best.c, method))}): M'aol is there ${win}.` + (bonded ? ' First stop after the bond breaks.' : '') + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
   }
 
   // ------------------------------------------------------------- UI
@@ -286,15 +436,15 @@
   function bar(n) {
     const pct = n.max ? Math.max(0, Math.min(100, (n.hp / n.max) * 100)) : 0;
     const dead = n.hp <= 0;
-    const eta = killEta(n.id, n.hp);
+    const eta = killEta(n.id, n.hp, n.max);
     const where = n.country || (n.id === MAOL.id ? (n.state === 'Awoken' ? 'Awoken' : 'Dormant') : '?');
-    const sub = dead ? (ST.deaths[n.id] ? `down ${tct(ST.deaths[n.id].t)}` : 'down')
-      : isFinite(eta) ? `~${fmtMin(eta)} left` : '';
+    const sub = dead ? (ST.deaths[n.id] ? `down ${hm(ST.deaths[n.id].t)}` : 'down')
+      : shielded(n) ? 'shield, slowing' : isFinite(eta) ? `~${fmtMin(eta)} left` : '';
     const tm = D && n.country && !dead ? tripMin(D.me, n.country, bestMethod()) : null;
     const trip = tm == null ? '' : tm < 1 && D.me.where === n.country ? 'here' : fmtMin(tm);
     return `<a class="tmt-row${dead ? ' tmt-dead' : ''}" href="https://www.torn.com/profiles.php?XID=${n.id}">
       <span class="tmt-name">${esc(n.name)}</span>
-      <span class="tmt-where">${esc(where)}${trip ? ` · ${trip === 'here' ? 'you are here' : `✈ ${trip}`}` : ''}</span>
+      <span class="tmt-where" title="${esc(where)}">${esc(SHORT[where] || where)}${trip ? ` · ${trip === 'here' ? 'here' : `✈ ${trip}`}` : ''}</span>
       <span class="tmt-hp"><i style="width:${pct.toFixed(1)}%"></i><b>${dead ? '0' : fmtHp(n.hp)} / ${fmtHp(n.max)}</b></span>
       <span class="tmt-sub">${esc(sub)}</span>
     </a>`;
@@ -310,7 +460,7 @@
         <input id="tmt-key" maxlength="16" placeholder="16-character key" autocomplete="off">
         <a href="#" class="tmt-btn" data-act="save-key">Save</a></div>`;
     } else if (!D) {
-      body = `<div class="tmt-tip info">${err ? esc(err) : 'Loading…'}</div>`;
+      body = `<div class="tmt-tip info">${sleeping() ? "M'aol sleeps until Halloween week (26 Oct). No API calls until then." : err ? esc(err) : 'Loading…'}</div>`;
     } else {
       const tips = advice().map((x) => x.href
         ? `<a class="tmt-tip ${x.c}" href="${x.href}"${/tornstats/.test(x.href) ? ' target="_blank" rel="noopener"' : ''}>${esc(x.t)}</a>`
@@ -323,7 +473,7 @@
           <span>You: ${esc(D.me.where || D.me.desc)} · ${METHOD_NAME[method]}${p.book ? ' + book' : ''}</span>
           <a href="#" data-act="biz" class="${UI.biz ? 'on' : ''}">${UI.biz ? 'Using business ticket' : 'Have business ticket?'}</a>
         </div>
-        <div class="tmt-foot"><span>${err ? '⚠ ' + esc(err) : 'Updated ' + tct(D.t) + ' TCT'}</span>
+        <div class="tmt-foot"><span>${err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · times in ${tzLabel()}`}</span>
           ${IS_PDA ? '' : '<a href="#" data-act="forget-key">change key</a>'}</div>`;
     }
     const docked = !!btnHost && btnHost.isConnected;
@@ -504,21 +654,22 @@
       #tmt .tmt-body::-webkit-scrollbar-thumb { background: var(--appheader-dropdown-list-scrollbar-thumb-color, #666); border-radius: 3px; }
       #tmt .tmt-sec { padding: 6px 10px 3px; font-weight: bold; color: var(--default-content-title-color, #999); text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
       #tmt a { color: var(--default-blue-color, #74c0fc); text-decoration: none; }
-      #tmt .tmt-tip { display: block; margin: 2px 8px; padding: 5px 7px; border-radius: 4px; line-height: 1.35;
+      #tmt .tmt-tip { display: block; margin: 3px 10px; padding: 5px 8px; border-radius: 4px; line-height: 1.35;
         background: var(--default-bg-panel-active-color, #444); border-left: 3px solid #888; color: var(--default-color, #ddd); }
       #tmt .tmt-tip.go { border-left-color: var(--default-green-color, #82c91e); }
       #tmt .tmt-tip.warn { border-left-color: var(--default-orange-color, #f08c00); }
       #tmt a.tmt-tip:hover { background: var(--default-bg-panel-hover-color, #555); }
-      #tmt .tmt-row { display: grid; grid-template-columns: 1fr auto; gap: 1px 6px; padding: 4px 10px; color: inherit;
+      #tmt .tmt-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: 2px 8px; padding: 5px 10px; color: inherit;
         border-bottom: 1px solid var(--panel-border-bottom-color, #3b3b3b); }
       #tmt .tmt-row:hover { background: var(--default-bg-panel-active-color, #444); }
-      #tmt .tmt-name { font-weight: bold; }
-      #tmt .tmt-where, #tmt .tmt-sub { color: var(--default-content-title-color, #999); text-align: right; white-space: nowrap; }
+      #tmt .tmt-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #tmt .tmt-where, #tmt .tmt-sub { color: var(--default-content-title-color, #999); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
       #tmt .tmt-hp { position: relative; height: 14px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
       #tmt .tmt-hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #8bc34a, #5a8a1e); }
       #tmt .tmt-hp b { position: relative; display: block; text-align: center; font-size: 10px; line-height: 14px; color: #fff; text-shadow: 0 0 2px #000; }
       #tmt .tmt-dead { opacity: .5; }
-      #tmt .tmt-foot { display: flex; justify-content: space-between; gap: 6px; padding: 5px 10px 0; font-size: 11px; color: var(--default-content-title-color, #999); }
+      #tmt .tmt-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 6px 10px 0; font-size: 11px; color: var(--default-content-title-color, #999); }
+      #tmt .tmt-foot > :last-child { white-space: nowrap; }
       #tmt .tmt-foot a.on { color: var(--default-green-color, #82c91e); }
       #tmt .tmt-key { padding: 8px 10px; line-height: 1.6; }
       #tmt input { width: 150px; color: var(--input-color, #fff); background: var(--input-background-color, linear-gradient(0deg, #111 0%, #000 100%));
