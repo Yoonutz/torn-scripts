@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.3
+// @version      1.0.4
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -260,7 +260,7 @@
         tips.push({ c: 'warn', t: 'Guards died before this script saw them, so their order is unknown. Check tornstats.com/maol for the route.', href: 'https://www.tornstats.com/maol' });
       }
     }
-    tips.push({ c: 'info', t: 'Bring a SFAK/FAK, not blood bags: they hit ~4k, so a small heal gets you out and saves medical cooldown.' });
+    tips.push({ c: 'info', t: 'Bring a Small First Aid Kit or First Aid Kit, not Blood Bags: they hit for ~4k, so a small heal gets you out of hospital and saves medical cooldown.' });
     return tips;
   }
 
