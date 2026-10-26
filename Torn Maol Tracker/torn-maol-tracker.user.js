@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.4
+// @version      1.0.5
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -325,10 +325,37 @@
     }
   }
 
+  // Torn styles each header item by its own class, so copy the box of a real sibling
+  // (the binoculars, else any other header button) instead of guessing sizes.
+  const BOX = ['display', 'float', 'width', 'height', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'lineHeight', 'verticalAlign', 'alignItems', 'justifyContent', 'boxSizing'];
+  function matchNeighbour() {
+    const ref = document.querySelector('ul.toolbar > li.find-extend') ||
+      [...document.querySelectorAll('ul.toolbar > li')].find((li) => li !== btnHost && li.querySelector(':scope > button.top_header_button'));
+    const refBtn = ref?.querySelector(':scope > button.top_header_button');
+    if (!ref || !refBtn) return;
+    const copy = (from, to, keys) => { const cs = getComputedStyle(from); keys.forEach((k) => { to.style[k] = cs[k]; }); };
+    copy(ref, btnHost, BOX);
+    btnHost.style.position = 'relative';
+    const btn = btnHost.querySelector('button');
+    copy(refBtn, btn, [...BOX, 'background', 'border', 'cursor', 'color', 'fill', 'opacity']);
+    const refSvg = refBtn.querySelector('svg');
+    const svg = btn.querySelector('svg');
+    if (refSvg && svg) {
+      const r = refSvg.getBoundingClientRect();
+      if (r.width) { svg.setAttribute('width', Math.round(r.width)); svg.setAttribute('height', Math.round(r.height)); }
+      const cs = getComputedStyle(refSvg);
+      svg.style.fill = cs.fill;
+      svg.style.filter = cs.filter;
+      svg.style.verticalAlign = cs.verticalAlign;
+      svg.style.display = cs.display;
+    }
+  }
+
   // ------------------------------------------------------------- header button
   // Torn's header toolbar: <ul class="toolbar"><li class="find-wrapper">(search)</li>...
   // The button sits just left of the search magnifier and opens the panel as a dropdown.
-  const ICON = '<svg width="24" height="25" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 3c-3.9 0-7 2.9-7 6.6 0 2 1 3.8 2.5 5-.3 1.5-1.2 2.8-2.5 3.6.9.5 2.4.4 3.6-.6.3 1.4.1 2.7-.6 3.9 1.4-.2 2.6-1.3 3.1-2.8.4.9.4 2-.1 2.9 1.2-.4 2-1.5 2.1-2.8.5.9 1.4 1.6 2.5 1.8-.6-1.1-.8-2.4-.5-3.6 1 .9 2.3 1.3 3.5 1-1.2-.8-2-2.1-2.3-3.5C19 13.4 19 11.6 19 9.6 19 5.9 15.9 3 12 3Zm-3 5.2a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Zm6 0a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Z"/></svg>';
+  const ICON = '<svg width="24" height="25" viewBox="3 1 18 22" xmlns="http://www.w3.org/2000/svg"><path d="M12 3c-3.9 0-7 2.9-7 6.6 0 2 1 3.8 2.5 5-.3 1.5-1.2 2.8-2.5 3.6.9.5 2.4.4 3.6-.6.3 1.4.1 2.7-.6 3.9 1.4-.2 2.6-1.3 3.1-2.8.4.9.4 2-.1 2.9 1.2-.4 2-1.5 2.1-2.8.5.9 1.4 1.6 2.5 1.8-.6-1.1-.8-2.4-.5-3.6 1 .9 2.3 1.3 3.5 1-1.2-.8-2-2.1-2.3-3.5C19 13.4 19 11.6 19 9.6 19 5.9 15.9 3 12 3Zm-3 5.2a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Zm6 0a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8Z"/></svg>';
   let btnHost = null;
   function mountButton() {
     if (btnHost && btnHost.isConnected) return;
@@ -342,6 +369,7 @@
       UI.open = !UI.open; saveUi(); render();
     });
     find.parentNode.insertBefore(btnHost, find);
+    matchNeighbour();
     render();
   }
 
@@ -369,6 +397,7 @@
     const s = document.createElement('style');
     s.textContent = `
       .tmt-host { position: relative; }
+      .tmt-host button:hover svg { filter: brightness(1.6) !important; }
       .tmt-host .tmt-dot { position: absolute; top: 9px; right: 4px; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; display: none;
         box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
       .tmt-host .tmt-dot.go { display: block; background: var(--default-green-color, #82c91e); }
