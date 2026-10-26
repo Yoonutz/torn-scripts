@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.10
+// @version      1.0.11
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -385,11 +385,16 @@
   }
 
   // Desktop search row holds two boxes side by side (search, "Forum posts").
-  // Torn anchors the boxes on the right, so they shrink from the left: shrink both by the
-  // button's width in total, then slide the whole row left by that width so it clears the button.
+  // Shrink both by the button's width in total (Torn's own sizes forced down with !important),
+  // then measure how far the row's right edge really moved; if Torn keeps it anchored on the
+  // right, slide the row left by exactly the width it gave up, never more.
   let shrunk = [];
+  function setImp(el, prop, val) {
+    shrunk.push({ el, prop, val: el.style.getPropertyValue(prop), pri: el.style.getPropertyPriority(prop) });
+    el.style.setProperty(prop, val, 'important');
+  }
   function restoreRoom() {
-    shrunk.forEach(({ el, w, mw, fl, tf }) => { el.style.width = w; el.style.minWidth = mw; el.style.flex = fl; if (tf !== undefined) el.style.transform = tf; });
+    shrunk.reverse().forEach(({ el, prop, val, pri }) => { if (val) el.style.setProperty(prop, val, pri); else el.style.removeProperty(prop); });
     shrunk = [];
   }
   function makeRoom(find) {
@@ -403,17 +408,29 @@
       if (kids.length >= 2) row = { el, kids };
     });
     if (!row) return;
+    const right = () => Math.max(...row.kids.map((k) => k.getBoundingClientRect().right));
+    const left = () => Math.min(...row.kids.map((k) => k.getBoundingClientRect().left));
+    const r0 = right();
+    const l0 = left();
     const each = Math.ceil(need / row.kids.length);
-    shrunk.push({ el: find, w: find.style.width, mw: find.style.minWidth, fl: find.style.flex, tf: find.style.transform });
-    find.style.transform = `translateX(-${need}px)`;
     row.kids.forEach((el) => {
-      const w = el.getBoundingClientRect().width;
-      shrunk.push({ el, w: el.style.width, mw: el.style.minWidth, fl: el.style.flex });
-      el.style.minWidth = '0';
-      el.style.flex = '0 0 auto';
-      el.style.width = `${Math.round(w - each)}px`;
-      el.querySelectorAll('input').forEach((i) => { i.style.minWidth = '0'; i.style.maxWidth = '100%'; });
+      const w = Math.round(el.getBoundingClientRect().width - each);
+      if (getComputedStyle(el).display === 'inline') setImp(el, 'display', 'inline-block');
+      setImp(el, 'box-sizing', 'border-box');
+      setImp(el, 'min-width', '0');
+      setImp(el, 'flex', '0 0 auto');
+      setImp(el, 'width', `${w}px`);
+      setImp(el, 'max-width', `${w}px`);
+      // Inner parts with their own fixed width (the input, the dropdown label) follow the box.
+      el.querySelectorAll('*').forEach((d) => {
+        if (d.getBoundingClientRect().width > w) { setImp(d, 'max-width', '100%'); setImp(d, 'min-width', '0'); setImp(d, 'box-sizing', 'border-box'); }
+      });
     });
+    // Right edge did not move (row anchored right): slide left by what the boxes gave up.
+    if (right() > r0 - need + 1) {
+      const shift = Math.max(0, Math.round(left() - l0));
+      if (shift) setImp(row.el, 'transform', `translateX(-${shift}px)`);
+    }
   }
 
   // ------------------------------------------------------------- header button
