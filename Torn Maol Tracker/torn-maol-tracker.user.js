@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.16
+// @version      1.0.17
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -384,22 +384,27 @@
 
     if (maol.state === 'Awoken' && maol.hp > 0) {
       const bonded = alive.length > 0;
-      if (maol.country) {
-        const line = P.stops.slice(0, 4).map((s) => `${SHORT[s.c] || s.c} ${hm(s.at)}`).join(' → ');
-        tips.push({ c: 'info', t: `M'aol is in ${maol.country} until ${hm(P.leaves)}` + (line ? `, then ${line}.` : '.') + ' One stop every 15 min, no flight.' });
-      } else if (P.order.loop.length) {
-        tips.push({ c: 'info', t: `M'aol hasn't started moving. He'll loop: ${P.order.loop.join(' → ')}${alive.length ? ', then guards still up as they fall' : ''}.` });
+      if (!bonded && maol.country === me.where && !busy) {
+        tips.push({ c: 'go', t: `Hit M'aol now. He's here in ${me.where} until ${hm(P.leaves)}.`, href: `https://www.torn.com/loader.php?sid=attack&user2ID=${MAOL.id}` });
+      } else if (maol.country && isFinite(P.bondAt)) {
+        tips.push(stayOrFly(P, maol, me, method, bonded));
       }
       if (bonded) {
-        tips.push({ c: 'info', t: `Bond holds: M'aol can't be hit until all 5 guards fall (${5 - alive.length}/5 down` + (isFinite(P.bondAt) ? `, ~${hm(P.bondAt)}).` : ').') });
-      } else if (maol.country === me.where && !busy) {
-        tips.push({ c: 'go', t: `M'aol is in ${me.where} with you until ${hm(P.leaves)}. Hit now.`, href: `https://www.torn.com/loader.php?sid=attack&user2ID=${MAOL.id}` });
+        tips.push({ c: 'info', t: `Bond: M'aol can't be attacked until all 5 guards are dead (${5 - alive.length}/5 down` + (isFinite(P.bondAt) ? `, last one ~${hm(P.bondAt)}).` : ').') });
       }
-      if (maol.country && isFinite(P.bondAt)) tips.push(stayOrFly(P, maol, me, method, bonded));
+      if (maol.country) {
+        const you = (c) => (c === me.where ? '<i>you</i>' : '');
+        const rows = [`<span>now</span><b>${esc(maol.country)}</b><em>until ${hm(P.leaves)}</em>${you(maol.country)}`,
+          ...P.stops.slice(0, 5).map((s) => `<span>${hm(s.at)}</span><b>${esc(s.c)}</b><em></em>${you(s.c)}`)];
+        tips.push({ c: 'route', h: `<div class="tmt-rt">M'aol's route <small>one stop every 15 min, no flight time</small></div>` +
+          rows.map((r, i) => `<div class="tmt-stop${i ? '' : ' now'}">${r}</div>`).join('') });
+      } else if (P.order.loop.length) {
+        tips.push({ c: 'info', t: `M'aol hasn't started moving yet. He'll loop through ${P.order.loop.join(' → ')}${alive.length ? ', plus each guard\'s country as it dies' : ''}.` });
+      }
     }
 
-    tips.push({ c: 'info', t: 'Loot is a lottery: every turn you land damage is a ticket, however small the hit. Tickets last until the kill, so keep hitting.' });
-    tips.push({ c: 'info', t: 'Bring a Small First Aid Kit or First Aid Kit, not Blood Bags: they hit for ~4k, so a small heal gets you out of hospital and saves medical cooldown.' });
+    tips.push({ c: 'note', t: "Loot: every turn you land damage is 1 lottery ticket, however small the hit. Tickets count until the kill, so keep hitting." });
+    tips.push({ c: 'note', t: 'Healing: bring medical items (first aid kits, blood bags, morphine) so a loss doesn\'t keep you in hospital and you can keep hitting.' });
     return tips;
   }
 
@@ -425,10 +430,10 @@
       .sort((a, b) => ((b.c === me.where) - (a.c === me.where)) || (a.arrive - b.arrive) || (a.start - b.start))[0];
     const win = `${hm(best.from)}–${hm(best.to)}`;
     if (best.c === me.where && me.where !== 'Torn') {
-      return { c: 'go', t: `Stay in ${best.c}: M'aol is here ${win}` + (best.from > t ? ` (in ${fmtMin((best.from - t) / 60)}).` : '.') + (bonded ? ' Bond must break first.' : '') + lowHp };
+      return { c: 'go', t: (best.from > t ? `Stay in ${best.c}. M'aol arrives ${hm(best.from)} (in ${fmtMin((best.from - t) / 60)}) and leaves ${hm(best.to)}.` : `Stay in ${best.c}. M'aol is here until ${hm(best.to)}.`) + (bonded ? ' Only once the bond breaks.' : '') + lowHp };
     }
     const home = me.where && me.where !== 'Torn' && fits.some((w) => w.c === me.where) ? ` Or stay: he's back in ${me.where} ${hm(fits.find((w) => w.c === me.where).from)}.` : '';
-    return { c: 'go', t: `Fly to ${best.c} (${METHOD_NAME[method]}, ${fmtMin(tripMin(me, best.c, method))}): M'aol is there ${win}.` + (bonded ? ' First stop after the bond breaks.' : '') + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
+    return { c: 'go', t: `Fly to ${best.c} now (${METHOD_NAME[method]}, ${fmtMin(tripMin(me, best.c, method))}). M'aol is there ${win}.` + (bonded ? ' First stop after the bond breaks.' : '') + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
   }
 
   // ------------------------------------------------------------- UI
@@ -462,13 +467,16 @@
     } else if (!D) {
       body = `<div class="tmt-tip info">${sleeping() ? "M'aol sleeps until Halloween week (26 Oct). No API calls until then." : err ? esc(err) : 'Loading…'}</div>`;
     } else {
-      const tips = advice().map((x) => x.href
+      const tip = (x) => x.href
         ? `<a class="tmt-tip ${x.c}" href="${x.href}"${/tornstats/.test(x.href) ? ' target="_blank" rel="noopener"' : ''}>${esc(x.t)}</a>`
-        : `<div class="tmt-tip ${x.c}">${esc(x.t)}</div>`).join('');
+        : `<div class="tmt-tip ${x.c}">${x.h || esc(x.t)}</div>`;
+      const all = advice();
+      const notes = all.filter((x) => x.c === 'note');
       body = `
-        <div class="tmt-sec">Next</div>${tips}
+        <div class="tmt-sec">Next</div>${all.filter((x) => x.c !== 'note').map(tip).join('')}
         <div class="tmt-sec">Praetorians</div>${D.guards.map(bar).join('')}
         <div class="tmt-sec">Boss</div>${bar(D.maol)}
+        ${notes.length ? `<div class="tmt-sec">Tips</div>${notes.map(tip).join('')}` : ''}
         <div class="tmt-foot">
           <span>You: ${esc(D.me.where || D.me.desc)} · ${METHOD_NAME[method]}${p.book ? ' + book' : ''}</span>
           <a href="#" data-act="biz" class="${UI.biz ? 'on' : ''}">${UI.biz ? 'Using business ticket' : 'Have business ticket?'}</a>
@@ -658,6 +666,16 @@
         background: var(--default-bg-panel-active-color, #444); border-left: 3px solid #888; color: var(--default-color, #ddd); }
       #tmt .tmt-tip.go { border-left-color: var(--default-green-color, #82c91e); }
       #tmt .tmt-tip.warn { border-left-color: var(--default-orange-color, #f08c00); }
+      #tmt .tmt-tip.note { background: none; border-left-color: var(--panel-border-bottom-color, #555); color: var(--default-content-title-color, #aaa); padding: 3px 8px; }
+      #tmt .tmt-tip.route { padding: 6px 8px 4px; }
+      #tmt .tmt-rt { font-weight: bold; margin-bottom: 4px; }
+      #tmt .tmt-rt small { font-weight: normal; color: var(--default-content-title-color, #999); font-size: 10px; margin-left: 4px; }
+      #tmt .tmt-stop { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 30px; gap: 6px; align-items: baseline; padding: 1px 0; }
+      #tmt .tmt-stop span { color: var(--default-content-title-color, #999); font-variant-numeric: tabular-nums; }
+      #tmt .tmt-stop b { font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #tmt .tmt-stop em { font-style: normal; color: var(--default-content-title-color, #999); font-size: 11px; }
+      #tmt .tmt-stop i { font-style: normal; font-size: 10px; text-align: right; color: var(--default-green-color, #82c91e); }
+      #tmt .tmt-stop.now b { font-weight: bold; }
       #tmt a.tmt-tip:hover { background: var(--default-bg-panel-hover-color, #555); }
       #tmt .tmt-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: 2px 8px; padding: 5px 10px; color: inherit;
         border-bottom: 1px solid var(--panel-border-bottom-color, #3b3b3b); }
