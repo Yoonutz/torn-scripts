@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.11
+// @version      1.0.12
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -381,7 +381,7 @@
     const before = wide && ext ? ext : find;
     if (btnHost.nextElementSibling !== before) find.parentNode.insertBefore(btnHost, before);
     matchNeighbour();
-    if (wide) makeRoom(find); else restoreRoom();
+    restoreRoom(); // box resizing disabled: it guessed Torn's layout and broke the header
   }
 
   // Desktop search row holds two boxes side by side (search, "Forum posts").
