@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.12
+// @version      1.0.13
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -348,21 +348,23 @@
   // (the binoculars, else any other header button) instead of guessing sizes.
   const BOX = ['display', 'float', 'width', 'height', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
     'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'lineHeight', 'verticalAlign', 'alignItems', 'justifyContent', 'boxSizing'];
-  function matchNeighbour() {
+  function matchNeighbour(inRow) {
     const ref = document.querySelector('ul.toolbar > li.find-extend') ||
       [...document.querySelectorAll('ul.toolbar > li')].find((li) => li !== btnHost && li.querySelector(':scope > button.top_header_button'));
     const refBtn = ref?.querySelector(':scope > button.top_header_button');
     if (!ref || !refBtn) return;
     const copy = (from, to, keys) => { const cs = getComputedStyle(from); keys.forEach((k) => { to.style[k] = cs[k]; }); };
-    copy(ref, btnHost, BOX);
-    btnHost.style.position = 'relative';
     const btn = btnHost.querySelector('button');
-    copy(refBtn, btn, [...BOX, 'background', 'border', 'cursor', 'color', 'fill', 'opacity']);
+    if (!inRow) {
+      copy(ref, btnHost, BOX);
+      btnHost.style.position = 'relative';
+      copy(refBtn, btn, [...BOX, 'background', 'border', 'cursor', 'color', 'fill', 'opacity']);
+    }
     const refSvg = refBtn.querySelector('svg');
     const svg = btn.querySelector('svg');
     if (refSvg && svg) {
       const r = refSvg.getBoundingClientRect();
-      if (r.width) { svg.setAttribute('width', Math.round(r.width)); svg.setAttribute('height', Math.round(r.height)); }
+      if (r.width && !inRow) { svg.setAttribute('width', Math.round(r.width)); svg.setAttribute('height', Math.round(r.height)); }
       const cs = getComputedStyle(refSvg);
       svg.style.fill = cs.fill;
       svg.style.filter = cs.filter;
@@ -371,23 +373,38 @@
     }
   }
 
-  // Desktop shows a wide search box: sit right after it, next to the binoculars.
-  // Phone shows only a magnifier button: sit left of it.
+  // Desktop: Torn's search row (form#searchForm, two floated boxes) is its own box, positioned
+  // independently of the toolbar items, so the button goes INSIDE that row, after the "User"
+  // box, and both boxes give up half its width. The row keeps Torn's exact size and spot.
+  // Phone: the row is a single magnifier button, so the button is a toolbar item left of it.
+  const ROW_W = 34;
+  function searchRow(find) {
+    const form = find.querySelector('form#searchForm');
+    if (!form || form.getBoundingClientRect().width < 80) return null;
+    const boxes = [form.querySelector(':scope > [class*="searchWrapper"]'), form.querySelector(':scope > #search-type-wrapper')];
+    return boxes.every(Boolean) ? { form, boxes } : null;
+  }
   function place() {
     const find = document.querySelector('ul.toolbar > li.find-wrapper');
     if (!find || !btnHost) return;
-    const wide = find.getBoundingClientRect().width > 80;
-    const ext = find.parentNode.querySelector(':scope > li.find-extend');
-    const before = wide && ext ? ext : find;
-    if (btnHost.nextElementSibling !== before) find.parentNode.insertBefore(btnHost, before);
-    matchNeighbour();
-    restoreRoom(); // box resizing disabled: it guessed Torn's layout and broke the header
+    restoreRoom();
+    const row = searchRow(find);
+    if (row) {
+      if (btnHost.parentNode !== row.form) {
+        btnHost.removeAttribute('style');
+        btnHost.querySelector('button').removeAttribute('style');
+        row.form.appendChild(btnHost);
+      }
+      btnHost.classList.add('tmt-inrow');
+      makeRoom(row);
+      matchNeighbour(true);
+    } else {
+      btnHost.classList.remove('tmt-inrow');
+      if (btnHost.nextElementSibling !== find) find.parentNode.insertBefore(btnHost, find);
+      matchNeighbour(false);
+    }
   }
 
-  // Desktop search row holds two boxes side by side (search, "Forum posts").
-  // Shrink both by the button's width in total (Torn's own sizes forced down with !important),
-  // then measure how far the row's right edge really moved; if Torn keeps it anchored on the
-  // right, slide the row left by exactly the width it gave up, never more.
   let shrunk = [];
   function setImp(el, prop, val) {
     shrunk.push({ el, prop, val: el.style.getPropertyValue(prop), pri: el.style.getPropertyPriority(prop) });
@@ -397,40 +414,21 @@
     shrunk.reverse().forEach(({ el, prop, val, pri }) => { if (val) el.style.setProperty(prop, val, pri); else el.style.removeProperty(prop); });
     shrunk = [];
   }
-  function makeRoom(find) {
-    restoreRoom();
-    const need = Math.ceil(btnHost.getBoundingClientRect().width);
-    if (!need) return;
-    // The deepest element whose visible children include two boxes wider than 80px.
-    let row = null;
-    find.querySelectorAll('*').forEach((el) => {
-      const kids = [...el.children].filter((c) => c.getBoundingClientRect().width > 80);
-      if (kids.length >= 2) row = { el, kids };
-    });
-    if (!row) return;
-    const right = () => Math.max(...row.kids.map((k) => k.getBoundingClientRect().right));
-    const left = () => Math.min(...row.kids.map((k) => k.getBoundingClientRect().left));
-    const r0 = right();
-    const l0 = left();
-    const each = Math.ceil(need / row.kids.length);
-    row.kids.forEach((el) => {
+  function makeRoom({ boxes }) {
+    const h = Math.round(boxes[1].getBoundingClientRect().height) || 24;
+    btnHost.style.height = `${h}px`;
+    const each = ROW_W / boxes.length;
+    boxes.forEach((el) => {
       const w = Math.round(el.getBoundingClientRect().width - each);
-      if (getComputedStyle(el).display === 'inline') setImp(el, 'display', 'inline-block');
       setImp(el, 'box-sizing', 'border-box');
-      setImp(el, 'min-width', '0');
-      setImp(el, 'flex', '0 0 auto');
       setImp(el, 'width', `${w}px`);
       setImp(el, 'max-width', `${w}px`);
-      // Inner parts with their own fixed width (the input, the dropdown label) follow the box.
+      setImp(el, 'min-width', '0');
+      // Inner parts with their own fixed width (the input, the "User" toggler) follow the box.
       el.querySelectorAll('*').forEach((d) => {
-        if (d.getBoundingClientRect().width > w) { setImp(d, 'max-width', '100%'); setImp(d, 'min-width', '0'); setImp(d, 'box-sizing', 'border-box'); }
+        if (d.getBoundingClientRect().width > w) { setImp(d, 'max-width', '100%'); setImp(d, 'box-sizing', 'border-box'); }
       });
     });
-    // Right edge did not move (row anchored right): slide left by what the boxes gave up.
-    if (right() > r0 - need + 1) {
-      const shift = Math.max(0, Math.round(left() - l0));
-      if (shift) setImp(row.el, 'transform', `translateX(-${shift}px)`);
-    }
   }
 
   // ------------------------------------------------------------- header button
@@ -477,6 +475,10 @@
     const s = document.createElement('style');
     s.textContent = `
       .tmt-host { position: relative; }
+      .tmt-host.tmt-inrow { float: left; display: flex; align-items: center; justify-content: center; width: 34px; margin: 0; padding: 0; list-style: none; }
+      .tmt-host.tmt-inrow button { display: flex; align-items: center; justify-content: center; width: 34px; height: 100%; margin: 0; padding: 0; border: 0; background: none; cursor: pointer; }
+      .tmt-host.tmt-inrow svg { width: 22px; height: 22px; }
+      .tmt-host.tmt-inrow .tmt-dot { top: 0; right: 3px; }
       .tmt-host button:hover svg { filter: brightness(1.6) !important; }
       .tmt-host.tmt-live svg, .tmt-host.tmt-live svg path { fill: #e53935 !important; }
       .tmt-host .tmt-dot { position: absolute; top: 9px; right: 4px; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; display: none;
@@ -538,7 +540,7 @@
       if (UI.open && btnHost?.isConnected && !root.contains(e.target) && !btnHost.contains(e.target)) { UI.open = false; saveUi(); render(); }
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && UI.open && btnHost?.isConnected) { UI.open = false; saveUi(); render(); } });
-    window.addEventListener('resize', () => { restoreRoom(); place(); if (UI.open) render(); });
+    window.addEventListener('resize', () => { place(); if (UI.open) render(); });
     // Torn re-renders its header on some pages: put the button back when it goes missing.
     new MutationObserver(() => { if (!btnHost || !btnHost.isConnected) mountButton(); }).observe(document.body, { childList: true, subtree: true });
     mountButton();
