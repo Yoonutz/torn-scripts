@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.9
+// @version      1.0.10
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -245,6 +245,7 @@
         tips.push({ c: 'warn', t: `Skip ${s.g.name} in ${s.g.country}: dies in ~${fmtMin(s.eta)}, you need ${fmtMin(s.trip)}.` });
       });
       tips.push({ c: 'info', t: `Bond holds: M'aol can't be hit until all 5 guards fall (${5 - alive.length}/5 down).` });
+      tips.push({ c: 'info', t: predictRoute(guards, alive) });
     }
 
     if (!alive.length && maol.state === 'Awoken' && maol.hp > 0) {
@@ -262,6 +263,22 @@
     }
     tips.push({ c: 'info', t: 'Bring a Small First Aid Kit or First Aid Kit, not Blood Bags: they hit for ~4k, so a small heal gets you out of hospital and saves medical cooldown.' });
     return tips;
+  }
+
+  // M'aol's route is his guards' countries in death order. Dead ones are fixed; the rest are
+  // ordered by kill ETA at the current pace (untouched guards last, by HP left), so it's an estimate.
+  function predictRoute(guards, alive) {
+    const dead = guards.filter((g) => !alive.includes(g));
+    const seen = dead.filter((g) => ST.deaths[g.id]).sort((a, b) => ST.deaths[a.id].t - ST.deaths[b.id].t);
+    const unseen = dead.filter((g) => !ST.deaths[g.id]);
+    const fixed = [...unseen, ...seen].map((g) => `${g.country || '?'} ✓`);
+    if (unseen.length > 1) fixed[0] = `(${unseen.map((g) => g.country).join(' / ')} in unknown order)`, fixed.splice(1, unseen.length - 1);
+    const t = now();
+    const next = alive
+      .map((g) => ({ g, eta: killEta(g.id, g.hp) }))
+      .sort((a, b) => (a.eta - b.eta) || (a.g.hp / a.g.max - b.g.hp / b.g.max))
+      .map(({ g, eta }) => `${g.country}${isFinite(eta) ? ' ~' + tct(t + eta * 60) : ' ?'}`);
+    return `Predicted route (estimate, times = guard death TCT): ${[...fixed, ...next].join(' → ')}. Then a hop every ${HOP_MIN} min.`;
   }
 
   // ------------------------------------------------------------- UI
