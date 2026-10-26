@@ -25,8 +25,8 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 <details><summary><b>How it works</b></summary>
 
 - NPC IDs: M'aol 23, Dyno'salam 100, Nol'dasaym 101, Asmol'yand 102, Sylo'nadam 103, Ladso'myna 104.
-- API use: 7 calls a minute (`user/{id}/profile` for the six NPCs, your `user/basic`), +1 `user/travel` only while you fly,
-  `user/perks` every 6 h. About 7% of Torn's 100/min key limit. Only while a Torn tab is visible, shared across tabs,
+- API use: refresh every 15 s, 7 calls each (`user/{id}/profile` for the six NPCs, your `user/basic`), so 28 calls a minute,
+  +1 `user/travel` per refresh only while you fly, `user/perks` every 6 h. About 28% of Torn's 100/min key limit. Only while a Torn tab is visible, shared across tabs,
   and once every 10 min when everything is dormant.
 - Flight times: standard minutes from the [wiki](https://wiki.torn.com/wiki/Travel), airstrip ×0.7, WLT ×0.5,
   business ×0.3, travel book ×0.75. Real flights vary about 3%.
@@ -36,7 +36,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 
 <details><summary><b>Compliance</b></summary>
 
-Reads the Torn API with your own key, about 7 calls a minute only while a Torn tab is visible. Adds one header button
+Reads the Torn API with your own key, about 28 calls a minute only while a Torn tab is visible. Adds one header button
 and a dropdown; never clicks, attacks or travels for you. Links take you to the attack or travel page, you act yourself.
 The key and the last snapshot stay in this browser's localStorage.
 

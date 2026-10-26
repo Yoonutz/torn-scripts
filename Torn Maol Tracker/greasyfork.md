@@ -19,7 +19,7 @@
 </ol>
 <h2>Good to know</h2>
 <ul>
-<li>About 7 API calls a minute, only while a Torn tab is visible, shared across tabs, every 10 min when everything is dormant.</li>
+<li>Refreshes every 15 s: about 28 API calls a minute, only while a Torn tab is visible, shared across tabs, every 10 min when everything is dormant.</li>
 <li>Key and last snapshot stay in this browser (localStorage). Calls go only to api.torn.com.</li>
 <li>Never attacks or travels for you: links open the attack or travel page.</li>
 <li>Defeat order is only known for guards the script saw die.</li>

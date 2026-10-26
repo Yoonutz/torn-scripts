@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.2
+// @version      1.0.3
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const POLL_S = 60;
+  const POLL_S = 15;               // 7 calls each: 28 of Torn's 100 calls/min per key
   const IDLE_POLL_S = 600;          // everything dormant: check every 10 min
   const PERKS_S = 6 * 3600;
   const RATE_WINDOW_S = 15 * 60;   // HP samples kept for the kill-rate estimate
@@ -76,7 +76,8 @@
   async function tornApi(path) {
     const key = apiKey();
     if (!key) throw new Error('No API key');
-    const url = `https://api.torn.com/v2/${path}`;
+    // timestamp makes Torn skip its response cache, so HP is fresh on every poll
+    const url = `https://api.torn.com/v2/${path}${path.includes('?') ? '&' : '?'}timestamp=${now()}&comment=MaolTracker`;
     const headers = { Authorization: `ApiKey ${key}` };
     let text;
     if (typeof window.PDA_httpGet === 'function') {
@@ -145,7 +146,7 @@
     // Several Torn tabs share one snapshot: only the first tab due polls the API.
     const fresh = load(K.state, {});
     const dormant = fresh.snap && fresh.snap.maol.state === 'Dormant' && fresh.snap.guards.every((g) => g.state === 'Dormant');
-    if (fresh.snap && now() - fresh.snap.t < (dormant ? IDLE_POLL_S : POLL_S) - 5) {
+    if (fresh.snap && now() - fresh.snap.t < (dormant ? IDLE_POLL_S : POLL_S) - 2) {
       ST = Object.assign(ST, fresh);
       D = fresh.snap;
       render();
@@ -433,7 +434,7 @@
     mountButton();
     render();
     refresh();
-    setInterval(() => { if (!document.hidden) refresh(); }, 15 * 1000);
+    setInterval(() => { if (!document.hidden) refresh(); }, 5 * 1000);
   }
 
   if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);
