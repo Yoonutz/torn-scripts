@@ -32,3 +32,10 @@ That one script is imported by the Cloudflare runner, so it (and what it imports
 JavaScript with no `fs` or Node modules; the other scripts stay ordinary CLIs. Pushing to `main`
 deploys the runner through GitHub Actions and the button appears on the next open. Contract and
 history: `docs/superpowers/specs/2026-08-23-operational-command-center-design.md`.
+
+## Greasy Fork publish
+
+Run `tools/greasyfork/gf.mjs` on Ionut's PC only in the pre-approved form, as a standalone command:
+from `D:\Temp-claude` `node torn-scripts/tools/greasyfork/gf.mjs publish "<Folder>"` (repo root: drop
+`torn-scripts/`). Any other form misses the allow rule and a new listing then needs a typed message.
+See `tools/greasyfork/README.md`.

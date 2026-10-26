@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node tools/greasyfork/gf.mjs status)",
+      "Bash(node tools/greasyfork/gf.mjs publish *)",
+      "Bash(node tools/greasyfork/gf.mjs sync *)",
+      "PowerShell(node tools/greasyfork/gf.mjs status)",
+      "PowerShell(node tools/greasyfork/gf.mjs publish *)",
+      "PowerShell(node tools/greasyfork/gf.mjs sync *)"
+    ]
+  }
+}

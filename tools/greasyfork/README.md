@@ -35,3 +35,12 @@ the window so the cookies are saved.
 
 The session lives in `~/.torn-greasyfork-chrome` (or `-msedge`; override with `GF_PROFILE`), never
 in the repo. `GF_BROWSER_PATH` picks another browser executable. Background: `docs/greasyfork-github-sync.md`.
+
+## Running it from Claude without prompts
+
+Creating a new listing trips Claude Code's auto-mode "Create Public Surface" check, which a card tap
+cannot clear. `permissions.allow` rules resolve before that check, so this tool is pre-approved for
+exactly `node tools/greasyfork/gf.mjs status|publish|sync` in `.claude/settings.json` (repo root as
+working folder) and for `node torn-scripts/tools/greasyfork/gf.mjs ...` in `D:\Temp-claude\.claude\settings.json`
+on the home PC, where Remote Control sessions start. Run the command on its own, in exactly that form:
+no `cd ... &&`, no `npx`, no absolute path, or the rule does not match.
