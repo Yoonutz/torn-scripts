@@ -22,7 +22,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 
 ## Install
 1. Get a userscript manager ([Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)).
-2. Install `torn-maol-tracker.user.js` from this folder.
+2. Install from [Greasy Fork](https://greasyfork.org/en/scripts/602300-torn-m-aol-tracker) (or `torn-maol-tracker.user.js` from this folder).
 3. Click the button left of the search and paste a Minimal access API key. Torn PDA fills it in by itself.
 
 <details><summary><b>How it works</b></summary>
