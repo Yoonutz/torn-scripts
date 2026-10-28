@@ -69,6 +69,12 @@ The key stays in Tampermonkey's own storage (a key saved by an older version mov
 
 </details>
 
+## Data sources
+
+- **Torn API**, with your own key: all live NPC status, HP, your location and travel perks.
+- **[chain-race M'aol dashboard](https://live.chain-race.workers.dev/maol.html)**, developed by [LDP [1580562]](https://www.torn.com/profiles.php?XID=1580562): its public feed fills in guard deaths and M'aol's kill time the script didn't see itself. Thank you, LDP.
+- **[TornStats M'aol tracker](https://www.tornstats.com/maol)**: linked from the panel when M'aol's route is still partly a guess.
+
 ## Source
 
 The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-maol-tracker.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand. The same plug-in also runs inside the private Command Center (tab, badge, and AI-worded tips through its private runner; this standalone copy has no AI); when both are installed this copy steps aside so nothing runs twice.

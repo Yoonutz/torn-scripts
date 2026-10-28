@@ -25,7 +25,7 @@
 <ul>
 <li>Refreshes every 15 s: at most 28 API calls a minute, only while a Torn tab is visible, shared across tabs. Dead NPCs are checked every 10 min. When everything is dormant: 1 call every 10 min in Halloween week, none outside it.</li>
 <li>Key in your userscript manager's storage, last snapshot in this browser. Torn calls go only to api.torn.com.</li>
-<li>When it missed guard deaths or M'aol's kill, it reads the public M'aol feed at live.chain-race.workers.dev (by LDP [1580562]) at most every 2 min, every 10 min while dormant. Nothing is sent to it: no key, no name. Your userscript manager asks once to allow that site.</li>
+<li>When it missed guard deaths or M'aol's kill, it reads the public feed of the <a href="https://live.chain-race.workers.dev/maol.html">chain-race M'aol dashboard</a> at most every 2 min, every 10 min while dormant. Nothing is sent to it: no key, no name. Your userscript manager asks once to allow that site.</li>
 <li>Never attacks or travels for you: links open the attack or travel page.</li>
 <li>Missed some guard deaths? It takes the defeat times from that feed, or else learns M'aol's route from his own moves within one loop.</li>
 </ul>
@@ -48,4 +48,10 @@
 <li><b>Key access level:</b> Minimal.</li>
 </ul>
 </details>
+<h2>Data sources</h2>
+<ul>
+<li><b>Torn API</b>, with your own key: all live NPC status, HP, your location and travel perks.</li>
+<li><b><a href="https://live.chain-race.workers.dev/maol.html">chain-race M'aol dashboard</a></b>, developed by <a href="https://www.torn.com/profiles.php?XID=1580562">LDP [1580562]</a>: its public feed fills in guard deaths and M'aol's kill time the script didn't see itself. Thank you, LDP.</li>
+<li><b><a href="https://www.tornstats.com/maol">TornStats M'aol tracker</a></b>: linked from the panel when M'aol's route is still partly a guess.</li>
+</ul>
 <p>Source and issues: <a href="https://github.com/Yoonutz/torn-scripts/tree/main/Torn%20Maol%20Tracker">GitHub</a></p>
