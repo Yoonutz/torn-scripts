@@ -8,8 +8,8 @@ import { store } from '../core/storage.js';
 import { tornKey, KEY_TORN } from '../core/torn.js';
 import { KEY_OR } from '../core/ai.js';
 import { injectTheme } from '../core/theme.js';
-import { frameCss } from '../core/frame.js';
-import { errCard, fillStats, keyField } from '../core/ui.js';
+import { frameCss, trapScroll } from '../core/frame.js';
+import { errCard, fillStats, keyField, button } from '../core/ui.js';
 import { makeKit } from '../core/kit.js';
 
 const SOLO_WAIT = 1500; // the Command Center runs at document-idle too: give it time to claim its plug-ins
@@ -23,7 +23,7 @@ export function boot(plugins) {
   const rootId = 'occk-' + p.id;
   const kit = makeKit('standalone', () => document.getElementById(rootId));
   const KEY_OPEN = 'occk.' + p.id + '.open';
-  let win, title, sub, statsRow, main, rerun, gear;
+  let win, title, sub, tool, statsRow, main, rerun, gear;
   let view = 'plugin';
 
   function claimedByOcc() {
@@ -58,7 +58,7 @@ export function boot(plugins) {
     view = 'plugin';
     title.textContent = p.label;
     sub.innerHTML = '';
-    rerun.hidden = false;
+    tool.hidden = false;
     gear.classList.remove('occ-act');
     fillStats(statsRow, null);
     show(el('div', 'occ-card', '<span class="occ-spin"></span>Loading...'));
@@ -73,7 +73,7 @@ export function boot(plugins) {
     view = 'setup';
     title.textContent = p.label + ' setup';
     sub.innerHTML = 'v' + esc(kit.version);
-    rerun.hidden = true;
+    tool.hidden = true;
     gear.classList.add('occ-act');
     fillStats(statsRow, null);
     const wrap = el('div');
@@ -117,19 +117,23 @@ export function boot(plugins) {
     const head = el('div', 'occ-head');
     title = el('span', 'occ-title', esc(p.label));
     head.appendChild(title);
-    sub = el('span', 'occ-sub', '');
-    head.appendChild(sub);
-    rerun = headButton(SOLO_ICON.refresh, 'Refresh', () => openPlugin(true));
-    head.appendChild(rerun);
+    head.appendChild(el('span', 'occ-gap'));
     gear = headButton(SOLO_ICON.gear, 'Setup', () => (view === 'setup' ? openPlugin(false) : showSetup()));
     head.appendChild(gear);
     head.appendChild(headButton('&times;', 'Close', () => setOpen(false)));
     win.appendChild(head);
+    tool = el('div', 'occ-tool');
+    sub = el('span', 'occ-sub', '');
+    tool.appendChild(sub);
+    rerun = button(SOLO_ICON.refresh + 'Refresh', () => openPlugin(true));
+    tool.appendChild(rerun);
+    win.appendChild(tool);
     statsRow = el('div', 'occ-stats');
     win.appendChild(statsRow);
     main = el('div', 'occ-main occ-scroll');
     win.appendChild(main);
     root.appendChild(win);
+    trapScroll(win);
     const toggle = () => setOpen(!win.classList.contains('occ-on'));
     if (typeof p.launcher === 'function') p.launcher(kit, toggle);
     else {
