@@ -4,14 +4,17 @@
 //   GET  /run/<id>[?force=1&...]   Authorization: ApiKey <Torn API key>; runs the skill, raw result
 //   GET  /ask/<id>[?force=1&...]   same, then a free model turns the report into the answer
 //   POST /write                    { system, user } from a userscript plug-in; a free model answers
+//   GET  /usage                    Keys tab: the runner's model calls and OpenRouter's free count, 14 days
+// Cron (wrangler.toml): hourly OpenRouter snapshot, so the daily trend fills even with OCC closed.
 // Private: only keys owned by a player in ALLOWED_PLAYERS (wrangler.toml) get past auth.mjs.
-// Parts: auth.mjs (owner, allowlist, rate limits), torn.mjs, store.mjs (KV), ai/ (models, answers),
+// Parts: auth.mjs (owner, allowlist, rate limits), torn.mjs, store.mjs (KV), ai/ (models, answers), usage.mjs,
 // registry.mjs (generated at build from .claude/skills/*/scripts/runner.mjs, SKILL.md bundled).
 import { REGISTRY } from "./registry.mjs";
 import { gate } from "./auth.mjs";
 import { tornClient, TornError } from "./torn.mjs";
 import { store } from "./store.mjs";
 import { answer, skillPrompt, BUDGET } from "./ai/answer.mjs";
+import { usage, orSnapshot } from "./usage.mjs";
 
 const RAW = "https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/";
 
@@ -84,19 +87,24 @@ export default {
     if (url.pathname === "/health") return json({ ok: true, skills: REGISTRY.length });
     if (url.pathname === "/skills") return json({ skills: skillList() });
     const isWrite = url.pathname === "/write" && req.method === "POST";
+    const isUsage = url.pathname === "/usage" && req.method === "GET";
     const m = url.pathname.match(/^\/(run|ask)\/([a-z0-9_-]+)$/);
-    if (!isWrite && (!m || req.method !== "GET")) return json({ error: "unknown route" }, 404);
+    if (!isWrite && !isUsage && (!m || req.method !== "GET")) return json({ error: "unknown route" }, 404);
     const entry = m ? REGISTRY.find((e) => e.skill.id === m[2]) : null;
     if (m && !entry) return json({ error: "unknown skill " + m[2] }, 404);
     try {
       const auth = await gate(req, env);
       if (auth.error) return json({ error: auth.error }, auth.status);
       if (isWrite) return await write(req, env);
+      if (isUsage) return json(await usage(env, req.headers.get("X-OpenRouter-Key") || ""));
       return await runSkill(req, env, auth, entry, m[1] === "ask");
     } catch (e) {
       if (e instanceof TornError && e.code === 2) return json({ error: "Torn rejected the API key" }, 401);
       if (e instanceof TornError) return json({ error: "Torn API: " + e.message }, 502);
       return json({ error: String((e && e.message) || e) }, 502);
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(orSnapshot(env, env.OPENROUTER_KEY));
   },
 };

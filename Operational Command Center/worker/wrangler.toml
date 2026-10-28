@@ -5,6 +5,11 @@ compatibility_date = "2026-08-01"
 [build]
 command = "node build-registry.mjs"
 
+# Hourly OpenRouter free-request snapshot for the Keys tab (needs the OPENROUTER_KEY secret; without
+# it the tab's own /usage reads fill the day instead). :55 so the last one is close to the UTC reset.
+[triggers]
+crons = ["55 * * * *"]
+
 [[kv_namespaces]]
 binding = "SNAPSHOTS"
 id = "bcdd4092e01f4ca4b4ff8cdf55b19759"

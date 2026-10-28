@@ -2,5 +2,5 @@
   "out": "operational-command-center.user.js",
   "header": "src/header.js",
   "shell": "occ",
-  "plugins": ["plugins/trains.js", "../Torn Maol Tracker/plugin.js"]
+  "plugins": ["plugins/trains.js", "../Torn Maol Tracker/plugin.js", "plugins/keys.js"]
 }
