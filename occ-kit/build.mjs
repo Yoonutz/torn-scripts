@@ -105,7 +105,12 @@ function buildTarget(dir, cfg) {
   parts.push('boot([' + ids.join(', ') + ']);');
   parts.push('})();');
   parts.push('');
-  return { text: parts.join('\n'), ver };
+  const text = parts.join('\n');
+  // Torn PDA turns every curly quote in a script into a straight one before running it, so one
+  // inside a JS string silently breaks the whole script there. Use \u2019 etc. instead.
+  const curly = text.split('\n').findIndex((l) => /[\u2018\u2019\u201C\u201D]/.test(l));
+  if (curly !== -1) throw new Error(rel(dir) + ': curly quote on built line ' + (curly + 1) + ' (Torn PDA rewrites them): use \\u2018/\\u2019/\\u201C/\\u201D');
+  return { text, ver };
 }
 
 function targets() {
