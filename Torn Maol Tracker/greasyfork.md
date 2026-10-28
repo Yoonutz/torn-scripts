@@ -11,7 +11,7 @@
 <li><b>Your flight times.</b> Reads your airstrip, WLT and travel book perks, adds the trip home and any hospital, jail or flight time left.</li>
 <li><b>What to do next.</b> Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land.</li>
 <li><b>M'aol's timetable.</b> Where he is, when he leaves and his next stops with times, even before the bond breaks.</li>
-<li><b>Stay or fly.</b> The first stop where you get at least 3 min of hitting. While the bond holds it tells you when to leave, so you never land early to a boss that can't be hit.</li>
+<li><b>Stay or fly.</b> The first stop where you get at least 3 min of hitting. When there's time it says when to be there and when to leave, and while the bond holds it adds a margin, so you never land early to a boss that can't be hit.</li>
 <li><b>Next summon countdown.</b> While all are dormant: when the next summon is due, about 48h after M'aol's kill.</li>
 <li><b>Sleeps when there's no event.</b> Zero API calls outside Halloween week. Times show in your own clock.</li>
 </ul>
@@ -33,7 +33,7 @@
 <summary><b>How the numbers work</b></summary>
 <ul>
 <li><b>Flight times:</b> standard minutes from the Torn wiki, airstrip x0.7, WLT x0.5, business x0.3, travel book x0.75. Real flights vary about 3%.</li>
-<li><b>Time left:</b> HP now divided by HP lost per minute over the last 5 min. Under 5% HP M'aol's shield slows the kill, so no time is shown.</li>
+<li><b>Time left:</b> between the current pace (last 5 min) and the fastest 5 min of the last 15, because the crowd keeps growing. Bond and M'aol's kill show as a window like ~20:05–20:25. Under 5% HP M'aol's shield slows the kill, so no time is shown.</li>
 <li><b>Reachable:</b> your trip plus 3 min is shorter than the time left.</li>
 <li><b>Route:</b> M'aol loops through the dead guards' countries in defeat order, one stop every quarter hour, with no flight. He starts moving before the bond breaks, but can't be hit until all 5 Praetorians fall.</li>
 </ul>

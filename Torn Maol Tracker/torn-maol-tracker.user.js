@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.29
+// @version      1.0.30
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-const VERSION = '1.0.29';
+const VERSION = '1.0.30';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -1096,18 +1096,72 @@ function tripMin(me, country, method) {
 let D = ST.snap || null;   // last snapshot: shown straight away, kept on screen when a refresh fails
 let err = '';
 
-// Minutes until the NPC falls, from the HP lost over the last 5 min.
-// Infinity: no drop yet, or M'aol under 5% where his shield makes the pace meaningless.
+// Kill times. The plain pace (HP lost over the last 5 min) runs late: the crowd keeps growing, and his
+// pace dips at every hop while players catch up (28 Oct: bond 1h late, kill 20 min late). The fast
+// case is the best 5 min of the last 15, counting every NPC's damage when this is the last target left,
+// since the crowd moves on to it. The estimate sits between the two (geometric mean), which replayed
+// 26 + 28 Oct within about a third of the time left.
+const RANGE = [0.75, 1.35];        // shown as a window around the estimate: replays missed by up to a third
+const NPC_IDS = [MAOL.id, ...GUARDS.map((g) => g.id)];
+
+// HP at time T: the last sample at or before T, or the first one when none is that old.
+function hpAt(id, T) {
+  const s = ST.samples[id] || [];
+  let hp = s.length ? s[0][1] : 0;
+  for (const [ts, h] of s) { if (ts > T) break; hp = h; }
+  return hp;
+}
+// HP lost per minute over the last 5 min, summed over ids.
+function paceNow(ids) {
+  const t = now();
+  let lost = 0, span = 0;
+  for (const id of ids) {
+    const s = (ST.samples[id] || []).filter(([ts]) => t - ts <= ETA_WINDOW_S);
+    if (s.length < 2) continue;
+    lost += s[0][1] - s[s.length - 1][1];
+    span = Math.max(span, s[s.length - 1][0] - s[0][0]);
+  }
+  return span >= 60 ? lost / (span / 60) : 0;
+}
+// Best 5-min HP loss per minute within the last 15 min, summed over ids.
+function pacePeak(ids) {
+  const t = now();
+  const all = ids.flatMap((id) => (ST.samples[id] || []).filter(([ts]) => t - ts <= RATE_WINDOW_S));
+  if (!all.length) return 0;
+  const first = Math.min(...all.map(([ts]) => ts));
+  let best = 0;
+  for (const e of new Set(all.map(([ts]) => ts))) {
+    const s = e - ETA_WINDOW_S;
+    if (s < first - 0.4 * ETA_WINDOW_S) continue;   // not enough history for a full 5 min
+    const lost = ids.reduce((a, id) => a + hpAt(id, s) - hpAt(id, e), 0);
+    best = Math.max(best, lost / (Math.min(e - s, e - first) / 60));
+  }
+  return best;
+}
+// Minutes until ids all fall. crowd: the crowd's damage on every NPC counts (they're the last targets left).
+function etaFor(ids, crowd) {
+  const hp = ids.reduce((a, id) => a + hpAt(id, now()), 0);
+  if (hp <= 0) return Infinity;
+  const slow = Math.max(...ids.map((id) => { const r = paceNow([id]); return r > 0 ? hpAt(id, now()) / r : Infinity; }));
+  const peak = pacePeak(crowd ? NPC_IDS : ids);
+  const fast = peak > 0 ? hp / peak : Infinity;
+  if (!isFinite(fast)) return slow;
+  return isFinite(slow) ? Math.sqrt(slow * fast) : fast;
+}
+// Minutes until one NPC falls. Infinity: no drop yet, or M'aol under 5% where his shield makes the pace meaningless.
 function killEta(id, hp, max) {
   if (hp <= 0) return Infinity;
   if (id === MAOL.id && max && hp / max < SHIELD_PCT) return Infinity;
-  const s = (ST.samples[id] || []).filter(([t]) => now() - t <= ETA_WINDOW_S);
-  if (s.length < 2) return Infinity;
-  const [t0, h0] = s[0];
-  const [t1, h1] = s[s.length - 1];
-  const perMin = (h0 - h1) / Math.max(1, (t1 - t0) / 60);
-  return perMin > 0 ? hp / perMin : Infinity;
+  const alive = D ? D.guards.filter((g) => g.hp > 0 && g.state === 'Awoken') : [];
+  const last = id === MAOL.id ? !alive.length : alive.length === 1 && alive[0].id === id;
+  return etaFor([id], last);
 }
+// "~20:05–20:25" around an estimate in minutes from now; one time when the window is tiny.
+const around = (m) => {
+  const t = now();
+  const a = hm(t + m * RANGE[0] * 60), b = hm(t + m * RANGE[1] * 60);
+  return a === b || m < 6 ? `~${hm(t + m * 60)}` : `~${a}–${b}`;
+};
 const shielded = (n) => n.id === MAOL.id && n.hp > 0 && n.max && n.hp / n.max < SHIELD_PCT;
 
 // Dead NPCs don't change while the event runs, so they're only re-checked every 10 min. While everything
@@ -1307,21 +1361,31 @@ function plan(D) {
   const alive = guards.filter((g) => g.hp > 0 && g.state === 'Awoken');
   const pend = alive.map((g) => { const e = killEta(g.id, g.hp, g.max); return { g, at: isFinite(e) ? t + e * 60 : Infinity }; })
     .sort((a, b) => (a.at - b.at) || (a.g.hp / a.g.max - b.g.hp / b.g.max));
-  const bondAt = !alive.length ? 0 : Math.max(...pend.map((p) => p.at));
+  // All guards together: their HP against the whole crowd, so the time doesn't hang on the slowest one.
+  const bondEta = alive.length > 1 ? etaFor(alive.map((g) => g.id), true) : alive.length ? killEta(alive[0].id, alive[0].hp, alive[0].max) : 0;
+  const bondAt = !alive.length ? 0 : isFinite(bondEta) ? t + bondEta * 60 : Infinity;
+  if (pend.length && isFinite(bondAt)) pend[pend.length - 1].at = bondAt;   // the last guard falls with the bond
   const loopAt = (T) => [...order.loop, ...pend.filter((p) => p.at <= T).map((p) => p.g.country)];
   const meta = { order, pend, bondAt, stops: [] };
   if (maol.state !== 'Awoken' || !maol.country) return meta;
   const seen = order.exact ? {} : hopNext();   // order partly guessed: his own moves win
+  const step = (c, T) => { const L = loopAt(T); const i = L.indexOf(c); return i < 0 || L.length < 2 ? null : seen[c] && L.includes(seen[c]) ? seen[c] : L[(i + 1) % L.length]; };
   let c = maol.country;
   let T = Math.floor(t / HOP_S) * HOP_S + HOP_S;
+  meta.here = c;
   meta.leaves = T;
+  // Just after a quarter hour Torn can show his last stop for a few more seconds: show where he's heading.
+  const hop = ST.hops[ST.hops.length - 1];
+  if (t - (T - HOP_S) < 90 && hop && hop[0] < T - HOP_S && hop[1] === c && step(c, T - HOP_S)) {
+    c = step(c, T - HOP_S);
+    meta.here = c;
+    meta.arriving = true;
+  }
   // Enough stops to cover the bond break plus one more loop, so stay-or-fly can look past it.
   const until = (isFinite(bondAt) ? Math.max(bondAt, t) : t) + 6 * HOP_S;
   for (let k = 0; k < 40 && T <= until; k++, T += HOP_S) {
-    const L = loopAt(T);
-    const i = L.indexOf(c);
-    if (i < 0 || L.length < 2) break;
-    c = seen[c] && L.includes(seen[c]) ? seen[c] : L[(i + 1) % L.length];
+    c = step(c, T);
+    if (!c) break;
     meta.stops.push({ c, at: T });
   }
   return meta;
@@ -1376,17 +1440,17 @@ function advice() {
 
   if (maol.state === 'Awoken' && maol.hp > 0) {
     const bonded = alive.length > 0;
-    if (!bonded && maol.country === me.where && !busy) {
+    if (!bonded && P.here === me.where && !busy) {
       tips.push({ c: 'go', t: `Hit M'aol now. He's here in ${me.where} until ${hm(P.leaves)}.`, href: `https://www.torn.com/loader.php?sid=attack&user2ID=${MAOL.id}` });
     } else if (maol.country && isFinite(P.bondAt)) {
       tips.push(stayOrFly(P, maol, me, method, bonded));
     }
     if (bonded) {
-      tips.push({ c: 'info', t: `Bond: M'aol can't be attacked until all 5 guards are dead (${5 - alive.length}/5 down` + (isFinite(P.bondAt) ? `, last one ~${hm(P.bondAt)}).` : ').') });
+      tips.push({ c: 'info', t: `Bond: M'aol can't be attacked until all 5 guards are dead (${5 - alive.length}/5 down` + (isFinite(P.bondAt) ? `, last one ${around((P.bondAt - t) / 60)}).` : ').') });
     }
     if (maol.country) {
       const you = (c) => (c === me.where ? '<i>you</i>' : '');
-      const rows = [`<span>now</span><b>${esc(maol.country)}</b><em>until ${hm(P.leaves)}</em>${you(maol.country)}`,
+      const rows = [`<span>now</span><b>${esc(P.here)}</b><em>${P.arriving ? 'arriving, ' : ''}until ${hm(P.leaves)}</em>${you(P.here)}`,
         ...P.stops.slice(0, 5).map((s) => `<span>${hm(s.at)}</span><b>${esc(s.c)}</b><em></em>${you(s.c)}`)];
       tips.push({ c: 'route', h: `<div class="tmt-rt">M'aol's route <small>one stop every 15 min, no flight time</small></div>` +
         rows.map((r, i) => `<div class="tmt-stop${i ? '' : ' now'}">${r}</div>`).join('') });
@@ -1412,10 +1476,10 @@ function stayOrFly(P, maol, me, method, bonded) {
   const deathAt = bonded || !isFinite(eta) ? Infinity : t + eta * 60;
   const left = Math.max(0, P.bondAt - t);
   if (bonded && left > 60 * 60) {
-    return { c: 'info', t: `Bond holds until ~${hm(P.bondAt)}. Too early to fly to M'aol, he can't be hit before then.` };
+    return { c: 'info', t: `Bond holds until ${around(left / 60)}. Too early to fly to M'aol, he can't be hit before then.` };
   }
   const opens = bonded ? P.bondAt + Math.max(3 * 60, left / 4) : t;
-  const windows = [{ c: maol.country, from: t, to: P.leaves }, ...P.stops.map((s) => ({ c: s.c, from: s.at, to: s.at + HOP_S }))];
+  const windows = [{ c: P.here, from: t, to: P.leaves }, ...P.stops.map((s) => ({ c: s.c, from: s.at, to: s.at + HOP_S }))];
   const fits = windows.map((w) => {
     const arrive = t + tripMin(me, w.c, method) * 60 + 60;
     const start = Math.max(w.from, arrive, opens);
@@ -1423,7 +1487,7 @@ function stayOrFly(P, maol, me, method, bonded) {
   }).filter((w) => w.ok);
   const lowHp = shielded(maol) ? ' He is under 5% and his shield slows the kill, so the end time is uncertain.' : '';
   if (!fits.length) {
-    return { c: 'warn', t: (isFinite(deathAt) ? `At this pace he dies ~${hm(deathAt)}, before you can reach any stop. ` : "You can't reach any of his next stops in time. ") + 'Stay put.' + lowHp };
+    return { c: 'warn', t: (isFinite(deathAt) ? `At this pace he dies ${around(eta)}, before you can reach any stop. ` : "You can't reach any of his next stops in time. ") + 'Stay put.' + lowHp };
   }
   // Earliest hit wins, but a stop only 15 min later with a shorter trip (or no trip) is the better deal.
   const first = Math.min(...fits.map((w) => w.start));
@@ -1436,10 +1500,12 @@ function stayOrFly(P, maol, me, method, bonded) {
   const home = me.where && me.where !== 'Torn' && fits.some((w) => w.c === me.where) ? ` Or stay: he's back in ${me.where} ${hm(fits.find((w) => w.c === me.where).from)}.` : '';
   const trip = tripMin(me, best.c, method);
   const flyAt = best.start - trip * 60 - 60;
-  if (bonded && flyAt - t > 2 * 60) {
-    return { c: 'info', t: `Don't fly yet: M'aol can't be hit until the bond breaks (~${hm(P.bondAt)}). Leave for ${best.c} at ${hm(flyAt)} (${METHOD_NAME[method]}, ${fmtMin(trip)}), he's there ${win}.` + home + lowHp };
+  const bond = bonded ? ` Bond breaks ${around(left / 60)}, he can't be hit before.` : '';
+  // "Fly now" only when leaving later would miss the window, otherwise when to be there and when to leave.
+  if (flyAt - t > 2 * 60) {
+    return { c: 'info', t: `Be in ${best.c} by ${hm(best.start)}: leave at ${hm(flyAt)} (${METHOD_NAME[method]}, ${fmtMin(trip)}). M'aol is there ${win}.` + bond + home + lowHp };
   }
-  return { c: 'go', t: `Fly to ${best.c} now (${METHOD_NAME[method]}, ${fmtMin(tripMin(me, best.c, method))}). M'aol is there ${win}.` + (bonded ? ' First stop after the bond breaks.' : '') + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
+  return { c: 'go', t: `Fly to ${best.c} now (${METHOD_NAME[method]}, ${fmtMin(trip)}). M'aol is there ${win}.` + bond + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
 }
 
 // ------------------------------------------------------------- AI tips

@@ -7,16 +7,16 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
   <img src="screenshot.png" alt="Torn M'aol tracker on desktop" width="300">
   <img src="screenshot-mobile.png" alt="Torn M'aol tracker on mobile" width="300">
 </p>
-<p align="center"><sub>Desktop and phone, replaying 26 Oct 2026 at 15:53: M'aol is coming to Mexico.</sub></p>
+<p align="center"><sub>Desktop and phone, replaying 28 Oct 2026 at 20:17 (18:17 TCT): bond just broke, M'aol is due in Mexico at 20:45.</sub></p>
 
 ## Features
 - **Header button.** Next to the binoculars on desktop, left of the magnifier on phones. Red while M'aol is summoned. Green dot: something to do now. Orange: action on, nothing reachable.
-- **All six NPCs.** Country, HP bar and time until each one falls, from the HP drop over the last 5 min.
+- **All six NPCs.** Country, HP bar and time until each one falls, from the HP drop and how fast the crowd is growing.
 - **Your flight times.** Reads your travel perks (airstrip, WLT, travel book), adds the trip home when you are abroad
   and any hospital, jail or flight you are still in. Toggle *business ticket* to see those times.
 - **What to do next.** Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land.
 - **M'aol's timetable.** Where he is, when he leaves and his next stops with times, even before the bond breaks.
-- **Stay or fly.** The first stop where you get at least 3 min of hitting: "Stay in Mexico, he's here 16:15–16:30" or "Fly to Canada". While the bond holds it says when to leave ("Leave for Canada at 15:16"), with a safety margin on the break time, so you never land early to a boss that can't be hit.
+- **Stay or fly.** The first stop where you get at least 3 min of hitting: "Stay in Mexico, he's here 16:15–16:30" or "Fly to Canada now". When there's time it says "Be in Canada by 15:45: leave at 15:16", and while the bond holds it adds a safety margin on the break time, so you never land early to a boss that can't be hit.
 - **Next summon countdown.** While all are dormant: when the next summon is due, about 48h after M'aol's kill.
 - **Sleeps when there's no event.** Zero API calls outside Halloween week.
 - **Times in your own clock.** The footer shows the offset from TCT.
@@ -48,7 +48,10 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 - A failed call keeps the last data on screen and retries on the next refresh.
 - Flight times: standard minutes from the [wiki](https://wiki.torn.com/wiki/Travel), airstrip ×0.7, WLT ×0.5,
   business ×0.3, travel book ×0.75. Real flights vary about 3%.
-- Kill times use the last 5 min of HP loss. Under 5% HP M'aol's shield slows the kill, so no time is shown there.
+- Kill times sit between the current pace (last 5 min) and the fastest 5 min of the last 15, where the last target left
+  counts the whole crowd's damage, since everyone moves on to it. Bond and M'aol's kill show as a window ("~20:05–20:25"):
+  replaying 26 and 28 Oct, the plain pace ran up to 1h late on the bond. Under 5% HP M'aol's shield slows the kill, so no time is shown there.
+- Right after a quarter hour, before Torn shows his move, the timetable already shows where he's heading ("arriving").
 
 </details>
 
