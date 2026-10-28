@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.1
+// @version      0.8.2
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -12,5 +12,6 @@
 // @grant        GM_deleteValue
 // @connect      occ-runner.yoonutz.workers.dev
 // @connect      api.torn.com
+// @connect      live.chain-race.workers.dev
 // @run-at       document-idle
 // ==/UserScript==
