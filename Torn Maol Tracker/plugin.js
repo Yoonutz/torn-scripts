@@ -875,12 +875,14 @@ function css() {
     .tmt-host .tmt-dot.go { display: block; background: var(--default-green-color, #82c91e); }
     .tmt-host .tmt-dot.warn { display: block; background: var(--default-orange-color, #f08c00); }
     .tmt-ui { font: 12px Arial, sans-serif; color: var(--default-color, #ddd); }
+    body.dark-mode #tmt { color-scheme: dark; }
+    .tmt-ui :where(p, li, label, small, b, em) { color: inherit; }
     .tmt-ui .tmt-sec small { font-weight: normal; letter-spacing: 0; color: var(--default-blue-color, #74c0fc); }
     .tmt-ui .tmt-key > div + div { margin-top: 8px; }
     .tmt-pane { margin: -4px -2px 0; }
     #tmt.tmt-docked { bottom: auto; }
     #tmt { position: fixed; left: 10px; bottom: 10px; z-index: 99999; width: 300px; max-width: calc(100vw - 20px);
-      font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: dark;
+      font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: light;
       background: var(--default-bg-panel-color, #333); border-radius: 5px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
     .tmt-ui .tmt-head { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 30px; cursor: pointer; user-select: none;
       border-radius: 5px; font-weight: bold; color: #fff; text-shadow: 0 0 2px #000;
