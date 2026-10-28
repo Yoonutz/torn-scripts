@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.13
+// @version      0.8.14
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.13';
+const VERSION = '0.8.14';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -3263,6 +3263,8 @@ const OCC_CSS = `
   .occ-dock{display:flex;align-items:center;justify-content:flex-start;box-sizing:border-box;width:100%;margin:0;padding:3px 12px 0;background:transparent;pointer-events:none;position:relative;z-index:1}
   .occ-dock .occ-inline,.occ-dock .occ-badges{pointer-events:auto}
   .occ-dock .occ-inline{margin:0 0 0 2px}
+  .occ-dock.occ-side{padding:2px 0 3px;gap:2px}
+  .occ-dock.occ-side .occ-inline{margin:0}
   @media (min-width:768px){
     .occ-badges.occ-float{bottom:80px;right:24px}
   }
@@ -3619,14 +3621,25 @@ function boot(plugins) {
     return block && block !== document.body ? block : null;
   }
 
+  // Desktop sidebar: the last info row (Merits) under the name, so icon and badges get a row of
+  // their own there. Next to the name the badges ran past the sidebar's edge and were cut off.
+  function sidebarLastRow(a) {
+    const ROW = '[class*="menuInfoRow"],[class*="menu-info-row"]';
+    const row = a.closest(ROW);
+    if (!row || !row.parentNode) return null;
+    const rows = Array.prototype.filter.call(row.parentNode.children, (c) => c.matches(ROW));
+    return rows[rows.length - 1] || row;
+  }
+
   // Phone layout: no room beside the name, so icon and badges get their own fixed slot on every
-  // page, right under the status icons line and above the page title.
-  function placeDock(btn) {
+  // page, right under the status icons line and above the page title. Desktop passes `fixed`: the
+  // row under the sidebar's Merits line.
+  function placeDock(btn, fixed) {
     // Real Torn mobile markup: div.content > [div.areas (nav), div.user-information-mobile (money +
     // icons swiper)], then the page. The icons <ul> sits in a horizontal swiper, so the dock must
     // go AFTER the whole block.
-    const um = mobileInfo(btn);
-    let anchor = um && um.parentNode ? { node: um, where: 'afterend' } : null;
+    const um = fixed ? null : mobileInfo(btn);
+    let anchor = fixed || (um && um.parentNode ? { node: um, where: 'afterend' } : null);
     if (!anchor) {
       const t = document.querySelector('.content-wrapper > .content-title') || document.querySelector('.content-title');
       if (t) anchor = { node: t, where: 'beforebegin' };
@@ -3641,7 +3654,9 @@ function boot(plugins) {
     let slot = dock ? dock.querySelector('.occ-badges') : null;
     if (!slot) {
       if (dock) dock.remove();
-      dock = el('div', 'occ-dock');
+      dock = el('div', 'occ-dock' + (fixed ? ' occ-side' : ''));
+      // Line up with the sidebar rows' own text indent.
+      if (fixed) dock.style.paddingLeft = getComputedStyle(fixed.node).paddingLeft;
       slot = badgeSlot(false);
       dock.appendChild(slot);
       anchor.node.insertAdjacentElement(anchor.where, dock);
@@ -3699,6 +3714,14 @@ function boot(plugins) {
       launch.classList.remove('occ-hide');
       placeFloatBadges();
       return false;
+    }
+    const side = !useDock(null) && sidebarLastRow(a);
+    if (side) {
+      const sb = docked || a.parentNode.querySelector('.occ-inline') || inlineButton();
+      if (placeDock(sb, { node: side, where: 'afterend' })) {
+        launch.classList.add('occ-hide');
+        return true;
+      }
     }
     const have = docked || a.parentNode.querySelector('.occ-inline');
     if (have) {
