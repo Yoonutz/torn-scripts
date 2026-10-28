@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.6
+// @version      0.8.7
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.6';
+const VERSION = '0.8.7';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -373,7 +373,9 @@ function letterIcon(label) {
 // Torn's dark and light mode. The value after each comma is Torn's dark mode value, used only where
 // a page lacks the variable (taken from torn.com computed styles, 2026-10-28). Plug-ins draw with
 // var(--occ-*) and never hardcode colors. No native controls: buttons, inputs and scrollbars are
-// all restyled here (color-scheme: dark for anything left).
+// all restyled here. Torn's page CSS colors bare elements (td, li, p, label, h3...) for its own
+// layout, so every such element here inherits the script's text color instead, in both modes.
+// color-scheme follows Torn's mode (body.dark-mode) for anything native that is left.
 
 const THEME_VARS = [
   '--occ-font:12px/1.4 Arial,Helvetica,sans-serif',
@@ -432,6 +434,7 @@ function themeCss(R) {
   return `
     ${R}{${THEME_VARS}}
     ${R},${R} *{box-sizing:border-box}
+    ${R} :where(table,thead,tbody,tr,td,th,ul,ol,li,p,dt,dd,label,caption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,small,strong,b,em,i){color:inherit}
     :where(${R}) button{font:var(--occ-font);margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent;height:auto;min-height:0;width:auto;min-width:0;max-width:none;box-shadow:none;text-indent:0;border-radius:0;float:none}
     :where(${R}) button:focus-visible{box-shadow:var(--occ-input-focus-shadow);outline:1px solid var(--occ-input-focus-border)}
     :where(${R}) p,:where(${R}) ul,:where(${R}) ol,:where(${R}) h3,:where(${R}) pre,:where(${R}) table{margin:0;padding:0;font-family:inherit}
@@ -461,7 +464,8 @@ function themeCss(R) {
     ${R} .occ-act-btn:active{background:var(--occ-btn-active-bg)}
     ${R} .occ-act-btn svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
     ${R} .occ-cancel{margin-left:auto}
-    ${R} .occ-field{display:block;width:100%;height:30px;padding:0 9px;margin:7px 0 2px;border:1px solid var(--occ-input-border);border-radius:5px;background:var(--occ-input-bg);color:var(--occ-input-fg);font:12px/1 Arial,Helvetica,sans-serif;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
+    ${R} .occ-field{display:block;width:100%;height:30px;padding:0 9px;margin:7px 0 2px;border:1px solid var(--occ-input-border);border-radius:5px;background:var(--occ-input-bg);color:var(--occ-input-fg);font:12px/1 Arial,Helvetica,sans-serif;outline:none;appearance:none;-webkit-appearance:none;color-scheme:light}
+    body.dark-mode ${R} .occ-field{color-scheme:dark}
     ${R} .occ-field:hover{border-color:var(--occ-input-hover-border)}
     ${R} .occ-field:focus{border-color:var(--occ-input-focus-border);box-shadow:var(--occ-input-focus-shadow)}
     ${R} .occ-field::placeholder{color:var(--occ-muted)}
@@ -512,8 +516,9 @@ function injectTheme(root, R, extra) {
 // Phone: fills the screen with a 10px margin. Desktop: 420x640, bottom right.
 function frameCss(R) {
   return `
-  ${R} .occ-win{position:fixed;top:10px;left:10px;right:10px;bottom:10px;z-index:99991;display:none;grid-template-rows:34px auto auto 1fr 50px;grid-template-areas:"head" "tool" "stats" "main" "tabs";background:var(--occ-bg);color:var(--occ-fg);font:var(--occ-font);overflow:hidden;text-align:left;color-scheme:dark;border:1px solid var(--occ-div-dark);border-radius:5px;box-shadow:0 0 12px rgba(0,0,0,.7)}
+  ${R} .occ-win{position:fixed;top:10px;left:10px;right:10px;bottom:10px;z-index:99991;display:none;grid-template-rows:34px auto auto 1fr 50px;grid-template-areas:"head" "tool" "stats" "main" "tabs";background:var(--occ-bg);color:var(--occ-fg);font:var(--occ-font);overflow:hidden;text-align:left;color-scheme:light;border:1px solid var(--occ-div-dark);border-radius:5px;box-shadow:0 0 12px rgba(0,0,0,.7)}
   ${R} .occ-win.occ-on{display:grid}
+  body.dark-mode ${R} .occ-win{color-scheme:dark}
   ${R} .occ-head{grid-area:head;display:flex;align-items:center;gap:4px;padding:0 4px 0 10px;min-width:0;background:var(--occ-title-bg);color:var(--occ-title-fg);text-shadow:var(--occ-title-shadow);border-bottom:1px solid var(--occ-div-dark)}
   ${R} .occ-title{font:bold 13px/1 Arial,Helvetica,sans-serif;white-space:nowrap;flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis}
   ${R} .occ-tool{grid-area:tool;display:flex;align-items:center;gap:8px;padding:8px 8px 0;min-width:0}
@@ -2107,12 +2112,14 @@ function css() {
     .tmt-host .tmt-dot.go { display: block; background: var(--default-green-color, #82c91e); }
     .tmt-host .tmt-dot.warn { display: block; background: var(--default-orange-color, #f08c00); }
     .tmt-ui { font: 12px Arial, sans-serif; color: var(--default-color, #ddd); }
+    body.dark-mode #tmt { color-scheme: dark; }
+    .tmt-ui :where(p, li, label, small, b, em) { color: inherit; }
     .tmt-ui .tmt-sec small { font-weight: normal; letter-spacing: 0; color: var(--default-blue-color, #74c0fc); }
     .tmt-ui .tmt-key > div + div { margin-top: 8px; }
     .tmt-pane { margin: -4px -2px 0; }
     #tmt.tmt-docked { bottom: auto; }
     #tmt { position: fixed; left: 10px; bottom: 10px; z-index: 99999; width: 300px; max-width: calc(100vw - 20px);
-      font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: dark;
+      font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: light;
       background: var(--default-bg-panel-color, #333); border-radius: 5px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
     .tmt-ui .tmt-head { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 30px; cursor: pointer; user-select: none;
       border-radius: 5px; font-weight: bold; color: #fff; text-shadow: 0 0 2px #000;

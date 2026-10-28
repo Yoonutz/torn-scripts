@@ -3,7 +3,9 @@
 // Torn's dark and light mode. The value after each comma is Torn's dark mode value, used only where
 // a page lacks the variable (taken from torn.com computed styles, 2026-10-28). Plug-ins draw with
 // var(--occ-*) and never hardcode colors. No native controls: buttons, inputs and scrollbars are
-// all restyled here (color-scheme: dark for anything left).
+// all restyled here. Torn's page CSS colors bare elements (td, li, p, label, h3...) for its own
+// layout, so every such element here inherits the script's text color instead, in both modes.
+// color-scheme follows Torn's mode (body.dark-mode) for anything native that is left.
 import { el } from './dom.js';
 
 export const THEME_VARS = [
@@ -63,6 +65,7 @@ export function themeCss(R) {
   return `
     ${R}{${THEME_VARS}}
     ${R},${R} *{box-sizing:border-box}
+    ${R} :where(table,thead,tbody,tr,td,th,ul,ol,li,p,dt,dd,label,caption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,small,strong,b,em,i){color:inherit}
     :where(${R}) button{font:var(--occ-font);margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent;height:auto;min-height:0;width:auto;min-width:0;max-width:none;box-shadow:none;text-indent:0;border-radius:0;float:none}
     :where(${R}) button:focus-visible{box-shadow:var(--occ-input-focus-shadow);outline:1px solid var(--occ-input-focus-border)}
     :where(${R}) p,:where(${R}) ul,:where(${R}) ol,:where(${R}) h3,:where(${R}) pre,:where(${R}) table{margin:0;padding:0;font-family:inherit}
@@ -92,7 +95,8 @@ export function themeCss(R) {
     ${R} .occ-act-btn:active{background:var(--occ-btn-active-bg)}
     ${R} .occ-act-btn svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
     ${R} .occ-cancel{margin-left:auto}
-    ${R} .occ-field{display:block;width:100%;height:30px;padding:0 9px;margin:7px 0 2px;border:1px solid var(--occ-input-border);border-radius:5px;background:var(--occ-input-bg);color:var(--occ-input-fg);font:12px/1 Arial,Helvetica,sans-serif;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
+    ${R} .occ-field{display:block;width:100%;height:30px;padding:0 9px;margin:7px 0 2px;border:1px solid var(--occ-input-border);border-radius:5px;background:var(--occ-input-bg);color:var(--occ-input-fg);font:12px/1 Arial,Helvetica,sans-serif;outline:none;appearance:none;-webkit-appearance:none;color-scheme:light}
+    body.dark-mode ${R} .occ-field{color-scheme:dark}
     ${R} .occ-field:hover{border-color:var(--occ-input-hover-border)}
     ${R} .occ-field:focus{border-color:var(--occ-input-focus-border);box-shadow:var(--occ-input-focus-shadow)}
     ${R} .occ-field::placeholder{color:var(--occ-muted)}
