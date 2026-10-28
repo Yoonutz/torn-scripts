@@ -125,6 +125,8 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
   answers plug-in data (`kit.ai.write`). `{ answer, model }`, or `503` when every model is busy.
   Each answer is logged for later review: rules, numbers sent, raw reply, model, failed tries, time
   (`ailog:<player>:<ms>` in KV, 30 days). `/ask` is not logged (live personal reports).
+  A reply carrying a privacy placeholder the prompt didn't have (`[ADDRESS]`, `[NAME]`) counts as a
+  failed try on every route: the next model answers.
 - `GET /ailog?limit=100&since=<ms>` - same gate; the caller's own `/write` log, newest first, at most 500.
 - `GET /usage` - same gate; Keys tab data: per UTC day the runner's own model calls (ok / 429 /
   failed per model) and OpenRouter's free-request count (hourly cron snapshot plus a live read),

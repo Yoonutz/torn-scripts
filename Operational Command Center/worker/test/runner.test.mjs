@@ -208,3 +208,20 @@ test("a failed answer is logged too, with an empty reply", async () => {
   assert.equal(j.entries[0].reply, "");
   assert.ok(j.entries[0].errors.length > 0);
 });
+
+test("a reply with a privacy placeholder like [ADDRESS] goes to the next model", async () => {
+  fakeFetch({ models: [{ text: '[{"kind":"warn","text":"Skip Dyno in [ADDRESS]: dies in ~46m"}]' }, { text: '[{"kind":"warn","text":"Skip Dyno in Hawaii"}]' }] });
+  const e = env({ OPENROUTER_KEY: "k" });
+  const j = await (await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ system: "s", user: '{"country":"Hawaii"}' }) }), e)).json();
+  assert.match(j.answer, /Hawaii/);
+  const log = await (await worker.fetch(req("/ailog"), e)).json();
+  assert.match(log.entries[0].errors[0], /masked text with \[ADDRESS\]/);
+  const h = JSON.parse(e.kv.get("ai:health"));
+  assert.equal(Object.keys(h.cool).length, 1);
+});
+
+test("a bracket token the prompt itself sent is not a placeholder", async () => {
+  fakeFetch({ models: [{ text: "Status [OK] as sent" }] });
+  const j = await (await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ system: "s", user: "flag [OK]" }) }), env({ OPENROUTER_KEY: "k" }))).json();
+  assert.equal(j.answer, "Status [OK] as sent");
+});
