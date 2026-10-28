@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.10
+// @version      0.8.11
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.10';
+const VERSION = '0.8.11';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -1040,12 +1040,16 @@ function tipText() {
   return parts.join(' · ');
 }
 
-function paint() {
+// extra: a pill not in the page yet (the shell appends it after badge() returns), which
+// querySelectorAll cannot see. Without it a rebuilt pill stayed empty until the next refresh.
+function paint(extra) {
   const has = !!trains && typeof trains.n === 'number';
   const n = has ? trains.n : -1;
   const html = '<span class="n">' + (has ? n : '?') + '</span><span class="s">/</span><span class="m">' + TRAINS_MAX + '</span>';
   const tip = tipText();
-  document.querySelectorAll('.occ-trains').forEach((p) => {
+  const pills = Array.from(document.querySelectorAll('.occ-trains'));
+  if (extra && pills.indexOf(extra) === -1) pills.push(extra);
+  pills.forEach((p) => {
     p.classList.toggle('full', n >= TRAINS_MAX);
     p.classList.toggle('hot', n > 0 && n < TRAINS_MAX);
     p.classList.toggle('stale', !has || !!(trains && trains.err));
@@ -1206,10 +1210,11 @@ return {
   label: 'Trains',
   access: 'limited',
   start,
-  // Shell asks for a fresh pill whenever it (re)builds a badge slot; paint() updates them all.
+  // Shell asks for a fresh pill whenever it (re)builds a badge slot (page load, Torn redrawing the
+  // name row, phone dock), so it is filled here before it goes in the page.
   badge(k) {
     const p = makePill(k);
-    if (kit) paint();
+    if (kit) paint(p);
     return p;
   },
   css: `
