@@ -4,13 +4,14 @@
 //   GET  /run/<id>[?force=1&...]   Authorization: ApiKey <Torn API key>; runs the skill, raw result
 //   GET  /ask/<id>[?force=1&...]   same, then a free model turns the report into the answer
 //   POST /write                    { system, user } from a userscript plug-in; a free model answers
+//   GET  /ailog[?limit=100&since=<ms>]  every /write answer kept 30 days for review (prompt, numbers, raw reply, model)
 //   GET  /usage                    Keys tab: the runner's model calls and OpenRouter's free count, 14 days
 //   GET  /data/<name>              a plug-in's private document for the key's owner: { rev, value, at }
 //   POST /data/<name>              { rev, value } replaces it; 409 + current document when rev is stale
 // Cron (wrangler.toml): hourly OpenRouter snapshot, so the daily trend fills even with OCC closed.
 // Private: only keys owned by a player in ALLOWED_PLAYERS (wrangler.toml) get past auth.mjs.
 // Parts: auth.mjs (owner, allowlist, rate limits), torn.mjs, store.mjs (KV), data.mjs (per-player documents),
-// ai/ (models, answers), usage.mjs,
+// ai/ (models, answers), ailog.mjs (answer log), usage.mjs,
 // registry.mjs (generated at build from .claude/skills/*/scripts/runner.mjs, SKILL.md bundled).
 import { REGISTRY } from "./registry.mjs";
 import { gate } from "./auth.mjs";
@@ -19,6 +20,7 @@ import { store } from "./store.mjs";
 import { answer, skillPrompt, BUDGET } from "./ai/answer.mjs";
 import { usage, orSnapshot } from "./usage.mjs";
 import { readData, writeData, validName } from "./data.mjs";
+import { logAi, readAiLog } from "./ailog.mjs";
 
 const RAW = "https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/";
 
@@ -73,13 +75,15 @@ async function runSkill(req, env, auth, entry, ask) {
   return json({ skill: skill.id, ...out, answer: a.text, model: a.model, errors: a.errors });
 }
 
-async function write(req, env) {
+async function write(req, env, auth) {
   const body = await req.json().catch(() => null);
   const system = body && typeof body.system === "string" ? body.system : "";
   const user = body && typeof body.user === "string" ? body.user : "";
   if (!user) return json({ error: "Nothing to write: send { system, user }" }, 400);
   if (system.length + user.length > BUDGET) return json({ error: "Too long: keep system + user under " + BUDGET + " characters" }, 413);
+  const t0 = Date.now();
   const a = await answer(env, { system, user }, req.headers.get("X-OpenRouter-Key") || "", "");
+  await logAi(env, auth.owner, { route: "write", model: a.model, ms: Date.now() - t0, errors: a.errors || [], system, user, reply: a.text });
   if (!a.text) return json({ error: a.model, errors: a.errors }, 503);
   return json({ answer: a.text, model: a.model });
 }
@@ -92,6 +96,7 @@ export default {
     if (url.pathname === "/skills") return json({ skills: skillList() });
     const isWrite = url.pathname === "/write" && req.method === "POST";
     const isUsage = url.pathname === "/usage" && req.method === "GET";
+    const isLog = url.pathname === "/ailog" && req.method === "GET";
     const m = url.pathname.match(/^\/(run|ask)\/([a-z0-9_-]+)$/);
     const d = url.pathname.match(/^\/data\/([^/]+)$/);
     if (d && (req.method === "GET" || req.method === "POST")) {
@@ -107,13 +112,14 @@ export default {
         return json({ error: String((e && e.message) || e) }, 502);
       }
     }
-    if (!isWrite && !isUsage && (!m || req.method !== "GET")) return json({ error: "unknown route" }, 404);
+    if (!isWrite && !isUsage && !isLog && (!m || req.method !== "GET")) return json({ error: "unknown route" }, 404);
     const entry = m ? REGISTRY.find((e) => e.skill.id === m[2]) : null;
     if (m && !entry) return json({ error: "unknown skill " + m[2] }, 404);
     try {
       const auth = await gate(req, env);
       if (auth.error) return json({ error: auth.error }, auth.status);
-      if (isWrite) return await write(req, env);
+      if (isWrite) return await write(req, env, auth);
+      if (isLog) return json(await readAiLog(env, auth.owner, { limit: Number(url.searchParams.get("limit")) || 100, since: Number(url.searchParams.get("since")) || 0 }));
       if (isUsage) return json(await usage(env, req.headers.get("X-OpenRouter-Key") || ""));
       return await runSkill(req, env, auth, entry, m[1] === "ask");
     } catch (e) {
