@@ -5,6 +5,7 @@
 //   ctx.tornGet  (path) => JSON from Torn API v2 with that key
 //   ctx.db       { index(), get(name), put(name, value) } scoped to this skill and key
 //   ctx.force    true when the caller asked to re-collect
+// Optional `access`: lowest Torn key level the skill needs (public | minimal | limited | full).
 // Must stay pure browser-grade JavaScript: no fs, no Node modules, only fetch.
 //
 // This runner is deliberately STATELESS (Ionuț's call, 2026-08-24): live financial data is
@@ -39,6 +40,7 @@ export const skill = {
   label: "Ledger",
   description: "Collects live Torn data, runs this skill's report script on it and returns the printed markdown report. Stateless: every run is a fresh collection, nothing is stored.",
   icon: '<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
+  access: "limited",
   async run(ctx) {
     const raw = await collect(ctx.tornGet);
     const cur = deriveSnapshot(raw);

@@ -42,6 +42,7 @@ export const skill = {
   label: "<Button text>", // shown on the tab bar
   description: "...", // tool description the model sees; say what run() returns
   icon: "<svg .../>", // optional; letter badge otherwise
+  access: "limited", // optional; lowest Torn key level it needs (public|minimal|limited|full), default full
   async run(ctx) {
     // return { report, stats?, ...anything }
   },
@@ -90,11 +91,15 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
 ## 4. What the Worker serves
 
 - `GET /health` - liveness.
-- `GET /skills` - public list: id, label, description, icon, SKILL.md URL.
+- `GET /skills` - public list: id, label, description, icon, access, SKILL.md URL.
   The userscript builds its bottom tab bar from this on every open.
 - `GET /run/<id>` with header `Authorization: ApiKey <torn key>` - executes
-  `skill.run(ctx)`. The Torn key is the only credential. `ctx.db` writes land
-  in KV under `<id>:<key-hash>:<name>`, so skills never see each other's data
+  `skill.run(ctx)`. **Private**: the Worker asks Torn who owns the key
+  (`user/basic`, cached a day per key hash) and only runs it for player IDs in
+  `ALLOWED_PLAYERS` (`wrangler.toml`); everyone else gets `403`. The check lives
+  on the server, so editing the userscript cannot get around it. Rate limited to
+  6 runs a minute per key and 20 per IP (`429` past that). The Torn key is the
+  only credential. `ctx.db` writes land in KV under `<id>:<key-hash>:<name>`, so skills never see each other's data
   or another player's. Whether anything is stored at all is each skill's own
   choice - the ledger stores nothing and treats every run as fresh; `?force=1`
   arrives as `ctx.force` for the skill to honor. House rule for live personal
@@ -149,6 +154,7 @@ Worker involved.
 - Click the pill to refresh now (30 s cooldown). A small message appears next
   to it saying what happened (new value, or why it failed). Hover shows the
   last refresh time, relative age and the next auto refresh, in TCT.
+- Hidden for keys that are not a company director (checked again once a day).
 - Colors: grey 0, amber 1-19, red 20/20 (full bank, daily trains are lost).
   Faded `?` or value = no data or last refresh failed (reason in the tooltip).
 - Cached in `localStorage` (`occ.trains`); tabs share it and a short lock
@@ -173,11 +179,12 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 
 | Item          | Answer                                                                                                    |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
-| Data storage  | Answers cached in your browser only. The runner keeps nothing; its request logs are off.                  |
+| Data storage  | Answers cached in your browser only. The runner keeps only key hash -> player ID for a day (access check); its request logs are off. |
 | Data sharing  | Skill reports (money, networth, company numbers) go to free OpenRouter models, which may log them.        |
 | Purpose       | Personal dashboards: the skill buttons and the company trains pill.                                      |
 | Key storage   | Tampermonkey storage in your browser; sent per run to the runner over HTTPS, never stored there.          |
 | Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill: Limited.     |
+| Who can use   | Private: the runner only serves the owner's player ID; any other key is refused server side.             |
 
 ## Compliance
 
@@ -186,8 +193,8 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 - Never clicks or acts for you. The Train-click watcher on the company page only listens, then
   refreshes the pill through the API.
 - The trains pill makes no timed call while the tab is hidden; it catches up when the tab is back.
-- The donator star and award icons right after your sidebar name are hidden to make room for the
-  icon.
+- The donator star and award icons right after the owner's own sidebar name are hidden to make
+  room for the icon; other players keep theirs.
 
 ## Verifying a change landed
 

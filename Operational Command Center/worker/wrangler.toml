@@ -9,6 +9,30 @@ command = "node build-registry.mjs"
 binding = "SNAPSHOTS"
 id = "bcdd4092e01f4ca4b4ff8cdf55b19759"
 
+# Even refused callers cost a request and a Torn lookup: cap each key and each caller so
+# nobody can burn the free plan's daily requests. Limits are per location and approximate.
+[[ratelimits]]
+name = "RUN_PER_KEY"
+namespace_id = "2801"
+
+  [ratelimits.simple]
+  limit = 6
+  period = 60
+
+[[ratelimits]]
+name = "RUN_PER_IP"
+namespace_id = "2802"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+# Private runner: only these Torn player IDs may run skills (comma separated). The check is
+# done here on the server with Torn's own answer about who owns the key, so editing the
+# userscript cannot get around it.
+[vars]
+ALLOWED_PLAYERS = "2805199"
+
 [observability]
 enabled = true
 
