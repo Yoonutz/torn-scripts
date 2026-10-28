@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.9
+// @version      0.8.10
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.9';
+const VERSION = '0.8.10';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -2083,7 +2083,9 @@ function settings(card) {
 }
 
 function css() {
+  if (document.getElementById('tmt-css')) return;
   const s = document.createElement('style');
+  s.id = 'tmt-css';
   s.textContent = `
     .tmt-host { position: relative; }
     .tmt-host.tmt-inrow { float: left; display: flex; align-items: center; justify-content: center; width: 34px; margin: 0; padding: 0; list-style: none; }
@@ -2157,8 +2159,15 @@ function css() {
 }
 
 function init() {
-  if (document.getElementById('tmt')) return;
   css();
+  // Another copy already owns the header dropdown (an older standalone that doesn't step aside for
+  // the Command Center): keep only the tab and badge live. Both copies share one snapshot in
+  // localStorage, so the API is still polled once.
+  if (document.getElementById('tmt')) {
+    refresh();
+    setInterval(() => { if (!document.hidden) refresh(); }, 5 * 1000);
+    return;
+  }
   root = document.createElement('div');
   root.id = 'tmt';
   root.className = 'tmt-ui';
@@ -2191,6 +2200,7 @@ return {
   // Command Center tab: the same view as the dropdown, kept live by the same poll.
   async mount(view, k, { force }) {
     paneView = view;
+    css();
     pane = k.el('div', 'tmt-ui tmt-pane');
     pane.addEventListener('click', onClick);
     view.body(pane);
