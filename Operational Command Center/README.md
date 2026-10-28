@@ -18,15 +18,16 @@ template. The contract is only: SKILL.md, the `skill` export shape, and the
                          │        └─> Greasy Fork webhook │
                          │            (userscript only)   │
                          └────────────────────────────────┘
-        button press: SKILL.md -> free model -> /run/<id> -> answer
+        button press: /ask/<id> -> runner runs skill -> free model -> answer
 ```
 
 ## 1. Create the skill
 
 Standard DOE skill format, nothing special:
 
-- `.claude/skills/<name>/SKILL.md` - the contract. The Torn UI sends this file
-  to the model as the system prompt, so its delivery rules decide what the
+- `.claude/skills/<name>/SKILL.md` - the contract. The runner sends this file
+  to the model as the system prompt (minus its Scripts, Environment and Inputs
+  sections), so its delivery rules decide what the
   player reads. Write the output shape and delivery rule precisely.
 - `.claude/skills/<name>/scripts/` - ordinary CLI scripts, tests as usual.
 
@@ -104,26 +105,34 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
   choice - the ledger stores nothing and treats every run as fresh; `?force=1`
   arrives as `ctx.force` for the skill to honor. House rule for live personal
   data: analyze and discard, never persist it server-side.
+- `GET /ask/<id>` - same gate, same run, then the runner has a free model write
+  the answer and returns `{ ...run result, answer, model, errors }`. OpenRouter
+  key: the Worker secret `OPENROUTER_KEY` if set, else the `X-OpenRouter-Key`
+  header from the userscript. No key = the raw report comes back as `answer`.
 
 ## 5. What happens on button press
 
-1. Userscript fetches the skill's `SKILL.md` and sends it to OpenRouter
-   (`openrouter/free` router, player's own key) with one tool: `run_script`.
-2. The model calls the tool; the userscript executes it against `/run/<id>`
-   with the player's Torn key.
-3. The tool result (report + metadata) goes back to the model, which delivers
-   the answer per the SKILL.md delivery rule.
-4. The UI renders: stat cards from `stats`, the answer split into folding
+1. Userscript makes one call: `GET /ask/<id>` with the Torn key (and the
+   OpenRouter key from Setup, if any). 180 s timeout, Cancel button in the
+   progress card.
+2. The runner executes the skill once, then trims `SKILL.md` to its delivery
+   rules and caps the report so the prompt stays under ~60k characters.
+3. Models are tried in order, up to 4 per press (40 s each):
+   `thinkingmachines/inkling:free`, `nvidia/nemotron-3.5-super-vl:free`,
+   `google/gemma-4-31b-it:free`, `cohere/north-mini-code:free`, `openrouter/free`.
+   The last model that answered goes first; a model that failed sits out for
+   10 min (shared health record in KV, `ai:health`). Override the list with a
+   `MODELS` var (comma separated).
+4. **Free models only**: the runner drops any model ID that is not `:free` or
+   `openrouter/free`, so the account's credit balance is never spent. The $10
+   lifetime top-up only lifts the free limit to 1000 requests a day (20 a
+   minute). Extra OpenRouter keys or accounts do not add capacity.
+5. If every model fails, the raw report is shown as-is, labelled
+   "runner (free models busy)".
+6. The UI renders: stat cards from `stats`, the answer split into folding
    sections on markdown headings and `Label:` lines, model name + timestamp.
-5. Answers are cached per skill in `localStorage`; the amber circle button
+   Answers are cached per skill in `localStorage`; the amber circle button
    reruns with `force`. Answers older than 12 h show their age in amber.
-6. One script run per press: if the model asks for the tool again it gets the same
-   result. A Cancel button sits in the progress card; busy models are retried
-   after a short pause (45 s timeout per try).
-
-If the model never calls the tool, the userscript runs the script itself and
-hands the output back; if the model produces no answer at all, the raw report
-is shown as-is.
 
 ## 6. Styling flows through
 
@@ -172,7 +181,7 @@ Both live in the userscript settings pane, stored in Tampermonkey's own storage
 Keys saved by older versions in `localStorage` move over on their own. Torn PDA keeps
 `localStorage` (it fills the Torn key itself).
 
-- OpenRouter API key (free tier is enough).
+- OpenRouter API key - optional; only free models are ever called with it.
 - Torn API key (full access) - doubles as the runner credential.
 
 ## Torn API key use (ToS)
@@ -180,7 +189,7 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 | Item          | Answer                                                                                                    |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | Data storage  | Answers cached in your browser only. The runner keeps only key hash -> player ID for a day (access check); its request logs are off. |
-| Data sharing  | Skill reports (money, networth, company numbers) go to free OpenRouter models, which may log them.        |
+| Data sharing  | The runner sends skill reports (money, networth, company numbers) to free OpenRouter models, which may log them. |
 | Purpose       | Personal dashboards: the skill buttons and the company trains pill.                                      |
 | Key storage   | Tampermonkey storage in your browser; sent per run to the runner over HTTPS, never stored there.          |
 | Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill: Limited.     |
@@ -188,7 +197,7 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 
 ## Compliance
 
-- Only Torn API calls (`api.torn.com`) plus the runner, GitHub raw files and OpenRouter. No page
+- Only Torn API calls (`api.torn.com`) plus the runner (which talks to OpenRouter). No page
   scraping, no extra requests to torn.com.
 - Never clicks or acts for you. The Train-click watcher on the company page only listens, then
   refreshes the pill through the API.

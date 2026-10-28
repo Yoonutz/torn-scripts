@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.16
-// @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
+// @version      0.7.17
+// @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -10,8 +10,6 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
-// @connect      openrouter.ai
-// @connect      raw.githubusercontent.com
 // @connect      occ-runner.yoonutz.workers.dev
 // @connect      api.torn.com
 // @run-at       document-idle
@@ -20,7 +18,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.16';
+  const VERSION = '0.7.17';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -30,13 +28,9 @@
   const PDA_KEY = '###PDA-APIKEY###';
   const OWNER_ID = '2805199';
   const RUNNER = 'https://occ-runner.yoonutz.workers.dev';
-  const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
-  const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
-  const MODEL = 'openrouter/free';
-  const FALLBACK = ['cohere/north-mini-code:free', 'google/gemma-4-26b-a4b-it:free'];
-  const ATTEMPTS = 3;
-  const MAX_STEPS = 4;
   const TIMEOUT_MS = 45000;
+  // A skill run plus up to four free-model tries on the runner.
+  const ASK_TIMEOUT_MS = 180000;
   const STALE_MS = 12 * 3600 * 1000;
   // Company trains pill (next to the OCC icon). Torn adds the daily trains with the company
   // update at ~18:05 TCT (UTC, no DST), so one call just after that, a 12h safety net,
@@ -418,12 +412,6 @@
     return String(url).replace(/^https?:\/\//, '').split('/')[0];
   }
 
-  async function fetchText(url) {
-    const r = await http({ url });
-    if (r.status < 200 || r.status >= 300) throw new Error('GET ' + url.split('/').pop() + ' -> HTTP ' + r.status);
-    return r.text;
-  }
-
   function parseJson(text) {
     try {
       return JSON.parse(text);
@@ -434,105 +422,26 @@
 
   const CANCELLED = 'Cancelled.';
 
-  function checkStop(run) {
-    if (run && run.stopped) throw new Error(CANCELLED);
-  }
-
-  function pause(ms, run) {
-    return new Promise((resolve, reject) => {
-      const t = setTimeout(resolve, ms);
-      if (run) run.wake = () => (clearTimeout(t), reject(new Error(CANCELLED)));
-    });
-  }
-
-  async function chat(messages, tools, run) {
-    const key = keys.get(KEY_OR);
-    if (!key) throw new Error('No OpenRouter key. Open Setup and paste one.');
-    const errors = [];
-    for (let i = 0; i < ATTEMPTS; i++) {
-      checkStop(run);
-      // Busy free models: wait a little longer before each new try.
-      if (i) await pause(2000 * i, run);
-      try {
-        const body = { model: MODEL, models: FALLBACK, temperature: 0.1, messages };
-        if (tools) body.tools = tools;
-        const res = await http({
-          method: 'POST',
-          url: OR_URL,
-          headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'X-Title': 'Operational Command Center' },
-          body: JSON.stringify(body),
-        });
-        const json = parseJson(res.text);
-        if (res.status === 401) throw new Error('OpenRouter rejected the key (401).');
-        const msg = json && json.choices && json.choices[0] && json.choices[0].message;
-        const hasTool = msg && msg.tool_calls && msg.tool_calls.length;
-        const hasText = msg && msg.content && String(msg.content).trim();
-        if (res.status >= 200 && res.status < 300 && msg && (hasTool || hasText)) return { msg, model: json.model || MODEL };
-        errors.push('try ' + (i + 1) + ': ' + res.status + ' ' + ((json.error && json.error.message) || 'empty reply'));
-      } catch (e) {
-        if (/401/.test(String(e.message)) || e.message === CANCELLED) throw e;
-        errors.push('try ' + (i + 1) + ': ' + e.message);
-      }
-    }
-    throw new Error('Free models busy, try again in a minute.\n' + errors.join('\n'));
-  }
-
   function tornKey() {
     const k = keys.get(KEY_TORN);
     if (k) return k;
     return PDA_KEY.indexOf('PDA-APIKEY') === -1 ? PDA_KEY : '';
   }
 
-  async function runTool(s, args) {
+  // One call per press: the runner executes the skill with the Torn key, then asks its free
+  // models (rotation and health live there) to write the answer. Without an OpenRouter key
+  // the runner returns the raw report instead.
+  async function askRunner(s, force) {
     const token = tornKey();
     if (!token) throw new Error('No Torn API token. Open Setup and paste it.');
-    const url = RUNNER + s.tool.path + (args && args.force ? 'force=1' : '');
-    const r = await http({ url, headers: { Authorization: 'ApiKey ' + token } });
+    const headers = { Authorization: 'ApiKey ' + token };
+    const or = keys.get(KEY_OR);
+    if (or) headers['X-OpenRouter-Key'] = or;
+    const r = await http({ url: RUNNER + s.path + (force ? '?force=1' : ''), headers, timeout: ASK_TIMEOUT_MS });
     const json = parseJson(r.text);
     if (r.status === 401) throw new Error(json.error || 'Torn rejected the API token (401).');
     if (r.status < 200 || r.status >= 300 || json.error) throw new Error('Runner: ' + (json.error || 'HTTP ' + r.status));
     return json;
-  }
-
-  // One script run per button press: the model can ask for the tool again, but it gets the
-  // same result instead of a second round of Torn calls. Rerun with fresh data is the
-  // amber button's job, never the model's.
-  async function agent(s, md, onStatus, force, run) {
-    const tools = [{ type: 'function', function: { name: s.tool.name, description: s.tool.description, parameters: { type: 'object', properties: {} } } }];
-    const messages = [
-      { role: 'system', content: md },
-      { role: 'user', content: "Run this skill now and deliver its output exactly as the skill's delivery rule says. Use the " + s.tool.name + ' tool to execute the scripts; you cannot run anything yourself. Plain hyphens only.' },
-    ];
-    let raw = null;
-    let model = null;
-    for (let step = 0; step < MAX_STEPS; step++) {
-      onStatus(step === 0 ? 'Sending the skill to a free model...' : 'Model is writing the answer...');
-      const r = await chat(messages, tools, run);
-      checkStop(run);
-      model = r.model;
-      messages.push(r.msg);
-      const calls = r.msg.tool_calls || [];
-      if (calls.length) {
-        onStatus('Model is running the script on the runner...');
-        for (const tc of calls) {
-          const out = raw || (await runTool(s, { force }));
-          checkStop(run);
-          raw = out;
-          messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ report: out.report, date: out.date, baseline: out.baseline, snapshots: out.snapshots, reused: out.reused }) });
-        }
-        continue;
-      }
-      if (!raw) {
-        onStatus('Model skipped the tool; running the script directly...');
-        raw = await runTool(s, { force });
-        checkStop(run);
-        messages.push({ role: 'user', content: 'Here is the output of ' + s.tool.name + ', run for you just now. Deliver it per the skill rules.\n\n' + raw.report });
-        continue;
-      }
-      return { text: String(r.msg.content).trim(), model, raw };
-    }
-    if (raw) return { text: raw.report, model: 'runner (model gave no answer)', raw };
-    throw new Error('The model never produced an answer.');
   }
 
   let skills = (store.get(KEY_SKILLS, []) || []).map(fromRunner);
@@ -542,9 +451,8 @@
       id: r.id,
       label: r.label,
       icon: safeIcon(r.icon) || '<span style="font:700 15px Verdana">' + esc(String(r.label || '?').charAt(0)) + '</span>',
-      md: r.md,
       access: r.access || 'full',
-      tool: { name: 'run_script', path: '/run/' + r.id + '?', description: r.description || "Runs this skill's script on the runner and returns its printed output." },
+      path: '/ask/' + r.id,
     };
   }
 
@@ -652,11 +560,7 @@
       show(answerView(s, cached));
       return;
     }
-    if (!keys.get(KEY_OR)) {
-      showSettings('Paste an OpenRouter key first, then press ' + s.label + ' again.');
-      return;
-    }
-    if (s.tool && !tornKey()) {
+    if (!tornKey()) {
       showSettings('Paste your Torn API token first, then press ' + s.label + ' again.');
       return;
     }
@@ -664,19 +568,18 @@
       if (inflight[id].status) show(inflight[id].status);
       return;
     }
-    const run = { stopped: false, wake: null };
+    const run = { stopped: false };
     inflight[id] = run;
     fab.classList.add('occ-busy');
     setStats(null);
     const status = el('div', 'occ-card');
     const line = el('div', 'occ-bar');
     line.style.marginTop = '0';
-    const text = el('span', '', '<span class="occ-spin"></span>Fetching the skill file...');
+    const text = el('span', '', '<span class="occ-spin"></span>Running the skill and asking a free model...');
     const stop = el('button', 'occ-act-btn occ-alt occ-cancel', 'Cancel');
     stop.type = 'button';
     stop.addEventListener('click', () => {
       run.stopped = true;
-      if (run.wake) run.wake();
       if (run.reject) run.reject(new Error(CANCELLED));
     });
     line.appendChild(text);
@@ -684,15 +587,11 @@
     status.appendChild(line);
     run.status = status;
     show(status);
-    const onStatus = (t) => {
-      if (!run.stopped) text.innerHTML = '<span class="occ-spin"></span>' + esc(t);
-    };
     // Cancel answers at once; requests already on the wire finish in the background and are ignored.
     const cancelled = new Promise((_, reject) => (run.reject = reject));
     try {
-      const md = await Promise.race([fetchText(s.md), cancelled]);
-      const a = await Promise.race([agent(s, md, onStatus, !!force, run), cancelled]);
-      const rec = { text: a.text, model: a.model, at: Date.now(), stats: a.raw ? a.raw.stats : null };
+      const a = await Promise.race([askRunner(s, !!force), cancelled]);
+      const rec = { text: a.answer || a.report || '', model: a.model || 'runner', at: Date.now(), stats: a.stats || null };
       store.set(KEY_ANS + id, rec);
       if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
     } catch (e) {
@@ -753,7 +652,7 @@
     const wrap = el('div');
     if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
     const c1 = el('div', 'occ-card');
-    keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. Skill reports (your money, networth, company numbers) go to free OpenRouter models, which may log them.', empty: 'No key yet; a free key is enough. Skill reports (your money, networth, company numbers) go to free OpenRouter models, which may log them.' });
+    keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. The runner sends skill reports (your money, networth, company numbers) to free OpenRouter models only, which may log them.', empty: 'Optional. Without it you get the raw report. With it, free OpenRouter models (never paid ones) write the answer; they may log the report.' });
     wrap.appendChild(c1);
     const c2 = el('div', 'occ-card');
     keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in Tampermonkey storage; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
@@ -772,7 +671,7 @@
     wrap.appendChild(c3);
     const info = el('div', 'occ-card');
     info.appendChild(el('h3', '', 'How it works'));
-    info.appendChild(el('div', 'occ-muted', 'Tabs are the skills in the repo, listed by the runner. A tab fetches its skill file from GitHub and hands it to the free model router. The model calls the runner, which executes the skill script with your Torn API token, then delivers the result here. Router: ' + MODEL + '.'));
+    info.appendChild(el('div', 'occ-muted', 'Tabs are the skills in the repo, listed by the runner. A tab asks the runner, which executes the skill script with your Torn API token, then has a free OpenRouter model write the answer from the skill file. The runner rotates free models, skips ones that failed lately and never calls a paid one.'));
     wrap.appendChild(info);
     show(wrap);
   }
