@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.7
+// @version      0.8.8
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.7';
+const VERSION = '0.8.8';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -434,7 +434,7 @@ function themeCss(R) {
   return `
     ${R}{${THEME_VARS}}
     ${R},${R} *{box-sizing:border-box}
-    ${R} :where(table,thead,tbody,tr,td,th,ul,ol,li,p,dt,dd,label,caption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,small,strong,b,em,i){color:inherit}
+    ${R} :where(table,thead,tbody,tr,td,th,ul,ol,li,p,dt,dd,label,caption,h1,h2,h3,h4,h5,h6,pre,blockquote){color:inherit}
     :where(${R}) button{font:var(--occ-font);margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent;height:auto;min-height:0;width:auto;min-width:0;max-width:none;box-shadow:none;text-indent:0;border-radius:0;float:none}
     :where(${R}) button:focus-visible{box-shadow:var(--occ-input-focus-shadow);outline:1px solid var(--occ-input-focus-border)}
     :where(${R}) p,:where(${R}) ul,:where(${R}) ol,:where(${R}) h3,:where(${R}) pre,:where(${R}) table{margin:0;padding:0;font-family:inherit}
@@ -1896,27 +1896,12 @@ let pane = null;
 let paneView = null;
 const badgeEls = new Set();
 
-function stats() {
-  if (!D) return null;
-  const down = D.guards.filter((g) => g.hp <= 0).length;
-  if (!anyAwake(D)) {
-    const ns = nextSummonAt();
-    return [{ k: 'Guards', v: `${down}/5`, unit: ' down' }, { k: "M'aol", v: 'Dormant' }, { k: 'Next summon', v: ns ? hm(ns) : '–' }];
-  }
-  const P = plan(D);
-  return [
-    { k: 'Guards', v: `${down}/5`, unit: ' down', hot: down < 5 },
-    { k: "M'aol HP", v: D.maol.max ? `${Math.round((D.maol.hp / D.maol.max) * 100)}%` : '–', hot: down === 5 },
-    { k: 'Leaves', v: P.leaves ? hm(P.leaves) : '–' },
-  ];
-}
-
 function renderPane() {
   if (!pane || !paneView || !paneView.active) return;
   pane.innerHTML = bodyHtml(true);
-  paneView.stats(UI.keys || !apiKey() ? null : stats());
-  const ai = aiTips() ? ` · AI ${esc(ST.ai.model)}` : '';
-  paneView.meta(D ? (err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · ${tzLabel()}`) + ai : '');
+  // Same look as the header dropdown: no stats tiles; its title-bar pill and footer clock go in the meta line.
+  paneView.stats(null);
+  paneView.meta(D ? `${esc(pill())} · ` + (err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · ${tzLabel()}`) : '');
 }
 
 function renderBadges() {
@@ -2116,7 +2101,7 @@ function css() {
     .tmt-ui :where(p, li, label, small, b, em) { color: inherit; }
     .tmt-ui .tmt-sec small { font-weight: normal; letter-spacing: 0; color: var(--default-blue-color, #74c0fc); }
     .tmt-ui .tmt-key > div + div { margin-top: 8px; }
-    .tmt-pane { margin: -4px -2px 0; }
+    .tmt-pane { padding: 4px 0 6px; border-radius: 5px; background: var(--default-bg-panel-color, #333); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
     #tmt.tmt-docked { bottom: auto; }
     #tmt { position: fixed; left: 10px; bottom: 10px; z-index: 99999; width: 300px; max-width: calc(100vw - 20px);
       font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: light;
