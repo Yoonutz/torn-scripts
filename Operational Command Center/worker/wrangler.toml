@@ -32,6 +32,15 @@ namespace_id = "2802"
   limit = 20
   period = 60
 
+# Data route (Trains tab ledger): each tap is one small write, so its own per-key cap.
+[[ratelimits]]
+name = "DATA_PER_KEY"
+namespace_id = "2803"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60
+
 # Private runner: only these Torn player IDs may run skills (comma separated). The check is
 # done here on the server with Torn's own answer about who owns the key, so editing the
 # userscript cannot get around it.

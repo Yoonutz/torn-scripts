@@ -59,3 +59,55 @@ test("Keys tab merges Torn key logs without double counting and flags missed cal
   assert.equal(h.days[day].n, 106);
   assert.equal(h.days[day].gap, true);
 });
+
+test("Trains tab: parses Torn news and events, counts paid trains left per employee", async () => {
+  const P = await import("../../Operational Command Center/plugins/paid.js");
+  const tr = P.parseTraining({ id: "a1", timestamp: 200, text: "Consultant <a href = http://www.torn.com/profiles.php?XID=2239897>Hookah12</a> has been trained by the director" });
+  assert.deepEqual(tr, ["a1", 200, "2239897", "Hookah12"]);
+  assert.equal(P.parseTraining({ id: "x", timestamp: 1, text: "Tuesday report: We had a total of 157 customers" }), null);
+  const pay = P.parsePayment({ id: "e1", timestamp: 150, event: 'You were sent $100,000,000 from <a href="https://www.torn.com/profiles.php?XID=2239897">Hookah12</a> with the message: Train me boss' });
+  assert.deepEqual(pay, { id: "e1", ts: 150, emp: "2239897", name: "Hookah12", msg: "Train me boss", money: 100000000 });
+  const bare = P.parsePayment({ id: "e2", timestamp: 160, event: 'You were sent $10,500,000 from <a href="https://www.torn.com/profiles.php?XID=2239897">Hookah12</a>.' });
+  assert.equal(bare.msg, "");
+  assert.equal(bare.money, 10500000);
+  const items = P.parsePayment({ id: "e3", timestamp: 170, event: 'You were sent 102x Camel Plushie from <a href="https://www.torn.com/profiles.php?XID=3783283">Keoholodeee</a> with the message: Fcking trains' });
+  assert.equal(items.items, "102x Camel Plushie");
+  assert.equal(items.money, undefined);
+  assert.equal(P.parsePayment({ id: "e4", timestamp: 1, event: "Someone mugged you and stole $23,257 [view]" }), null);
+
+  // Torn's from= is inclusive: the same second comes back on the next page and is dropped.
+  const cache = { list: [] };
+  assert.equal(P.addPage(cache, [["n1", 100, "1"], ["n2", 100, "1"]]), 2);
+  assert.equal(P.addPage(cache, [["n2", 100, "1"], ["n3", 101, "2"]]), 1);
+  assert.equal(cache.list.length, 3);
+
+  const staff = [{ id: "2239897", name: "Hookah12" }, { id: "3783283", name: "Keoholodeee" }, { id: "9", name: "Alex" }];
+  const l = P.newLedger(100);
+  l.emp["2239897"] = { carry: -527, start: 120 };
+  l.emp["9"] = { daily: true };
+  const ev = [pay, bare, items, { id: "old", ts: 50, emp: "2239897", name: "Hookah12", money: 5, msg: "train" }, { id: "x", ts: 150, emp: "777", name: "Stranger", money: 5, msg: "train" }];
+  // Inbox: since tracking began, staff only, not decided yet.
+  assert.deepEqual(P.inbox(l, ev, staff).map((p) => p.id), ["e1", "e2", "e3"]);
+  assert.equal(P.autoTrains(l, pay), 200);
+  assert.equal(P.autoTrains(l, bare), 0);
+  assert.equal(P.autoTrains(l, items), 0);
+  l.pays.push({ id: "e1", emp: "2239897", ts: 150, money: 100000000, trains: 200 });
+  l.skip.push("e2");
+  assert.deepEqual(P.inbox(l, ev, staff).map((p) => p.id), ["e3"]);
+  l.hold.push("e1");
+  assert.equal(P.autoTrains(l, pay), 0);
+  const news = [["t0", 110, "2239897"], ["t1", 130, "2239897"], ["t2", 140, "2239897"], ["t3", 145, "3783283"]];
+  const b = P.balances(l, news, staff);
+  assert.equal(b["2239897"].left, -527 + 200 - 2);
+  assert.equal(b["3783283"].left, -1);
+  assert.equal(b["9"].daily, true);
+  assert.equal(P.needFrom(l), 100);
+
+  const imp = P.fromSnapshot({ updatedAtIso: "2026-10-28T14:25:02.000Z", paidTrainsLeftByEmployee: { Hookah12: -527, Alex: -1, Keoholodeee: "" } }, staff);
+  assert.equal(imp.at, Date.UTC(2026, 9, 28, 14, 25, 2) / 1000);
+  assert.deepEqual(imp.rows, [
+    { id: "2239897", name: "Hookah12", carry: -527, daily: false },
+    { id: "3783283", name: "Keoholodeee", carry: 0, daily: false },
+    { id: "9", name: "Alex", carry: 0, daily: true },
+  ]);
+});

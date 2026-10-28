@@ -31,17 +31,19 @@ export function allowed(env, id) {
     .includes(id);
 }
 
-// Returns { key, hash } for an allowed caller, or { status, error } to send back.
-// Torn errors from the owner lookup are thrown for the router to map.
-export async function gate(req, env) {
+// Returns { key, hash, owner } for an allowed caller, or { status, error } to send back.
+// Torn errors from the owner lookup are thrown for the router to map. limiter: the per-key rate
+// limit binding to use (the data route gets its own, roomier one: a few taps = a few writes).
+export async function gate(req, env, limiter) {
   const key = tornKey(req);
   if (!key) return { status: 401, error: "No Torn API key sent" };
   const ip = req.headers.get("CF-Connecting-IP") || "";
   const hash = await keyHash(key);
-  const perKey = env.RUN_PER_KEY ? await env.RUN_PER_KEY.limit({ key: hash }) : { success: true };
+  const lim = limiter || env.RUN_PER_KEY;
+  const perKey = lim ? await lim.limit({ key: hash }) : { success: true };
   const perIp = env.RUN_PER_IP && ip ? await env.RUN_PER_IP.limit({ key: ip }) : { success: true };
   if (!perKey.success || !perIp.success) return { status: 429, error: "Too many runs, wait a minute" };
   const owner = await keyOwner(env, key, hash);
   if (!allowed(env, owner)) return { status: 403, error: "This Command Center is private" };
-  return { key, hash };
+  return { key, hash, owner };
 }

@@ -149,3 +149,31 @@ test("hourly cron stores OpenRouter's count, and does nothing without a key", as
   await run(none);
   assert.equal(none.kv.size, 0);
 });
+
+test("/data keeps one document per player, refuses stale writes and strangers", async () => {
+  fakeFetch();
+  const e = env();
+  const empty = await (await worker.fetch(req("/data/paid"), e)).json();
+  assert.deepEqual([empty.rev, empty.value], [0, null]);
+  const w1 = await worker.fetch(req("/data/paid", { method: "POST", body: JSON.stringify({ rev: 0, value: { a: 1 } }) }), e);
+  assert.equal(w1.status, 200);
+  assert.equal((await w1.json()).rev, 1);
+  assert.ok(e.kv.has("data:2805199:paid"));
+  const stale = await worker.fetch(req("/data/paid", { method: "POST", body: JSON.stringify({ rev: 0, value: { a: 2 } }) }), e);
+  assert.equal(stale.status, 409);
+  assert.deepEqual((await stale.json()).value, { a: 1 });
+  const got = await (await worker.fetch(req("/data/paid"), e)).json();
+  assert.deepEqual([got.rev, got.value], [1, { a: 1 }]);
+  assert.equal((await worker.fetch(req("/data/Bad.Name"), e)).status, 400);
+  assert.equal((await worker.fetch(req("/data/paid", { method: "POST", body: JSON.stringify({ rev: 1, value: "x".repeat(300000) }) }), e)).status, 413);
+  fakeFetch({ owner: 1 });
+  assert.equal((await worker.fetch(req("/data/paid"), env())).status, 403);
+});
+
+test("/data has its own rate limit, separate from skill runs", async () => {
+  fakeFetch();
+  const r = await worker.fetch(req("/data/paid"), env({ RUN_PER_KEY: { limit: async () => ({ success: false }) }, DATA_PER_KEY: { limit: async () => ({ success: true }) } }));
+  assert.equal(r.status, 200);
+  const r2 = await worker.fetch(req("/data/paid"), env({ DATA_PER_KEY: { limit: async () => ({ success: false }) } }));
+  assert.equal(r2.status, 429);
+});
