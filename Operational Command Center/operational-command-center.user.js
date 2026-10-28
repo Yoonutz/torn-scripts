@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.3
+// @version      0.8.4
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.3';
+const VERSION = '0.8.4';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -989,11 +989,16 @@ function lastGrant(now) {
   return g <= now ? g : g - day;
 }
 
+// A key that ever got a count is a director's key, so a later "not a director" reply was a hiccup.
+function hadCount(c) {
+  return !!c && typeof c.n === 'number';
+}
+
 // When the next automatic refresh is due (ms timestamp), or Infinity when it never is.
 function nextAt(c, key) {
   if (!c || typeof c.tried !== 'number' || c.kh !== keyTail(key)) return 0;
   if (c.bad) return Infinity;
-  if (c.none) return c.tried + 86400000;
+  if (c.none) return hadCount(c) ? 0 : c.tried + 86400000;
   const now = Date.now();
   if (c.tried < lastGrant(now)) return 0;
   let at = Math.min(lastGrant(now) + 86400000, c.tried + TRAINS_SAFETY);
@@ -1040,11 +1045,23 @@ function paint() {
     p.classList.toggle('hot', n > 0 && n < TRAINS_MAX);
     p.classList.toggle('stale', !has || !!(trains && trains.err));
     p.classList.toggle('busy', trainsBusy);
-    p.classList.toggle('occ-none', !!(trains && trains.none));
+    p.classList.toggle('occ-none', !!(trains && trains.none) && !has);
     if (p.innerHTML !== html) p.innerHTML = html;
     if (p.getAttribute('data-tip') !== tip) p.setAttribute('data-tip', tip);
   });
   kit.tip.update(tip);
+}
+
+// Torn sometimes answers a director's key without the trains count (or with error 6/7), e.g. around
+// the company update. Hiding the pill on that kept it empty for a whole day, so once a key has had a
+// count, keep showing it and retry in 10 minutes instead.
+function notDirector(rec) {
+  if (hadCount(rec)) {
+    rec.err = 'Torn sent no trains count, showing the last one';
+    rec.retry = true;
+  } else {
+    rec.none = true;
+  }
 }
 
 async function refresh(manual, pill, force) {
@@ -1094,7 +1111,7 @@ async function refresh(manual, pill, force) {
       rec.ts = Date.now();
     } else if (j.profile) {
       // Not a company director: hide the pill and only look again once a day.
-      rec.none = true;
+      notDirector(rec);
     } else {
       rec.err = 'Unexpected reply from Torn';
     }
@@ -1102,7 +1119,7 @@ async function refresh(manual, pill, force) {
     if (e instanceof kit.TornApiError) {
       if (e.code === 6 || e.code === 7) {
         // Not in a company (wrong ID / ID-entity relation): same as not a director.
-        rec.none = true;
+        notDirector(rec);
       } else {
         rec.err = e.code === 16 ? 'Key access level too low (needs Limited or higher)' : e.message;
         if (TRAINS_STOP.indexOf(e.code) !== -1) rec.bad = true;
