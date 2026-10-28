@@ -65,7 +65,7 @@ export function themeCss(R) {
   return `
     ${R}{${THEME_VARS}}
     ${R},${R} *{box-sizing:border-box}
-    ${R} :where(table,thead,tbody,tr,td,th,ul,ol,li,p,dt,dd,label,caption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,small,strong,b,em,i){color:inherit}
+    ${R} :where(table,thead,tbody,tr,td,th,ul,ol,li,p,dt,dd,label,caption,h1,h2,h3,h4,h5,h6,pre,blockquote){color:inherit}
     :where(${R}) button{font:var(--occ-font);margin:0;padding:0;border:0;background:none;color:inherit;text-shadow:none;text-transform:none;letter-spacing:normal;appearance:none;-webkit-appearance:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent;height:auto;min-height:0;width:auto;min-width:0;max-width:none;box-shadow:none;text-indent:0;border-radius:0;float:none}
     :where(${R}) button:focus-visible{box-shadow:var(--occ-input-focus-shadow);outline:1px solid var(--occ-input-focus-border)}
     :where(${R}) p,:where(${R}) ul,:where(${R}) ol,:where(${R}) h3,:where(${R}) pre,:where(${R}) table{margin:0;padding:0;font-family:inherit}

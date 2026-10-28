@@ -659,27 +659,12 @@ let pane = null;
 let paneView = null;
 const badgeEls = new Set();
 
-function stats() {
-  if (!D) return null;
-  const down = D.guards.filter((g) => g.hp <= 0).length;
-  if (!anyAwake(D)) {
-    const ns = nextSummonAt();
-    return [{ k: 'Guards', v: `${down}/5`, unit: ' down' }, { k: "M'aol", v: 'Dormant' }, { k: 'Next summon', v: ns ? hm(ns) : '–' }];
-  }
-  const P = plan(D);
-  return [
-    { k: 'Guards', v: `${down}/5`, unit: ' down', hot: down < 5 },
-    { k: "M'aol HP", v: D.maol.max ? `${Math.round((D.maol.hp / D.maol.max) * 100)}%` : '–', hot: down === 5 },
-    { k: 'Leaves', v: P.leaves ? hm(P.leaves) : '–' },
-  ];
-}
-
 function renderPane() {
   if (!pane || !paneView || !paneView.active) return;
   pane.innerHTML = bodyHtml(true);
-  paneView.stats(UI.keys || !apiKey() ? null : stats());
-  const ai = aiTips() ? ` · AI ${esc(ST.ai.model)}` : '';
-  paneView.meta(D ? (err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · ${tzLabel()}`) + ai : '');
+  // Same look as the header dropdown: no stats tiles; its title-bar pill and footer clock go in the meta line.
+  paneView.stats(null);
+  paneView.meta(D ? `${esc(pill())} · ` + (err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · ${tzLabel()}`) : '');
 }
 
 function renderBadges() {
@@ -879,7 +864,7 @@ function css() {
     .tmt-ui :where(p, li, label, small, b, em) { color: inherit; }
     .tmt-ui .tmt-sec small { font-weight: normal; letter-spacing: 0; color: var(--default-blue-color, #74c0fc); }
     .tmt-ui .tmt-key > div + div { margin-top: 8px; }
-    .tmt-pane { margin: -4px -2px 0; }
+    .tmt-pane { padding: 4px 0 6px; border-radius: 5px; background: var(--default-bg-panel-color, #333); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
     #tmt.tmt-docked { bottom: auto; }
     #tmt { position: fixed; left: 10px; bottom: 10px; z-index: 99999; width: 300px; max-width: calc(100vw - 20px);
       font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: light;
