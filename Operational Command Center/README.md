@@ -4,7 +4,7 @@
 > [occ-kit](../occ-kit/README.md). Run `node occ-kit/build.mjs`, never edit
 > `operational-command-center.user.js` by hand. Tabs come from two places: bundled plug-ins
 > (`occ.build.json`: company trains pill, M'aol tracker with its own tab, badge and AI tips via
-> `kit.ai.write`) and the runner's skills below. Each plug-in's `settings(card, kit)` shows in Setup.
+> `kit.ai.write`, Keys tab with 14-day Torn key and free AI usage vs their caps) and the runner's skills below. Each plug-in's `settings(card, kit)` shows in Setup.
 > Size is no concern: Torn PDA loaded a 400 KB test script (2026-10-28).
 
 How a skill in this repo becomes a working button in the Torn UI, with zero
@@ -123,8 +123,11 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
   the answer and returns `{ ...run result, answer, model, errors }`.
 - `POST /write` with `{ system, user }` (under 60k characters) - same gate; a free model
   answers plug-in data (`kit.ai.write`). `{ answer, model }`, or `503` when every model is busy.
+- `GET /usage` - same gate; Keys tab data: per UTC day the runner's own model calls (ok / 429 /
+  failed per model) and OpenRouter's free-request count (hourly cron snapshot plus a live read),
+  14 days. Counts only, no personal data; kept 40 days. Torn usage comes from `key/log` in the browser.
 - Code: `src/index.mjs` (routes), `auth.mjs` (owner, allowlist, rate limits), `torn.mjs`,
-  `store.mjs` (KV), `ai/models.mjs` + `ai/answer.mjs`. Free model list and free-only guard:
+  `store.mjs` (KV), `ai/models.mjs` + `ai/answer.mjs`, `usage.mjs`. Free model list and free-only guard:
   `occ-kit/core/models.js`, shared with the userscripts. Tests:
   `node --test "Operational Command Center/worker/test/runner.test.mjs"`. OpenRouter
   key: the Worker secret `OPENROUTER_KEY` if set, else the `X-OpenRouter-Key`

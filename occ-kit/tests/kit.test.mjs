@@ -37,3 +37,25 @@ test("model list is free only", () => {
 test("built userscripts match their sources", () => {
   execFileSync(process.execPath, [resolve(repo, "occ-kit/build.mjs"), "--check"], { stdio: "pipe" });
 });
+
+test("Keys tab merges Torn key logs without double counting and flags missed calls", async () => {
+  const { mergeLog } = await import("../../Operational Command Center/plugins/keys.js");
+  const t0 = Date.UTC(2026, 9, 28, 10, 0, 0) / 1000;
+  const e = (ts, sel, ip, comment) => ({ timestamp: ts, type: sel === "log" ? "key" : "user", selections: sel, id: 1, ip, comment: comment || null });
+  const first = [e(t0 + 70, "log", "1.x"), e(t0 + 65, "bars", "1.x"), e(t0 + 65, "bars", "9.x"), e(t0 + 10, "bars", "1.x")];
+  let h = mergeLog(null, first, (t0 + 80) * 1000);
+  const day = "2026-10-28";
+  assert.equal(h.days[day].n, 4);
+  assert.equal(h.days[day].peak, 3);
+  assert.equal(h.days[day].src["elsewhere\u0001user bars"], 1);
+  // Second read overlaps the first: only the two new calls count, peak merges across both reads.
+  h = mergeLog(h, [e(t0 + 100, "log", "1.x", "OCC"), e(t0 + 90, "bars", "1.x")].concat(first), (t0 + 110) * 1000);
+  assert.equal(h.days[day].n, 6);
+  assert.equal(h.days[day].peak, 5);
+  assert.ok(!h.days[day].gap);
+  // A full log that starts after the last call seen: calls were missed, the day is a lower bound.
+  const full = Array.from({ length: 100 }, (_, i) => e(t0 + 3600 + i, "bars", "1.x"));
+  h = mergeLog(h, full, (t0 + 3700) * 1000);
+  assert.equal(h.days[day].n, 106);
+  assert.equal(h.days[day].gap, true);
+});

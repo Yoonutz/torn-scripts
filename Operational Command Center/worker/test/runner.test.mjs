@@ -31,6 +31,7 @@ function fakeFetch({ owner = 2805199, models = [] } = {}) {
   globalThis.fetch = async (url, opt) => {
     calls.push(String(url));
     if (String(url).startsWith("https://api.torn.com/v2/user/basic")) return Response.json({ profile: { id: owner } });
+    if (String(url) === "https://openrouter.ai/api/v1/key") return Response.json({ data: { usage: 0, free_model_daily_requests: { used: 12, limit: 1000, remaining: 988 } } });
     if (String(url).startsWith("https://openrouter.ai/")) {
       const body = JSON.parse(opt.body);
       assert.ok(isFree(body.model), "paid model called: " + body.model);
@@ -111,4 +112,40 @@ test("free-only guard", () => {
   assert.equal(isFree("openrouter/free"), true);
   assert.equal(isFree("google/gemma-4-31b-it:free"), true);
   assert.equal(isFree("openai/gpt-5"), false);
+});
+
+test("model calls are counted per UTC day and model, /usage returns 14 days plus OpenRouter's count", async () => {
+  fakeFetch({ models: [{ status: 429 }, { status: 500 }, { text: "Answer." }] });
+  const e = env({ OPENROUTER_KEY: "k" });
+  await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ user: "u" }) }), e);
+  const r = await worker.fetch(req("/usage"), e);
+  const j = await r.json();
+  assert.equal(r.status, 200);
+  assert.equal(j.days.length, 14);
+  const today = j.days[13];
+  assert.equal(today.day, new Date().toISOString().slice(0, 10));
+  assert.deepEqual([today.ai.ok, today.ai.rl, today.ai.fail], [1, 1, 1]);
+  assert.equal(Object.keys(today.ai.models).length, 3);
+  assert.equal(j.live.used, 12);
+  assert.equal(today.or.limit, 1000);
+});
+
+test("/usage is private like every other route", async () => {
+  fakeFetch({ owner: 1 });
+  assert.equal((await worker.fetch(req("/usage"), env())).status, 403);
+});
+
+test("hourly cron stores OpenRouter's count, and does nothing without a key", async () => {
+  fakeFetch();
+  const run = async (e) => {
+    const waits = [];
+    await worker.scheduled({}, e, { waitUntil: (p) => waits.push(p) });
+    await Promise.all(waits);
+  };
+  const e = env({ OPENROUTER_KEY: "k" });
+  await run(e);
+  assert.equal(JSON.parse(e.kv.get("usage:or:" + new Date().toISOString().slice(0, 10))).used, 12);
+  const none = env();
+  await run(none);
+  assert.equal(none.kv.size, 0);
 });

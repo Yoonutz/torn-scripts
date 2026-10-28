@@ -2,6 +2,7 @@
 // health shared in KV. OpenRouter key: env.OPENROUTER_KEY, else the caller's X-OpenRouter-Key.
 import { OPENROUTER_URL } from "../../../../occ-kit/core/models.js";
 import { modelList, health, ranked, COOL_MS } from "./models.mjs";
+import { record } from "../usage.mjs";
 
 const MAX_TRIES = 4;
 const MODEL_TIMEOUT = 40000;
@@ -30,7 +31,8 @@ export async function answer(env, prompt, orKey, fallback) {
   if (!key) return { text: fallback, model: "runner (no OpenRouter key)" };
   const h = await health(env);
   const before = JSON.stringify(h);
-  const save = () => (JSON.stringify(h) !== before ? env.SNAPSHOTS.put("ai:health", JSON.stringify(h)) : null);
+  const tries = [];
+  const save = () => Promise.all([JSON.stringify(h) !== before ? env.SNAPSHOTS.put("ai:health", JSON.stringify(h)) : null, record(env, tries)]);
   const errors = [];
   for (const model of ranked(modelList(env), h).slice(0, MAX_TRIES)) {
     try {
@@ -42,20 +44,24 @@ export async function answer(env, prompt, orKey, fallback) {
       });
       const j = await res.json().catch(() => ({}));
       if (res.status === 401) {
+        tries.push([model, "fail"]);
         errors.push("OpenRouter rejected the key");
         break;
       }
       const msg = j.choices && j.choices[0] && j.choices[0].message;
       const text = msg && msg.content ? String(msg.content).trim() : "";
       if (res.ok && text) {
+        tries.push([model, "ok"]);
         h.last = model;
         delete h.cool[model];
         await save();
         return { text, model: j.model || model };
       }
+      tries.push([model, res.status === 429 ? "rl" : "fail"]);
       h.cool[model] = Date.now() + COOL_MS;
       errors.push(model + ": " + res.status + " " + ((j.error && j.error.message) || "empty reply"));
     } catch (e) {
+      tries.push([model, "fail"]);
       h.cool[model] = Date.now() + COOL_MS;
       errors.push(model + ": " + (e && e.name === "TimeoutError" ? "timeout" : String((e && e.message) || e)));
     }
