@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "Operational Command Center/worker/**"
+      - "occ-kit/core/models.js"
       - ".claude/skills/**"
       - ".github/workflows/occ-runner.yml"
   workflow_dispatch:

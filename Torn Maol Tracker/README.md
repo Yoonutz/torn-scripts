@@ -57,7 +57,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 Reads the Torn API with your own key, at most 28 calls a minute only while a Torn tab is visible, none outside Halloween week.
 No other requests to Torn. The only other site is the public chain-race feed (`@connect live.chain-race.workers.dev`), read-only: nothing is sent to it, no key, no name. Adds one header button
 and a dropdown; never clicks, attacks or travels for you. Links take you to the attack or travel page, you act yourself.
-The key and the last snapshot stay in this browser's localStorage.
+The key stays in Tampermonkey's own storage (a key saved by an older version moves there by itself), the last snapshot in this browser's localStorage.
 
 | Torn API ToS | |
 | --- | --- |
@@ -68,3 +68,7 @@ The key and the last snapshot stay in this browser's localStorage.
 | Key access level | Minimal |
 
 </details>
+
+## Source
+
+The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-maol-tracker.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand.
