@@ -19,6 +19,9 @@ function env(extra) {
       async put(k, v) {
         kv.set(k, v);
       },
+      async list({ prefix }) {
+        return { keys: [...kv.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true };
+      },
     },
     kv,
     ...extra,
@@ -176,4 +179,32 @@ test("/data has its own rate limit, separate from skill runs", async () => {
   assert.equal(r.status, 200);
   const r2 = await worker.fetch(req("/data/paid"), env({ DATA_PER_KEY: { limit: async () => ({ success: false }) } }));
   assert.equal(r2.status, 429);
+});
+
+test("every /write answer is logged for its owner and read back newest first by /ailog", async () => {
+  fakeFetch({ models: [{ status: 429 }, { text: "first" }, { text: "second" }] });
+  const e = env({ OPENROUTER_KEY: "k" });
+  await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ system: "rules", user: '{"hp":5}' }) }), e);
+  await new Promise((r) => setTimeout(r, 2));
+  await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ system: "rules", user: '{"hp":4}' }) }), e);
+  assert.equal([...e.kv.keys()].filter((k) => k.startsWith("ailog:2805199:")).length, 2);
+  const j = await (await worker.fetch(req("/ailog"), e)).json();
+  assert.equal(j.total, 2);
+  assert.deepEqual(j.entries.map((x) => [x.route, x.user, x.reply]), [["write", '{"hp":4}', "second"], ["write", '{"hp":5}', "first"]]);
+  assert.equal(j.entries[1].system, "rules");
+  assert.equal(j.entries[1].errors.length, 1);
+  assert.ok(j.entries[1].model && j.entries[1].at && typeof j.entries[1].ms === "number");
+  assert.equal((await (await worker.fetch(req("/ailog?limit=1"), e)).json()).entries.length, 1);
+  fakeFetch({ owner: 1 });
+  assert.equal((await worker.fetch(req("/ailog"), env())).status, 403);
+});
+
+test("a failed answer is logged too, with an empty reply", async () => {
+  fakeFetch({ models: [] });
+  const e = env({ OPENROUTER_KEY: "k" });
+  const r = await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ user: "u" }) }), e);
+  assert.equal(r.status, 503);
+  const j = await (await worker.fetch(req("/ailog"), e)).json();
+  assert.equal(j.entries[0].reply, "");
+  assert.ok(j.entries[0].errors.length > 0);
 });

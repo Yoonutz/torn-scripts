@@ -55,7 +55,7 @@ export async function answer(env, prompt, orKey, fallback) {
         h.last = model;
         delete h.cool[model];
         await save();
-        return { text, model: j.model || model };
+        return { text, model: j.model || model, errors };
       }
       tries.push([model, res.status === 429 ? "rl" : "fail"]);
       h.cool[model] = Date.now() + COOL_MS;
