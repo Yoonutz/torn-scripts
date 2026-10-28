@@ -1,12 +1,15 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.14
+// @version      0.7.15
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
 // @connect      openrouter.ai
 // @connect      raw.githubusercontent.com
 // @connect      occ-runner.yoonutz.workers.dev
@@ -17,7 +20,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.14';
+  const VERSION = '0.7.15';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -29,10 +32,11 @@
   const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
   const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
   const MODEL = 'openrouter/free';
-  const FALLBACK = ['z-ai/glm-5.2:free', 'cohere/north-mini-code:free', 'google/gemma-4-26b-a4b-it:free'];
+  const FALLBACK = ['cohere/north-mini-code:free', 'google/gemma-4-26b-a4b-it:free'];
   const ATTEMPTS = 3;
   const MAX_STEPS = 4;
-  const TIMEOUT_MS = 90000;
+  const TIMEOUT_MS = 45000;
+  const STALE_MS = 12 * 3600 * 1000;
   // Company trains pill (next to the OCC icon). Torn adds the daily trains with the company
   // update at ~18:05 TCT (UTC, no DST), so one call just after that, a 12h safety net,
   // a call after training on the company page, or on click.
@@ -78,6 +82,48 @@
       try {
         localStorage.removeItem(k);
       } catch (e) {}
+    },
+  };
+
+  // Keys live in Tampermonkey's own storage: clearing torn.com site data, logging out or
+  // Torn wiping its localStorage no longer loses them, and other scripts on the page cannot
+  // read them. Torn PDA keeps localStorage (it fills the Torn key itself). Keys saved by
+  // older versions in localStorage move over on first read, once the copy is confirmed.
+  function hasGM() {
+    return typeof GM_getValue === 'function' && typeof GM_setValue === 'function' && !isPda();
+  }
+
+  const keys = {
+    get(k) {
+      if (hasGM()) {
+        try {
+          const v = GM_getValue(k, '');
+          if (typeof v === 'string' && v) return v;
+        } catch (e) {}
+      }
+      const old = store.get(k, '');
+      if (old && hasGM() && keys.gmSet(k, old)) store.del(k);
+      return old;
+    },
+    gmSet(k, v) {
+      try {
+        GM_setValue(k, v);
+        return GM_getValue(k, '') === v;
+      } catch (e) {
+        return false;
+      }
+    },
+    set(k, v) {
+      if (hasGM() && keys.gmSet(k, v)) store.del(k);
+      else store.set(k, v);
+    },
+    del(k) {
+      if (hasGM()) {
+        try {
+          GM_deleteValue(k);
+        } catch (e) {}
+      }
+      store.del(k);
     },
   };
 
@@ -146,6 +192,10 @@
     .occ-act-btn svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
     .occ-field{display:block;width:100%;height:36px;padding:0 10px;margin:7px 0 2px;border:1px solid #3a3a3a;border-radius:6px;background:#161616;color:#d9d9d9;font:12px/1 Consolas,Menlo,monospace;outline:none;appearance:none;-webkit-appearance:none;color-scheme:dark}
     .occ-field:focus{border-color:#f2c14e;box-shadow:0 0 0 2px rgba(242,193,78,.2)}
+    .occ-field::-ms-reveal,.occ-field::-ms-clear{display:none}
+    .occ-field:-webkit-autofill,.occ-field:-webkit-autofill:hover,.occ-field:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 40px #161616 inset;-webkit-text-fill-color:#d9d9d9;caret-color:#d9d9d9;transition:background-color 9999s}
+    .occ-meta .occ-old{color:#f2c14e}
+    .occ-cancel{margin-left:auto}
     .occ-tabs{grid-area:tabs;display:flex;border-top:1px solid #2f2f2f;background:#161616}
     .occ-tab{flex:1;min-width:0;align-self:stretch;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px 9px;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#8c8c8c;user-select:none}
     .occ-tab svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -380,11 +430,27 @@
     }
   }
 
-  async function chat(messages, tools) {
-    const key = store.get(KEY_OR, '');
+  const CANCELLED = 'Cancelled.';
+
+  function checkStop(run) {
+    if (run && run.stopped) throw new Error(CANCELLED);
+  }
+
+  function pause(ms, run) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(resolve, ms);
+      if (run) run.wake = () => (clearTimeout(t), reject(new Error(CANCELLED)));
+    });
+  }
+
+  async function chat(messages, tools, run) {
+    const key = keys.get(KEY_OR);
     if (!key) throw new Error('No OpenRouter key. Open Setup and paste one.');
     const errors = [];
     for (let i = 0; i < ATTEMPTS; i++) {
+      checkStop(run);
+      // Busy free models: wait a little longer before each new try.
+      if (i) await pause(2000 * i, run);
       try {
         const body = { model: MODEL, models: FALLBACK, temperature: 0.1, messages };
         if (tools) body.tools = tools;
@@ -402,7 +468,7 @@
         if (res.status >= 200 && res.status < 300 && msg && (hasTool || hasText)) return { msg, model: json.model || MODEL };
         errors.push('try ' + (i + 1) + ': ' + res.status + ' ' + ((json.error && json.error.message) || 'empty reply'));
       } catch (e) {
-        if (/401/.test(String(e.message))) throw e;
+        if (/401/.test(String(e.message)) || e.message === CANCELLED) throw e;
         errors.push('try ' + (i + 1) + ': ' + e.message);
       }
     }
@@ -410,7 +476,7 @@
   }
 
   function tornKey() {
-    const k = store.get(KEY_TORN, '');
+    const k = keys.get(KEY_TORN);
     if (k) return k;
     return PDA_KEY.indexOf('PDA-APIKEY') === -1 ? PDA_KEY : '';
   }
@@ -426,8 +492,11 @@
     return json;
   }
 
-  async function agent(s, md, onStatus) {
-    const tools = [{ type: 'function', function: { name: s.tool.name, description: s.tool.description, parameters: { type: 'object', properties: { force: { type: 'boolean', description: 'Re-collect live data even if a fresh snapshot exists' } } } } }];
+  // One script run per button press: the model can ask for the tool again, but it gets the
+  // same result instead of a second round of Torn calls. Rerun with fresh data is the
+  // amber button's job, never the model's.
+  async function agent(s, md, onStatus, force, run) {
+    const tools = [{ type: 'function', function: { name: s.tool.name, description: s.tool.description, parameters: { type: 'object', properties: {} } } }];
     const messages = [
       { role: 'system', content: md },
       { role: 'user', content: "Run this skill now and deliver its output exactly as the skill's delivery rule says. Use the " + s.tool.name + ' tool to execute the scripts; you cannot run anything yourself. Plain hyphens only.' },
@@ -436,15 +505,16 @@
     let model = null;
     for (let step = 0; step < MAX_STEPS; step++) {
       onStatus(step === 0 ? 'Sending the skill to a free model...' : 'Model is writing the answer...');
-      const r = await chat(messages, tools);
+      const r = await chat(messages, tools, run);
+      checkStop(run);
       model = r.model;
       messages.push(r.msg);
       const calls = r.msg.tool_calls || [];
       if (calls.length) {
         onStatus('Model is running the script on the runner...');
         for (const tc of calls) {
-          const args = parseJson(tc.function && tc.function.arguments);
-          const out = await runTool(s, args);
+          const out = raw || (await runTool(s, { force }));
+          checkStop(run);
           raw = out;
           messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ report: out.report, date: out.date, baseline: out.baseline, snapshots: out.snapshots, reused: out.reused }) });
         }
@@ -452,7 +522,8 @@
       }
       if (!raw) {
         onStatus('Model skipped the tool; running the script directly...');
-        raw = await runTool(s, {});
+        raw = await runTool(s, { force });
+        checkStop(run);
         messages.push({ role: 'user', content: 'Here is the output of ' + s.tool.name + ', run for you just now. Deliver it per the skill rules.\n\n' + raw.report });
         continue;
       }
@@ -468,10 +539,18 @@
     return {
       id: r.id,
       label: r.label,
-      icon: r.icon || '<span style="font:700 15px Verdana">' + esc(String(r.label || '?').charAt(0)) + '</span>',
+      icon: safeIcon(r.icon) || '<span style="font:700 15px Verdana">' + esc(String(r.label || '?').charAt(0)) + '</span>',
       md: r.md,
       tool: { name: 'run_script', path: '/run/' + r.id + '?', description: r.description || "Runs this skill's script on the runner and returns its printed output." },
     };
+  }
+
+  // The runner's icon lands on torn.com as markup: accept only a plain inline <svg>.
+  function safeIcon(svg) {
+    const s = String(svg || '').trim();
+    if (!/^<svg[\s>]/i.test(s) || !/<\/svg>$/i.test(s)) return '';
+    if (/<(script|foreignObject|iframe|image|use|a)[\s>]|\son\w+\s*=|javascript:|href\s*=/i.test(s)) return '';
+    return s;
   }
 
   async function loadSkills() {
@@ -541,7 +620,9 @@
     const shortModel = String(a.model || '').split('/').pop().replace(/:free$/, '');
     const today = new Date().toDateString() === when.toDateString();
     const stamp = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (today ? '' : ', ' + when.toLocaleDateString());
-    const meta = el('div', 'occ-meta', '<span class="occ-dot">●</span><span class="occ-m">' + esc(shortModel) + ' · ' + esc(stamp) + '</span>');
+    const age = Date.now() - a.at;
+    const old = age > STALE_MS ? ' · <span class="occ-old">' + Math.floor(age / 3600000) + 'h old</span>' : '';
+    const meta = el('div', 'occ-meta', '<span class="occ-dot">●</span><span class="occ-m">' + esc(shortModel) + ' · ' + esc(stamp) + old + '</span>');
     meta.title = a.model + ' - ' + when.toLocaleString();
     wrap.appendChild(meta);
     setStats(a.stats);
@@ -568,7 +649,7 @@
       show(answerView(s, cached));
       return;
     }
-    if (!store.get(KEY_OR, '')) {
+    if (!keys.get(KEY_OR)) {
       showSettings('Paste an OpenRouter key first, then press ' + s.label + ' again.');
       return;
     }
@@ -576,32 +657,59 @@
       showSettings('Paste your Torn API token first, then press ' + s.label + ' again.');
       return;
     }
-    if (inflight[id]) return;
-    inflight[id] = true;
+    if (inflight[id]) {
+      if (inflight[id].status) show(inflight[id].status);
+      return;
+    }
+    const run = { stopped: false, wake: null };
+    inflight[id] = run;
     fab.classList.add('occ-busy');
     setStats(null);
-    const status = el('div', 'occ-card', '<span class="occ-spin"></span>Fetching the skill file...');
+    const status = el('div', 'occ-card');
+    const line = el('div', 'occ-bar');
+    line.style.marginTop = '0';
+    const text = el('span', '', '<span class="occ-spin"></span>Fetching the skill file...');
+    const stop = el('button', 'occ-act-btn occ-alt occ-cancel', 'Cancel');
+    stop.type = 'button';
+    stop.addEventListener('click', () => {
+      run.stopped = true;
+      if (run.wake) run.wake();
+      if (run.reject) run.reject(new Error(CANCELLED));
+    });
+    line.appendChild(text);
+    line.appendChild(stop);
+    status.appendChild(line);
+    run.status = status;
     show(status);
     const onStatus = (t) => {
-      status.innerHTML = '<span class="occ-spin"></span>' + esc(t);
+      if (!run.stopped) text.innerHTML = '<span class="occ-spin"></span>' + esc(t);
     };
+    // Cancel answers at once; requests already on the wire finish in the background and are ignored.
+    const cancelled = new Promise((_, reject) => (run.reject = reject));
     try {
-      const md = await fetchText(s.md);
-      const a = await agent(s, md, onStatus);
+      const md = await Promise.race([fetchText(s.md), cancelled]);
+      const a = await Promise.race([agent(s, md, onStatus, !!force, run), cancelled]);
       const rec = { text: a.text, model: a.model, at: Date.now(), stats: a.raw ? a.raw.stats : null };
       store.set(KEY_ANS + id, rec);
       if (store.get(KEY_SKILL, null) === id) show(answerView(s, rec));
     } catch (e) {
-      if (store.get(KEY_SKILL, null) === id) show(errCard(s.label + ' failed', String((e && e.message) || e)));
+      const msg = String((e && e.message) || e);
+      if (store.get(KEY_SKILL, null) !== id) {
+        // Another skill is on screen now; nothing to repaint.
+      } else if (msg === CANCELLED) {
+        const prev = store.get(KEY_ANS + id, null);
+        if (prev) show(answerView(s, prev));
+        else show(el('div', 'occ-card occ-muted', 'Cancelled.'));
+      } else show(errCard(s.label + ' failed', msg));
     } finally {
-      inflight[id] = false;
+      inflight[id] = null;
       fab.classList.remove('occ-busy');
     }
   }
 
   function keyField(card, opts) {
     card.appendChild(el('h3', '', opts.title));
-    const has = !!store.get(opts.key, '');
+    const has = !!keys.get(opts.key);
     const st = el('div', 'occ-muted', has ? opts.saved : opts.empty);
     card.appendChild(st);
     const input = el('input', 'occ-field');
@@ -616,7 +724,7 @@
     save.addEventListener('click', () => {
       const v = input.value.trim();
       if (!v) return;
-      store.set(opts.key, v);
+      keys.set(opts.key, v);
       input.value = '';
       st.textContent = opts.saved;
       input.placeholder = 'Paste a new value to replace';
@@ -624,7 +732,7 @@
     const clear = el('button', 'occ-act-btn occ-alt', 'Forget');
     clear.type = 'button';
     clear.addEventListener('click', () => {
-      store.del(opts.key);
+      keys.del(opts.key);
       st.textContent = opts.empty;
       input.placeholder = opts.placeholder;
     });
@@ -642,10 +750,10 @@
     const wrap = el('div');
     if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
     const c1 = el('div', 'occ-card');
-    keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in this browser only.', empty: 'No key yet. Free models only; the key never leaves this browser.' });
+    keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. Skill reports (your money, networth, company numbers) go to free OpenRouter models, which may log them.', empty: 'No key yet; a free key is enough. Skill reports (your money, networth, company numbers) go to free OpenRouter models, which may log them.' });
     wrap.appendChild(c1);
     const c2 = el('div', 'occ-card');
-    keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in this browser only; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
+    keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in Tampermonkey storage; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
     wrap.appendChild(c2);
     const c3 = el('div', 'occ-card');
     c3.appendChild(el('h3', '', 'Answers'));
@@ -838,6 +946,8 @@
     // Cap the wait so a sleeping laptop or throttled tab re-checks reasonably soon.
     const wait = Math.min(Math.max(5000, at - Date.now()), 3600000);
     trainsTimer = setTimeout(() => {
+      // Hidden tab: no call now; the visibility handler catches up when the tab is back.
+      if (document.hidden) return;
       fetchTrains(false).then(scheduleTrains);
     }, wait);
   }
@@ -1132,7 +1242,7 @@
   function startTrains() {
     trains = store.get(KEY_TRAINS, null);
     paintTrains();
-    fetchTrains(false).then(scheduleTrains);
+    if (!document.hidden) fetchTrains(false).then(scheduleTrains);
     // Background tabs get their timers throttled: check again when the tab comes back.
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') fetchTrains(false).then(scheduleTrains);
@@ -1179,13 +1289,32 @@
       setTimeout(tick, 500);
     };
     tick();
+    // Torn's chat and timers change the page all the time: check at most once a second,
+    // otherwise pages where the icon cannot mount rescan every profile link on each change.
+    let moTimer = 0;
     const mo = new MutationObserver(() => {
-      if (!document.querySelector('.occ-inline') || !document.querySelector('.occ-trains')) mountInline();
+      if (moTimer) return;
+      moTimer = setTimeout(() => {
+        moTimer = 0;
+        if (!document.querySelector('.occ-inline') || !document.querySelector('.occ-trains')) mountInline();
+      }, 1000);
     });
     mo.observe(document.body, { childList: true, subtree: true });
     // Torn swaps pages client-side; re-check after each navigation.
     addEventListener('hashchange', mountInline);
     addEventListener('popstate', mountInline);
+    // Rotating a tablet across the phone breakpoint: move icon and pill to the other layout.
+    let phone = useDock(null);
+    let rsTimer = 0;
+    addEventListener('resize', () => {
+      clearTimeout(rsTimer);
+      rsTimer = setTimeout(() => {
+        if (useDock(null) === phone) return;
+        phone = useDock(null);
+        document.querySelectorAll('.occ-dock,.occ-inline,.occ-trains').forEach((x) => x.remove());
+        mountInline();
+      }, 300);
+    });
   }
 
   function build() {
