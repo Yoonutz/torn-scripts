@@ -1,7 +1,7 @@
 // Standalone shell: one plug-in as its own userscript, outside the Command Center.
 // start(kit) runs as soon as the page is ready. A plug-in with mount() also gets a small window
 // (same look as the Command Center, no tab bar) opened by a floating button, or by its own page
-// button when it defines launcher(kit, toggle). When the Command Center on this page already
+// button when it defines launcher(kit, toggle). solo: false skips that window (the plug-in draws its own). When the Command Center on this page already
 // bundles the same plug-in, this copy steps aside so nothing runs or calls the API twice.
 import { el, esc } from '../core/dom.js';
 import { store } from '../core/storage.js';
@@ -150,10 +150,11 @@ export function boot(plugins) {
     if (claimedByOcc() || document.getElementById(rootId)) return;
     const root = el('div');
     root.id = rootId;
-    injectTheme(root, '#' + rootId, (p.mount ? frameCss('#' + rootId) : '') + (p.css || ''));
+    const solo = typeof p.mount === 'function' && p.solo !== false;
+    injectTheme(root, '#' + rootId, (solo ? frameCss('#' + rootId) : '') + (p.css || ''));
     document.body.appendChild(root);
     if (typeof p.start === 'function') p.start(kit);
-    if (typeof p.mount === 'function') buildWindow(root);
+    if (solo) buildWindow(root);
   }
 
   const go = () => setTimeout(build, SOLO_WAIT);

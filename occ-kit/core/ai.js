@@ -62,10 +62,10 @@ async function direct(system, user) {
   throw new Error('Free models busy, try again in a minute (' + errors.join('; ') + ')');
 }
 
-async function write(req) {
+async function write(req, opt) {
   const system = String(req.system || '');
   const user = String(req.user || '');
-  if (!runnerPrivate && tornKey()) {
+  if (!(opt && opt.direct) && !runnerPrivate && tornKey()) {
     try {
       const r = await http({ url: RUNNER + '/write', method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, runnerHeaders()), body: JSON.stringify({ system, user }), timeout: WRITE_TIMEOUT });
       const j = parseJson(r.text);
@@ -81,4 +81,12 @@ export const ai = {
   write,
   // True when write() has a way to reach a model.
   ready: () => !!keys.get(KEY_OR) || (!runnerPrivate && !!tornKey()),
+};
+
+// Standalone builds are public (Greasy Fork): their players' Torn keys must never go to the private
+// runner, so they only ever use their own OpenRouter key.
+export const aiDirect = {
+  ask,
+  write: (req) => write(req, { direct: true }),
+  ready: () => !!keys.get(KEY_OR),
 };

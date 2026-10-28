@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.2
+// @version      0.8.3
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -13,6 +13,7 @@
 // @connect      occ-runner.yoonutz.workers.dev
 // @connect      api.torn.com
 // @connect      live.chain-race.workers.dev
+// @connect      openrouter.ai
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -20,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.2';
+const VERSION = '0.8.3';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -337,10 +338,10 @@ async function direct(system, user) {
   throw new Error('Free models busy, try again in a minute (' + errors.join('; ') + ')');
 }
 
-async function write(req) {
+async function write(req, opt) {
   const system = String(req.system || '');
   const user = String(req.user || '');
-  if (!runnerPrivate && tornKey()) {
+  if (!(opt && opt.direct) && !runnerPrivate && tornKey()) {
     try {
       const r = await http({ url: RUNNER + '/write', method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, runnerHeaders()), body: JSON.stringify({ system, user }), timeout: WRITE_TIMEOUT });
       const j = parseJson(r.text);
@@ -356,6 +357,14 @@ const ai = {
   write,
   // True when write() has a way to reach a model.
   ready: () => !!keys.get(KEY_OR) || (!runnerPrivate && !!tornKey()),
+};
+
+// Standalone builds are public (Greasy Fork): their players' Torn keys must never go to the private
+// runner, so they only ever use their own OpenRouter key.
+const aiDirect = {
+  ask,
+  write: (req) => write(req, { direct: true }),
+  ready: () => !!keys.get(KEY_OR),
 };
 
 // ---- occ-kit/core/theme.js
@@ -925,7 +934,7 @@ function makeKit(host, root) {
     TORN_ERRORS,
     KEY_TORN,
     KEY_OR,
-    ai,
+    ai: host === 'occ' ? ai : aiDirect,
     ui: { card, errCard, button, accordion, keyField, md: mdToHtml, sections: mdSections },
     tip: tipper(root),
     toast: toaster(root, '.occ-badges'),
@@ -1205,9 +1214,9 @@ return {
 // ---- plug-in: Torn Maol Tracker/plugin.js
 const PLUGIN_1 = (function () {
 // M'aol tracker as an occ-kit plug-in. Builds into the standalone Greasy Fork script
-// (torn-maol-tracker.user.js, see occ.build.json) and can be bundled into the Command Center.
-// Everything below is the tracker's own code; the kit supplies only the API key storage
-// (Tampermonkey storage instead of torn.com localStorage).
+// (torn-maol-tracker.user.js, see occ.build.json) and is bundled into the Command Center, where it
+// also gets a tab, a badge and Setup fields. The kit supplies key storage (Tampermonkey storage
+// instead of torn.com localStorage) and the free-model AI that words the "Next" tips.
 
 const POLL_S = 15;               // you + live NPCs: at most 7 calls, 28 of Torn's 100 calls/min per key
 const IDLE_POLL_S = 600;          // dead NPCs, or M'aol alone while everything sleeps: every 10 min
@@ -1261,7 +1270,7 @@ function store(key, value) {
 // samples: { id: [[t, hp], ...] }, deaths: { id: { t, country } }, hops: [[t, country], ...] (M'aol's moves),
 // polled: { id: t }, perks: {...}, snap: last snapshot, nextSummon: feed's estimate, summonAt: when we saw the summon
 let ST = Object.assign({ samples: {}, deaths: {}, hops: [], polled: {}, perks: null, perksAt: 0, feedAt: 0, nextSummon: 0, summonAt: 0 }, load(K.state, {}));
-let UI = Object.assign({ open: true, biz: false }, load(K.ui, {}));
+let UI = Object.assign({ open: true, biz: false, ai: true, keys: false }, load(K.ui, {}));
 const saveState = () => store(K.state, ST);
 const saveUi = () => store(K.ui, UI);
 let kit = null;
@@ -1403,17 +1412,18 @@ const anyAwake = (snap) => !!snap && [snap.maol, ...snap.guards].some((n) => n.s
 const sleeping = () => !inSummonWindow(now()) && !anyAwake(D);
 
 let inFlight = false;   // a slow API must not stack refreshes (the timer ticks every 5 s)
-async function refresh() {
+async function refresh(force) {
   if (inFlight) return;
   inFlight = true;
-  try { await poll(); } finally { inFlight = false; }
+  try { await poll(force); } finally { inFlight = false; }
+  aiTick();
 }
-async function poll() {
+async function poll(force) {
   if (!apiKey() || sleeping()) { render(); return; }
   // Several Torn tabs share one snapshot: only the first tab due polls the API.
   const fresh = load(K.state, {});
   const dormant = fresh.snap && fresh.snap.maol.state === 'Dormant' && fresh.snap.guards.every((g) => g.state === 'Dormant');
-  if (fresh.snap && now() - fresh.snap.t < (dormant ? IDLE_POLL_S : POLL_S) - 2) {
+  if (!force && fresh.snap && now() - fresh.snap.t < (dormant ? IDLE_POLL_S : POLL_S) - 2) {
     ST = Object.assign(ST, fresh);
     D = fresh.snap;
     render();
@@ -1687,6 +1697,125 @@ function stayOrFly(P, maol, me, method, bonded) {
   return { c: 'go', t: `Fly to ${best.c} now (${METHOD_NAME[method]}, ${fmtMin(tripMin(me, best.c, method))}). M'aol is there ${win}.` + (bonded ? ' First stop after the bond breaks.' : '') + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
 }
 
+// ------------------------------------------------------------- AI tips
+// The numbers stay the script's own maths. A free model only picks and words the "Next" tips from
+// them. Built-in tips show while it thinks or when no AI is set up, and stay when a reply looks
+// wrong (bad JSON, a clock time that isn't in the facts). Asked only while the event runs, again
+// only when the situation changes, at most once per 2 min across all Torn tabs.
+const AI_GAP_S = 120;
+const AI_STALE_S = 10 * 60;   // times drift: ask again after 10 min even when nothing changed
+const AI_WAIT_S = 90;         // another tab's ask older than this is treated as lost
+const AI_SYSTEM = [
+  "You advise a Torn City player during the M'aol Halloween event, inside a small userscript panel.",
+  'The user message is JSON facts the script computed from the Torn API. They are exact; you must not change them.',
+  'Reply with ONLY a JSON array of 1 to 4 tips, most urgent first:',
+  '[{"kind":"go","text":"...","link":"none"}]',
+  'kind: "go" = do this now, "warn" = skip or avoid something, "info" = useful context.',
+  'link: "attack:<id>" (only an NPC with attackable true), "travel" (when the tip says to fly), or "none".',
+  'Rules: use only the facts given, never invent numbers, names, countries or times. Copy clock times exactly as',
+  'written (HH:MM). Durations only as given in minutes. Plain English, no markdown, each text under 160 characters.',
+  'The "calculated" list is the script\'s own advice: keep its decisions, you may merge, reorder or reword them and add',
+  'one tactical point the facts support. Never suggest scripts, automation, or anything against Torn rules.',
+].join('\n');
+
+let aiBusy = false;
+const aiOn = () => UI.ai !== false && !!kit && kit.ai.ready() && anyAwake(D);
+
+// What changes the advice: where everyone is, who is alive, the bond, and the script's own decisions.
+function aiSig() {
+  const alive = D.guards.filter((g) => g.state === 'Awoken' && g.hp > 0).map((g) => g.id);
+  const calc = advice().filter((x) => x.c === 'go' || x.c === 'warn').map((x) => x.c + x.t.split(' ').slice(0, 3).join(' '));
+  return JSON.stringify([D.maol.state, D.maol.country, D.maol.hp > 0, alive, D.me.where, D.me.state, bestMethod(), calc]);
+}
+
+function aiFacts() {
+  const { maol, guards, me } = D;
+  const method = bestMethod();
+  const P = plan(D);
+  const t = now();
+  const alive = guards.filter((g) => g.state === 'Awoken' && g.hp > 0);
+  const min = (m) => (isFinite(m) ? Math.round(m) : null);
+  const pct = (n) => (n.max ? Math.round((n.hp / n.max) * 100) : null);
+  return {
+    now: hm(t),
+    times_in: tzLabel(),
+    you: { where: me.where || me.desc, state: me.state, busy_until: me.busyUntil > t ? hm(me.busyUntil) : null, travel: METHOD_NAME[method], travel_book: perkMethods(ST.perks).book },
+    guards: guards.map((g) => {
+      const dead = g.hp <= 0;
+      const eta = killEta(g.id, g.hp, g.max);
+      const trip = dead ? Infinity : tripMin(me, g.country, method);
+      return { id: g.id, name: g.name, country: g.country, dead, down_at: dead && ST.deaths[g.id] ? hm(ST.deaths[g.id].t) : null,
+        hp_pct: dead ? 0 : pct(g), dies_in_min: dead ? null : min(eta), trip_min: min(trip), attackable: !dead && g.state === 'Awoken',
+        reach_before_death: !dead && trip + 3 < eta };
+    }),
+    maol: { id: MAOL.id, name: MAOL.name, state: maol.state, country: maol.country, hp_pct: pct(maol), bonded: alive.length > 0,
+      attackable: maol.state === 'Awoken' && maol.hp > 0 && !alive.length, leaves_at: P.leaves ? hm(P.leaves) : null,
+      dies_in_min: alive.length ? null : min(killEta(MAOL.id, maol.hp, maol.max)), shield_under_5pct: shielded(maol),
+      next_stops: P.stops.slice(0, 6).map((s) => ({ at: hm(s.at), country: s.c, trip_min: min(tripMin(me, s.c, method)) })) },
+    bond_breaks_at: alive.length && isFinite(P.bondAt) ? hm(P.bondAt) : null,
+    calculated: advice().filter((x) => x.t && x.c !== 'note').map((x) => ({ kind: x.c, text: x.t })),
+  };
+}
+
+// The model's reply, checked. null: not usable, the built-in tips stay.
+function aiParse(text, facts) {
+  const m = /\[[\s\S]*\]/.exec(String(text || ''));
+  if (!m) return null;
+  let arr;
+  try { arr = JSON.parse(m[0]); } catch (e) { return null; }
+  if (!Array.isArray(arr) || !arr.length) return null;
+  const times = new Set(JSON.stringify(facts).match(/\d{2}:\d{2}/g) || []);
+  const ids = new Set(facts.guards.filter((g) => g.attackable).map((g) => g.id));
+  if (facts.maol.attackable) ids.add(MAOL.id);
+  const out = [];
+  for (const x of arr.slice(0, 4)) {
+    const kind = ['go', 'warn', 'info'].includes(x && x.kind) ? x.kind : '';
+    const t = String((x && x.text) || '').replace(/\s+/g, ' ').trim();
+    if (!kind || !t || t.length > 240) return null;
+    if ((t.match(/\b\d{1,2}:\d{2}\b/g) || []).some((h) => !times.has(h.padStart(5, '0')))) return null;
+    const a = /^attack:(\d+)$/.exec(String(x.link || ''));
+    const href = a && ids.has(+a[1]) ? `https://www.torn.com/loader.php?sid=attack&user2ID=${a[1]}`
+      : x.link === 'travel' ? 'https://www.torn.com/page.php?sid=travel' : '';
+    out.push(href ? { c: kind, t, href } : { c: kind, t });
+  }
+  return out;
+}
+
+// Current AI tips, or null when there are none for the situation on screen.
+function aiTips() {
+  const a = ST.ai;
+  if (!aiOn() || !a || !a.tips || now() - a.at > AI_STALE_S + AI_GAP_S) return null;
+  return a.sig === aiSig() ? a.tips : null;
+}
+
+async function aiTick() {
+  if (aiBusy || !D || !aiOn()) return;
+  const fresh = load(K.state, {});
+  if (fresh.ai) ST.ai = fresh.ai;
+  ST.aiAsk = fresh.aiAsk || 0;
+  const t = now();
+  const sig = aiSig();
+  const cur = ST.ai;
+  if (cur && cur.tips && cur.sig === sig && t - cur.at < AI_STALE_S) return;
+  if (cur && t - cur.at < AI_GAP_S) return;
+  if (t - ST.aiAsk < AI_WAIT_S) return;
+  aiBusy = true;
+  ST.aiAsk = t;
+  saveState();
+  const facts = aiFacts();
+  try {
+    const r = await kit.ai.write({ system: AI_SYSTEM, user: JSON.stringify(facts) });
+    ST.ai = { sig, at: now(), tips: aiParse(r.text, facts), model: String(r.model || '').split('/').pop().replace(/:free$/, '') };
+  } catch (e) {
+    ST.ai = { sig, at: now(), tips: null, model: '', err: String((e && e.message) || e) };
+  } finally {
+    aiBusy = false;
+    ST.aiAsk = 0;
+    saveState();
+    render();
+  }
+}
+
 // ------------------------------------------------------------- UI
 let root;
 function bar(n) {
@@ -1706,35 +1835,92 @@ function bar(n) {
   </a>`;
 }
 
-function render() {
-  if (!root) return;
+// Key form: the Torn key (standalone only; in the Command Center its own key is used) and the
+// optional free OpenRouter key for AI tips (Command Center: in its Setup instead).
+function keyForm() {
+  const occ = kit.host === 'occ';
+  const torn = !IS_PDA && !(occ && kit.tornKey())
+    ? `<div>Minimal access API key${apiKey() ? ' (saved, paste to replace)' : ' needed (NPCs, your status, perks, travel)'}.<br>
+      <input id="tmt-key" type="password" maxlength="16" placeholder="16-character key" autocomplete="off">
+      <a href="#" class="tmt-btn" data-act="save-key">Save</a></div>` : '';
+  const or = occ ? '' : `<div>AI tips, optional: a free <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a> key${kit.keys.get(kit.KEY_OR) ? ' (saved)' : ''}. Only free models get the numbers shown here; they may log them.<br>
+      <input id="tmt-or" type="password" placeholder="sk-or-v1-..." autocomplete="off">
+      <a href="#" class="tmt-btn" data-act="save-or">Save</a>${kit.keys.get(kit.KEY_OR) ? ' <a href="#" data-act="forget-or">remove</a>' : ''}</div>`;
+  return `<div class="tmt-key">${torn}${or}${apiKey() ? '<a href="#" data-act="keys">Done</a>' : ''}</div>`;
+}
+
+// The panel body, shared by the header dropdown and the Command Center tab (pane: no footer clock,
+// the tab's own tool row shows it).
+function bodyHtml(pane) {
   const method = bestMethod();
   const p = perkMethods(ST.perks);
-  let body;
-  if (!apiKey()) {
-    body = `<div class="tmt-key">Minimal access API key needed (NPCs, your status, perks, travel).<br>
-      <input id="tmt-key" maxlength="16" placeholder="16-character key" autocomplete="off">
-      <a href="#" class="tmt-btn" data-act="save-key">Save</a></div>`;
-  } else if (!D) {
-    body = `<div class="tmt-tip info">${sleeping() ? "M'aol sleeps until Halloween week (26 Oct). No API calls until then." : err ? esc(err) : 'Loading…'}</div>`;
-  } else {
-    const tip = (x) => x.href
-      ? `<a class="tmt-tip ${x.c}" href="${x.href}"${/tornstats/.test(x.href) ? ' target="_blank" rel="noopener"' : ''}>${esc(x.t)}</a>`
-      : `<div class="tmt-tip ${x.c}">${x.h || esc(x.t)}</div>`;
-    const all = advice();
-    const notes = all.filter((x) => x.c === 'note');
-    body = `
-      <div class="tmt-sec">Next</div>${all.filter((x) => x.c !== 'note').map(tip).join('')}
-      <div class="tmt-sec">Praetorians</div>${D.guards.map(bar).join('')}
-      <div class="tmt-sec">Boss</div>${bar(D.maol)}
-      ${notes.length ? `<div class="tmt-sec">Tips</div>${notes.map(tip).join('')}` : ''}
-      <div class="tmt-foot">
-        <span>You: ${esc(D.me.where || D.me.desc)} · ${METHOD_NAME[method]}${p.book ? ' + book' : ''}</span>
-        <a href="#" data-act="biz" class="${UI.biz ? 'on' : ''}">${UI.biz ? 'Using business ticket' : 'Have business ticket?'}</a>
-      </div>
-      <div class="tmt-foot"><span>${err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · times in ${tzLabel()}`}</span>
-        ${IS_PDA ? '' : '<a href="#" data-act="forget-key">change key</a>'}</div>`;
+  if (!apiKey() || UI.keys) return keyForm();
+  if (!D) return `<div class="tmt-tip info">${sleeping() ? "M'aol sleeps until Halloween week (26 Oct). No API calls until then." : err ? esc(err) : 'Loading…'}</div>`;
+  const tip = (x) => x.href
+    ? `<a class="tmt-tip ${x.c}" href="${x.href}"${/tornstats/.test(x.href) ? ' target="_blank" rel="noopener"' : ''}>${esc(x.t)}</a>`
+    : `<div class="tmt-tip ${x.c}">${x.h || esc(x.t)}</div>`;
+  const all = advice();
+  const notes = all.filter((x) => x.c === 'note');
+  const ai = aiTips();
+  const next = ai ? [...ai, ...all.filter((x) => x.c === 'route')] : all.filter((x) => x.c !== 'note');
+  return `
+    <div class="tmt-sec">Next${ai ? ' <small title="Worded by a free AI model from the numbers below">· AI</small>' : ''}</div>${next.map(tip).join('')}
+    <div class="tmt-sec">Praetorians</div>${D.guards.map(bar).join('')}
+    <div class="tmt-sec">Boss</div>${bar(D.maol)}
+    ${notes.length ? `<div class="tmt-sec">Tips</div>${notes.map(tip).join('')}` : ''}
+    <div class="tmt-foot">
+      <span>You: ${esc(D.me.where || D.me.desc)} · ${METHOD_NAME[method]}${p.book ? ' + book' : ''}</span>
+      <a href="#" data-act="biz" class="${UI.biz ? 'on' : ''}">${UI.biz ? 'Using business ticket' : 'Have business ticket?'}</a>
+    </div>
+    ${pane ? '' : `<div class="tmt-foot"><span>${err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · times in ${tzLabel()}`}</span>
+      ${kit.host === 'occ' ? '' : '<a href="#" data-act="keys">keys</a>'}</div>`}`;
+}
+
+// ------------------------------------------------------------- Command Center tab and badge
+let pane = null;
+let paneView = null;
+const badgeEls = new Set();
+
+function stats() {
+  if (!D) return null;
+  const down = D.guards.filter((g) => g.hp <= 0).length;
+  if (!anyAwake(D)) {
+    const ns = nextSummonAt();
+    return [{ k: 'Guards', v: `${down}/5`, unit: ' down' }, { k: "M'aol", v: 'Dormant' }, { k: 'Next summon', v: ns ? hm(ns) : '–' }];
   }
+  const P = plan(D);
+  return [
+    { k: 'Guards', v: `${down}/5`, unit: ' down', hot: down < 5 },
+    { k: "M'aol HP", v: D.maol.max ? `${Math.round((D.maol.hp / D.maol.max) * 100)}%` : '–', hot: down === 5 },
+    { k: 'Leaves', v: P.leaves ? hm(P.leaves) : '–' },
+  ];
+}
+
+function renderPane() {
+  if (!pane || !paneView || !paneView.active) return;
+  pane.innerHTML = bodyHtml(true);
+  paneView.stats(UI.keys || !apiKey() ? null : stats());
+  const ai = aiTips() ? ` · AI ${esc(ST.ai.model)}` : '';
+  paneView.meta(D ? (err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · ${tzLabel()}`) + ai : '');
+}
+
+function renderBadges() {
+  const live = !!D && anyAwake(D);
+  // A fresh badge is not on the page yet when first painted; the shell drops old ones on re-mount.
+  if (badgeEls.size > 8) badgeEls.forEach((b) => { if (!b.isConnected) badgeEls.delete(b); });
+  badgeEls.forEach((b) => {
+    b.style.display = live ? '' : 'none';
+    const down = live ? D.guards.filter((g) => g.hp <= 0).length : 0;
+    b.textContent = !live ? '' : down < 5 ? `M'aol ${down}/5` : `M'aol ${D.maol.max ? Math.round((D.maol.hp / D.maol.max) * 100) : 0}%`;
+    b.title = live ? `M'aol: ${pill()}` : '';
+  });
+}
+
+function render() {
+  renderPane();
+  renderBadges();
+  if (!root) return;
+  const body = bodyHtml(false);
   const docked = !!btnHost && btnHost.isConnected;
   root.classList.toggle('tmt-docked', docked);
   root.innerHTML = `
@@ -1877,11 +2063,28 @@ function onClick(e) {
   const act = a.dataset.act;
   if (act === 'toggle') { UI.open = !UI.open; saveUi(); render(); }
   if (act === 'biz') { UI.biz = !UI.biz; saveUi(); render(); }
-  if (act === 'forget-key') { kit.keys.del(K.key); D = null; render(); }
+  if (act === 'keys') { UI.keys = !UI.keys; saveUi(); render(); }
+  const box = a.closest('.tmt-ui');
   if (act === 'save-key') {
-    const v = (root.querySelector('#tmt-key')?.value || '').trim();
-    if (/^[A-Za-z0-9]{16}$/.test(v)) { kit.keys.set(K.key, v); render(); refresh(); }
+    const v = (box.querySelector('#tmt-key')?.value || '').trim();
+    if (/^[A-Za-z0-9]{16}$/.test(v)) { kit.keys.set(K.key, v); UI.keys = false; saveUi(); D = null; render(); refresh(true); }
   }
+  if (act === 'save-or') {
+    const v = (box.querySelector('#tmt-or')?.value || '').trim();
+    if (/^sk-or-[\w-]{10,}$/.test(v)) { kit.keys.set(kit.KEY_OR, v); render(); aiTick(); }
+  }
+  if (act === 'forget-or') { kit.keys.del(kit.KEY_OR); render(); }
+}
+
+// Command Center Setup: the switches that live in the footer of the standalone panel.
+function settings(card) {
+  card.appendChild(kit.el('h3', '', "M'aol tracker"));
+  card.appendChild(kit.el('div', 'occ-muted', 'Uses this Command Center\'s Torn key. AI tips: a free model words the "Next" tips from the tracker\'s own numbers while the event runs, at most once per 2 min. Built-in tips show when it is off or busy.'));
+  const row = kit.el('div', 'occ-bar');
+  const label = () => (UI.ai !== false ? 'AI tips: on' : 'AI tips: off');
+  const b = kit.ui.button(label(), () => { UI.ai = UI.ai === false; saveUi(); b.textContent = label(); render(); aiTick(); }, true);
+  row.appendChild(b);
+  card.appendChild(row);
 }
 
 function css() {
@@ -1898,54 +2101,58 @@ function css() {
       box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
     .tmt-host .tmt-dot.go { display: block; background: var(--default-green-color, #82c91e); }
     .tmt-host .tmt-dot.warn { display: block; background: var(--default-orange-color, #f08c00); }
+    .tmt-ui { font: 12px Arial, sans-serif; color: var(--default-color, #ddd); }
+    .tmt-ui .tmt-sec small { font-weight: normal; letter-spacing: 0; color: var(--default-blue-color, #74c0fc); }
+    .tmt-ui .tmt-key > div + div { margin-top: 8px; }
+    .tmt-pane { margin: -4px -2px 0; }
     #tmt.tmt-docked { bottom: auto; }
     #tmt { position: fixed; left: 10px; bottom: 10px; z-index: 99999; width: 300px; max-width: calc(100vw - 20px);
       font: 12px Arial, sans-serif; color: var(--default-color, #ddd); color-scheme: dark;
       background: var(--default-bg-panel-color, #333); border-radius: 5px; box-shadow: 0 2px 12px rgba(0,0,0,.6); }
-    #tmt .tmt-head { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 30px; cursor: pointer; user-select: none;
+    .tmt-ui .tmt-head { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 30px; cursor: pointer; user-select: none;
       border-radius: 5px; font-weight: bold; color: #fff; text-shadow: 0 0 2px #000;
       background: var(--title-black-gradient, linear-gradient(180deg, #555 0%, #333 100%)); }
-    #tmt .tmt-pill { margin-left: auto; font-weight: normal; color: var(--default-content-title-color, #bbb); }
-    #tmt .tmt-body { max-height: 70vh; overflow-y: auto; padding: 4px 0 6px;
+    .tmt-ui .tmt-pill { margin-left: auto; font-weight: normal; color: var(--default-content-title-color, #bbb); }
+    .tmt-ui .tmt-body { max-height: 70vh; overflow-y: auto; padding: 4px 0 6px;
       scrollbar-width: thin; scrollbar-color: var(--appheader-dropdown-list-scrollbar-thumb-color, #666) var(--appheader-dropdown-list-scrollbar-track-color, #222); }
-    #tmt .tmt-body::-webkit-scrollbar { width: 6px; }
-    #tmt .tmt-body::-webkit-scrollbar-track { background: var(--appheader-dropdown-list-scrollbar-track-color, #222); }
-    #tmt .tmt-body::-webkit-scrollbar-thumb { background: var(--appheader-dropdown-list-scrollbar-thumb-color, #666); border-radius: 3px; }
-    #tmt .tmt-sec { padding: 6px 10px 3px; font-weight: bold; color: var(--default-content-title-color, #999); text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
-    #tmt a { color: var(--default-blue-color, #74c0fc); text-decoration: none; }
-    #tmt .tmt-tip { display: block; margin: 3px 10px; padding: 5px 8px; border-radius: 4px; line-height: 1.35;
+    .tmt-ui .tmt-body::-webkit-scrollbar { width: 6px; }
+    .tmt-ui .tmt-body::-webkit-scrollbar-track { background: var(--appheader-dropdown-list-scrollbar-track-color, #222); }
+    .tmt-ui .tmt-body::-webkit-scrollbar-thumb { background: var(--appheader-dropdown-list-scrollbar-thumb-color, #666); border-radius: 3px; }
+    .tmt-ui .tmt-sec { padding: 6px 10px 3px; font-weight: bold; color: var(--default-content-title-color, #999); text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
+    .tmt-ui a { color: var(--default-blue-color, #74c0fc); text-decoration: none; }
+    .tmt-ui .tmt-tip { display: block; margin: 3px 10px; padding: 5px 8px; border-radius: 4px; line-height: 1.35;
       background: var(--default-bg-panel-active-color, #444); border-left: 3px solid #888; color: var(--default-color, #ddd); }
-    #tmt .tmt-tip.go { border-left-color: var(--default-green-color, #82c91e); }
-    #tmt .tmt-tip.warn { border-left-color: var(--default-orange-color, #f08c00); }
-    #tmt .tmt-tip.note { background: none; border-left-color: var(--panel-border-bottom-color, #555); color: var(--default-content-title-color, #aaa); padding: 3px 8px; }
-    #tmt .tmt-tip.route { padding: 6px 8px 4px; }
-    #tmt .tmt-rt { font-weight: bold; margin-bottom: 4px; }
-    #tmt .tmt-rt small { font-weight: normal; color: var(--default-content-title-color, #999); font-size: 10px; margin-left: 4px; }
-    #tmt .tmt-stop { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 30px; gap: 6px; align-items: baseline; padding: 1px 0; }
-    #tmt .tmt-stop span { color: var(--default-content-title-color, #999); font-variant-numeric: tabular-nums; }
-    #tmt .tmt-stop b { font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #tmt .tmt-stop em { font-style: normal; color: var(--default-content-title-color, #999); font-size: 11px; }
-    #tmt .tmt-stop i { font-style: normal; font-size: 10px; text-align: right; color: var(--default-green-color, #82c91e); }
-    #tmt .tmt-stop.now b { font-weight: bold; }
-    #tmt a.tmt-tip:hover { background: var(--default-bg-panel-hover-color, #555); }
-    #tmt .tmt-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: 2px 8px; padding: 5px 10px; color: inherit;
+    .tmt-ui .tmt-tip.go { border-left-color: var(--default-green-color, #82c91e); }
+    .tmt-ui .tmt-tip.warn { border-left-color: var(--default-orange-color, #f08c00); }
+    .tmt-ui .tmt-tip.note { background: none; border-left-color: var(--panel-border-bottom-color, #555); color: var(--default-content-title-color, #aaa); padding: 3px 8px; }
+    .tmt-ui .tmt-tip.route { padding: 6px 8px 4px; }
+    .tmt-ui .tmt-rt { font-weight: bold; margin-bottom: 4px; }
+    .tmt-ui .tmt-rt small { font-weight: normal; color: var(--default-content-title-color, #999); font-size: 10px; margin-left: 4px; }
+    .tmt-ui .tmt-stop { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 30px; gap: 6px; align-items: baseline; padding: 1px 0; }
+    .tmt-ui .tmt-stop span { color: var(--default-content-title-color, #999); font-variant-numeric: tabular-nums; }
+    .tmt-ui .tmt-stop b { font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tmt-ui .tmt-stop em { font-style: normal; color: var(--default-content-title-color, #999); font-size: 11px; }
+    .tmt-ui .tmt-stop i { font-style: normal; font-size: 10px; text-align: right; color: var(--default-green-color, #82c91e); }
+    .tmt-ui .tmt-stop.now b { font-weight: bold; }
+    .tmt-ui a.tmt-tip:hover { background: var(--default-bg-panel-hover-color, #555); }
+    .tmt-ui .tmt-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: 2px 8px; padding: 5px 10px; color: inherit;
       border-bottom: 1px solid var(--panel-border-bottom-color, #3b3b3b); }
-    #tmt .tmt-row:hover { background: var(--default-bg-panel-active-color, #444); }
-    #tmt .tmt-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #tmt .tmt-where, #tmt .tmt-sub { color: var(--default-content-title-color, #999); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-    #tmt .tmt-hp { position: relative; height: 14px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
-    #tmt .tmt-hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #8bc34a, #5a8a1e); }
-    #tmt .tmt-hp b { position: relative; display: block; text-align: center; font-size: 10px; line-height: 14px; color: #fff; text-shadow: 0 0 2px #000; }
-    #tmt .tmt-dead { opacity: .5; }
-    #tmt .tmt-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 6px 10px 0; font-size: 11px; color: var(--default-content-title-color, #999); }
-    #tmt .tmt-foot > :last-child { white-space: nowrap; }
-    #tmt .tmt-foot a.on { color: var(--default-green-color, #82c91e); }
-    #tmt .tmt-key { padding: 8px 10px; line-height: 1.6; }
-    #tmt input { width: 150px; color: var(--input-color, #fff); background: var(--input-background-color, linear-gradient(0deg, #111 0%, #000 100%));
+    .tmt-ui .tmt-row:hover { background: var(--default-bg-panel-active-color, #444); }
+    .tmt-ui .tmt-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tmt-ui .tmt-where, .tmt-ui .tmt-sub { color: var(--default-content-title-color, #999); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+    .tmt-ui .tmt-hp { position: relative; height: 14px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+    .tmt-ui .tmt-hp i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #8bc34a, #5a8a1e); }
+    .tmt-ui .tmt-hp b { position: relative; display: block; text-align: center; font-size: 10px; line-height: 14px; color: #fff; text-shadow: 0 0 2px #000; }
+    .tmt-ui .tmt-dead { opacity: .5; }
+    .tmt-ui .tmt-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 6px 10px 0; font-size: 11px; color: var(--default-content-title-color, #999); }
+    .tmt-ui .tmt-foot > :last-child { white-space: nowrap; }
+    .tmt-ui .tmt-foot a.on { color: var(--default-green-color, #82c91e); }
+    .tmt-ui .tmt-key { padding: 8px 10px; line-height: 1.6; }
+    .tmt-ui input { width: 150px; color: var(--input-color, #fff); background: var(--input-background-color, linear-gradient(0deg, #111 0%, #000 100%));
       border: 1px solid var(--input-border-color, #444); border-radius: 5px; padding: 3px 6px; outline: none; font: inherit; }
-    #tmt input:focus { border-color: var(--input-focus-border-color, #1864ab80); }
-    #tmt input::placeholder { color: var(--input-disabled-color, #666); }
-    #tmt .tmt-btn { display: inline-block; margin-left: 4px; padding: 3px 10px; border-radius: 5px; font-weight: bold;
+    .tmt-ui input:focus { border-color: var(--input-focus-border-color, #1864ab80); }
+    .tmt-ui input::placeholder { color: var(--input-disabled-color, #666); }
+    .tmt-ui .tmt-btn { display: inline-block; margin-left: 4px; padding: 3px 10px; border-radius: 5px; font-weight: bold;
       color: var(--btn-color, #eee); text-shadow: 0 0 5px #000; background: var(--btn-background, linear-gradient(180deg, #555 0%, #333 100%));
       border: 1px solid var(--btn-border-color, #222); }
   `;
@@ -1957,6 +2164,7 @@ function init() {
   css();
   root = document.createElement('div');
   root.id = 'tmt';
+  root.className = 'tmt-ui';
   root.addEventListener('click', onClick);
   document.body.appendChild(root);
   // Close the dropdown like Torn's own: click outside or Escape.
@@ -1976,11 +2184,37 @@ function init() {
 return {
   id: 'maol',
   label: "M'aol",
+  icon: ICON.replace('width="24" height="25" ', ''),
   access: 'minimal',
+  ai: true,
+  solo: false,   // standalone: its own header button and dropdown, no kit window
   start(k) {
     kit = k;
     init();
   },
+  // Command Center tab: the same view as the dropdown, kept live by the same poll.
+  async mount(view, k, { force }) {
+    paneView = view;
+    pane = k.el('div', 'tmt-ui tmt-pane');
+    pane.addEventListener('click', onClick);
+    view.body(pane);
+    renderPane();
+    if (force) {
+      view.busy(true);
+      try { await refresh(true); } finally { view.busy(false); }
+    }
+  },
+  badge(k) {
+    const b = k.el('span', 'tmt-badge');
+    b.setAttribute('role', 'button');
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); UI.open = true; saveUi(); render(); });
+    badgeEls.add(b);
+    renderBadges();
+    return b;
+  },
+  settings,
+  css: `.tmt-badge{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;flex:none;height:13px;margin:0 0 0 3px;padding:0 3px;background:#3a1414;border:1px solid #7a2020;border-radius:3px;font:700 9px/1 Verdana,Arial,sans-serif;color:#ff8a80;white-space:nowrap;vertical-align:middle;cursor:pointer;user-select:none}
+    .occ-dock .tmt-badge{margin:0 0 0 6px;height:16px;padding:0 6px;font-size:11px}`,
 };
 })();
 
@@ -2259,6 +2493,14 @@ function boot(plugins) {
     const c2 = el('div', 'occ-card');
     keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in Tampermonkey storage; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
     wrap.appendChild(c2);
+    plugins.forEach((p) => {
+      if (typeof p.settings !== 'function') return;
+      const c = el('div', 'occ-card');
+      try {
+        p.settings(c, kit);
+        wrap.appendChild(c);
+      } catch (e) {}
+    });
     const c3 = el('div', 'occ-card');
     c3.appendChild(el('h3', '', 'Answers'));
     const row = el('div', 'occ-bar');
