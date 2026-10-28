@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.23
+// @version      1.0.24
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -11,14 +11,13 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @connect      live.chain-race.workers.dev
-// @connect      openrouter.ai
 // ==/UserScript==
 
 // Built by occ-kit/build.mjs from the sources named below. Edit those, then rebuild.
 (function () {
   'use strict';
 
-const VERSION = '1.0.23';
+const VERSION = '1.0.24';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -942,8 +941,8 @@ function makeKit(host, root) {
 const PLUGIN_0 = (function () {
 // M'aol tracker as an occ-kit plug-in. Builds into the standalone Greasy Fork script
 // (torn-maol-tracker.user.js, see occ.build.json) and is bundled into the Command Center, where it
-// also gets a tab, a badge and Setup fields. The kit supplies key storage (Tampermonkey storage
-// instead of torn.com localStorage) and the free-model AI that words the "Next" tips.
+// also gets a tab, a badge, Setup fields and AI tips (Command Center only: the standalone has no AI).
+// The kit supplies key storage (Tampermonkey storage instead of torn.com localStorage).
 
 const POLL_S = 15;               // you + live NPCs: at most 7 calls, 28 of Torn's 100 calls/min per key
 const IDLE_POLL_S = 600;          // dead NPCs, or M'aol alone while everything sleeps: every 10 min
@@ -1446,7 +1445,7 @@ const AI_SYSTEM = [
 ].join('\n');
 
 let aiBusy = false;
-const aiOn = () => UI.ai !== false && !!kit && kit.ai.ready() && anyAwake(D);
+const aiOn = () => !!kit && kit.host === 'occ' && UI.ai !== false && kit.ai.ready() && anyAwake(D);
 
 // What changes the advice: where everyone is, who is alive, the bond, and the script's own decisions.
 function aiSig() {
@@ -1562,18 +1561,11 @@ function bar(n) {
   </a>`;
 }
 
-// Key form: the Torn key (standalone only; in the Command Center its own key is used) and the
-// optional free OpenRouter key for AI tips (Command Center: in its Setup instead).
+// Key form (standalone, or the Command Center before its own key is set).
 function keyForm() {
-  const occ = kit.host === 'occ';
-  const torn = !IS_PDA && !(occ && kit.tornKey())
-    ? `<div>Minimal access API key${apiKey() ? ' (saved, paste to replace)' : ' needed (NPCs, your status, perks, travel)'}.<br>
-      <input id="tmt-key" type="password" maxlength="16" placeholder="16-character key" autocomplete="off">
-      <a href="#" class="tmt-btn" data-act="save-key">Save</a></div>` : '';
-  const or = occ ? '' : `<div>AI tips, optional: a free <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a> key${kit.keys.get(kit.KEY_OR) ? ' (saved)' : ''}. Only free models get the numbers shown here; they may log them.<br>
-      <input id="tmt-or" type="password" placeholder="sk-or-v1-..." autocomplete="off">
-      <a href="#" class="tmt-btn" data-act="save-or">Save</a>${kit.keys.get(kit.KEY_OR) ? ' <a href="#" data-act="forget-or">remove</a>' : ''}</div>`;
-  return `<div class="tmt-key">${torn}${or}${apiKey() ? '<a href="#" data-act="keys">Done</a>' : ''}</div>`;
+  return `<div class="tmt-key">Minimal access API key${apiKey() ? ' (saved, paste to replace)' : ' needed (NPCs, your status, perks, travel)'}.<br>
+    <input id="tmt-key" type="password" maxlength="16" placeholder="16-character key" autocomplete="off">
+    <a href="#" class="tmt-btn" data-act="save-key">Save</a>${apiKey() ? ' <a href="#" data-act="keys">cancel</a>' : ''}</div>`;
 }
 
 // The panel body, shared by the header dropdown and the Command Center tab (pane: no footer clock,
@@ -1600,7 +1592,7 @@ function bodyHtml(pane) {
       <a href="#" data-act="biz" class="${UI.biz ? 'on' : ''}">${UI.biz ? 'Using business ticket' : 'Have business ticket?'}</a>
     </div>
     ${pane ? '' : `<div class="tmt-foot"><span>${err ? `⚠ ${esc(err)} · data from ${hm(D.t)}` : `Updated ${hm(D.t)} · times in ${tzLabel()}`}</span>
-      ${kit.host === 'occ' ? '' : '<a href="#" data-act="keys">keys</a>'}</div>`}`;
+      ${kit.host === 'occ' || IS_PDA ? '' : '<a href="#" data-act="keys">change key</a>'}</div>`}`;
 }
 
 // ------------------------------------------------------------- Command Center tab and badge
@@ -1796,11 +1788,6 @@ function onClick(e) {
     const v = (box.querySelector('#tmt-key')?.value || '').trim();
     if (/^[A-Za-z0-9]{16}$/.test(v)) { kit.keys.set(K.key, v); UI.keys = false; saveUi(); D = null; render(); refresh(true); }
   }
-  if (act === 'save-or') {
-    const v = (box.querySelector('#tmt-or')?.value || '').trim();
-    if (/^sk-or-[\w-]{10,}$/.test(v)) { kit.keys.set(kit.KEY_OR, v); render(); aiTick(); }
-  }
-  if (act === 'forget-or') { kit.keys.del(kit.KEY_OR); render(); }
 }
 
 // Command Center Setup: the switches that live in the footer of the standalone panel.
@@ -1913,7 +1900,6 @@ return {
   label: "M'aol",
   icon: ICON.replace('width="24" height="25" ', ''),
   access: 'minimal',
-  ai: true,
   solo: false,   // standalone: its own header button and dropdown, no kit window
   start(k) {
     kit = k;
