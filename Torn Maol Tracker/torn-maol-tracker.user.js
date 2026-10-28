@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.28
+// @version      1.0.29
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-const VERSION = '1.0.28';
+const VERSION = '1.0.29';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -1648,9 +1648,15 @@ function render() {
   const body = bodyHtml(false);
   const docked = !!btnHost && btnHost.isConnected;
   root.classList.toggle('tmt-docked', docked);
+  // The body is rebuilt on every 5 s refresh (and on phones on every resize, which scrolling the
+  // page fires when the address bar slides): keep where the reader had scrolled to.
+  const prev = root.querySelector('.tmt-body');
+  const top = prev ? prev.scrollTop : 0;
   root.innerHTML = `
     <div class="tmt-head" data-act="toggle"><span>M'aol</span><span class="tmt-pill">${D ? pill() : ''}</span><span class="tmt-caret">${docked ? '✕' : UI.open ? '▾' : '▸'}</span></div>
     ${UI.open ? `<div class="tmt-body">${body}</div>` : ''}`;
+  const next = root.querySelector('.tmt-body');
+  if (next && top) next.scrollTop = top;
   root.style.display = docked && !UI.open ? 'none' : '';
   if (docked) {
     const b = btnHost.getBoundingClientRect();

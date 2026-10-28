@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.16
+// @version      0.8.17
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.16';
+const VERSION = '0.8.17';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -2734,9 +2734,15 @@ function render() {
   const body = bodyHtml(false);
   const docked = !!btnHost && btnHost.isConnected;
   root.classList.toggle('tmt-docked', docked);
+  // The body is rebuilt on every 5 s refresh (and on phones on every resize, which scrolling the
+  // page fires when the address bar slides): keep where the reader had scrolled to.
+  const prev = root.querySelector('.tmt-body');
+  const top = prev ? prev.scrollTop : 0;
   root.innerHTML = `
     <div class="tmt-head" data-act="toggle"><span>M'aol</span><span class="tmt-pill">${D ? pill() : ''}</span><span class="tmt-caret">${docked ? '✕' : UI.open ? '▾' : '▸'}</span></div>
     ${UI.open ? `<div class="tmt-body">${body}</div>` : ''}`;
+  const next = root.querySelector('.tmt-body');
+  if (next && top) next.scrollTop = top;
   root.style.display = docked && !UI.open ? 'none' : '';
   if (docked) {
     const b = btnHost.getBoundingClientRect();
