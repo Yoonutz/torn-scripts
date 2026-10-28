@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.12
+// @version      0.8.13
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.12';
+const VERSION = '0.8.13';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -1259,7 +1259,6 @@ const KEY_LOCK = 'occ.paid.lock';
 const KEY_LAST = 'occ.paid.last';
 const OLD_SNAPSHOT = 'tcw_paid_trains_snapshot_v1'; // the old Companion's cached sheet numbers
 const PRICE = 500000;
-const PRICE_STEP = 50000;
 const SYNC_GAP = 60000;
 const EV_GAP = 5 * 60000;
 const EMP_GAP = 6 * 3600000;
@@ -1278,6 +1277,7 @@ let busy = false;
 let tabView = null;
 let open = {}; // employee rows expanded in the tab
 let steps = {}; // trains picked for item payments in the inbox
+let pricing = false; // price editor open in the tab
 
 // ---------- pure parts (tested in occ-kit/tests) ----------
 
@@ -1335,7 +1335,8 @@ function needFrom(ledger) {
   return m;
 }
 
-// left = start balance + paid trains since start - trains given since start.
+// left = start balance + paid trains since start - trains given since start. Someone who trains
+// free daily spends nothing, so their trains are not taken off, but an old debt still shows.
 function balances(ledger, trainings, staff) {
   const out = {};
   const ids = new Set(Object.keys(ledger.emp).concat((staff || []).map((s) => s.id)));
@@ -1356,7 +1357,7 @@ function balances(ledger, trainings, staff) {
       start,
       paid,
       used,
-      left: (e.carry || 0) + paid - used,
+      left: (e.carry || 0) + paid - (e.daily ? 0 : used),
       last: pays.length ? pays[pays.length - 1] : null,
     };
   });
@@ -1371,6 +1372,15 @@ function inbox(ledger, payments, staff) {
 }
 
 // hold: payments you took back with Undo, never added on their own again.
+// "600k", "$600,000", "0.6m" -> 600000. 0 when it is not a usable price.
+function parsePrice(text) {
+  const m = /^\$?\s*([\d.,]+)\s*([km]?)$/i.exec(String(text || '').trim());
+  if (!m) return 0;
+  const unit = { k: 1e3, m: 1e6 }[m[2].toLowerCase()] || 1;
+  const n = Math.round(Number(unit === 1 ? m[1].replace(/[.,]/g, '') : m[1].replace(/,/g, '')) * unit);
+  return Number.isFinite(n) && n >= 1000 && n <= 1e9 ? n : 0;
+}
+
 function autoTrains(ledger, p) {
   return ledger.auto !== false && (ledger.hold || []).indexOf(p.id) === -1 && typeof p.money === 'number' && /train/i.test(p.msg || '') ? Math.floor(p.money / (ledger.price || PRICE)) : 0;
 }
@@ -1546,14 +1556,14 @@ function onCompany() {
 
 function cellText(b) {
   if (!b) return '-';
-  if (b.daily) return 'D';
+  if (b.daily && !b.left) return 'D';
   return String(b.left);
 }
 
 function cellTip(b) {
   if (!b) return 'Paid trains: not synced yet';
-  if (b.daily) return b.name + ': trains free daily';
-  return b.name + ': ' + b.left + ' paid trains left (' + (b.carry ? 'start ' + b.carry + ', ' : '') + b.paid + ' paid, ' + b.used + ' given since ' + day(b.start) + ')';
+  if (b.daily && !b.left) return b.name + ': trains free daily';
+  return b.name + (b.daily ? ' (free daily)' : '') + ': ' + b.left + ' paid trains left (' + (b.carry ? 'start ' + b.carry + ', ' : '') + b.paid + ' paid, ' + b.used + ' given since ' + day(b.start) + ')';
 }
 
 function paintPage() {
@@ -1585,8 +1595,8 @@ function paintPage() {
     const v = cell.querySelector('.occ-paid-v');
     const t = cellText(x);
     if (v.textContent !== t) v.textContent = t;
-    v.classList.toggle('neg', !!x && !x.daily && x.left < 0);
-    v.classList.toggle('daily', !!x && x.daily);
+    v.classList.toggle('neg', !!x && x.left < 0);
+    v.classList.toggle('daily', !!x && x.daily && !x.left);
     v.classList.toggle('stale', busy || !!errs.news);
     v.title = cellTip(x);
   });
@@ -1630,6 +1640,11 @@ function day(sec) {
 
 function money(n) {
   return '$' + Math.round(n).toLocaleString('en-US');
+}
+
+// Fits a stat tile: $202.8M, $14.0B.
+function short(n) {
+  return n >= 1e9 ? '$' + (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : money(n);
 }
 
 function ago(ms) {
@@ -1739,9 +1754,10 @@ function staffCard(b, snap) {
     .sort((a, z) => Number(z.staff) - Number(a.staff) || a.left - z.left || a.name.localeCompare(z.name));
   list.forEach((x) => {
     const tr = kit.el('tr', 'occ-pd-emp' + (x.staff ? '' : ' gone'));
-    const left = x.daily ? '<span class="occ-pd-d">D</span>' : '<span class="' + (x.left < 0 ? 'occ-pd-neg' : x.left > 0 ? 'occ-pd-pos' : '') + '">' + x.left + '</span>';
+    const num = '<span class="' + (x.left < 0 ? 'occ-pd-neg' : x.left > 0 ? 'occ-pd-pos' : '') + '">' + x.left + '</span>';
+    const left = x.daily ? (x.left ? num + ' ' : '') + '<span class="occ-pd-d" title="Trains free daily">D</span>' : num;
     const sheet = old && Object.prototype.hasOwnProperty.call(old, x.name) ? kit.esc(String(old[x.name] === '' ? 0 : old[x.name])) : '';
-    tr.innerHTML = '<td>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>' + (old ? '<td class="occ-muted">' + sheet + '</td>' : '');
+    tr.innerHTML = '<td><span class="occ-car">' + (open[x.id] ? '▼' : '▶') + '</span>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>' + (old ? '<td class="occ-muted">' + sheet + '</td>' : '');
     tr.addEventListener('click', () => {
       open[x.id] = !open[x.id];
       paintAll();
@@ -1751,7 +1767,7 @@ function staffCard(b, snap) {
   });
   t.appendChild(table);
   c.appendChild(t);
-  c.appendChild(kit.el('div', 'occ-muted', 'Tap a name to adjust its balance, set daily, or undo a payment.'));
+  c.appendChild(kit.el('div', 'occ-muted', 'Tap a name to open or close it: adjust the balance, free daily trains, undo a payment.'));
   return c;
 }
 
@@ -1759,7 +1775,7 @@ function detail(x, cols) {
   const tr = kit.el('tr', 'occ-pd-more');
   const td = kit.el('td');
   td.colSpan = cols;
-  td.appendChild(kit.el('div', 'occ-muted', 'Since ' + day(x.start) + ': start ' + x.carry + ' + ' + x.paid + ' paid - ' + x.used + ' given = ' + x.left));
+  td.appendChild(kit.el('div', 'occ-muted', 'Since ' + day(x.start) + ': start ' + x.carry + ' + ' + x.paid + ' paid - ' + (x.daily ? '0 (' + x.used + ' given free)' : x.used + ' given') + ' = ' + x.left));
   const bar = kit.el('div', 'occ-pd-ctl');
   const edit = (fn) => (btn) =>
     act(btn, (l) => {
@@ -1768,8 +1784,14 @@ function detail(x, cols) {
       fn(e);
       return l;
     });
-  bar.appendChild(small(x.daily ? 'Daily: on' : 'Daily: off', edit((e) => (e.daily = !e.daily)), x.daily ? 'go' : ''));
+  bar.appendChild(small(x.daily ? 'Free daily: yes' : 'Free daily: no', edit((e) => (e.daily = !e.daily)), x.daily ? 'go' : ''));
   [-10, -1, 1, 10].forEach((d) => bar.appendChild(small((d > 0 ? '+' : '−') + Math.abs(d), edit((e) => (e.carry = (e.carry || 0) + d)))));
+  bar.appendChild(
+    small('✕ Close', () => {
+      open[x.id] = false;
+      paintAll();
+    }, 'shut')
+  );
   td.appendChild(bar);
   const pays = doc.value.pays.filter((p) => p.emp === x.id).slice(-3).reverse();
   pays.forEach((p) => {
@@ -1790,6 +1812,46 @@ function detail(x, cols) {
   return tr;
 }
 
+// Price per train: a themed text field (no native number spinner). Saved on the runner.
+function priceField(box, l, done) {
+  const row = kit.el('div', 'occ-pd-ctl');
+  row.appendChild(kit.el('span', 'occ-muted', 'Price per train'));
+  const input = kit.el('input', 'occ-field occ-pd-in');
+  input.type = 'text';
+  input.inputMode = 'decimal';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.value = String(l.price || PRICE);
+  row.appendChild(input);
+  const go = small('Save', () => {
+    const n = parsePrice(input.value);
+    if (!n) return kit.toast.show(go, 'Type a price like 600000, 600k or $600,000', true);
+    act(go, (x) => {
+      x.price = n;
+      return x;
+    }).then(() => {
+      input.value = String(doc.value.price);
+      kit.toast.show(go, 'Saved: ' + money(doc.value.price) + ' a train');
+      if (done) done();
+    });
+  }, 'go');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') go.click();
+  });
+  row.appendChild(go);
+  if (done) row.appendChild(small('✕', done, 'shut'));
+  box.appendChild(row);
+  box.appendChild(kit.el('div', 'occ-muted', 'Payments already counted keep the trains they got. New payments use this price.'));
+  return input;
+}
+
+function priceCard(l, done) {
+  const c = kit.ui.card('Price per train');
+  const input = priceField(c, l, done);
+  setTimeout(() => input.focus(), 0);
+  return c;
+}
+
 function render(v) {
   if (!v || !v.active) return;
   const wrap = kit.el('div');
@@ -1807,16 +1869,23 @@ function render(v) {
   }
   const snap = kit.store.get(OLD_SNAPSHOT, null);
   const list = inbox(l, (ev && ev.list) || [], emps && emps.list);
-  const vals = Object.values(b).filter((x) => !x.daily);
+  const vals = Object.values(b);
   const left = vals.reduce((a, x) => a + Math.max(0, x.left), 0);
   const owed = vals.reduce((a, x) => a + Math.max(0, -x.left), 0);
   v.stats([
     { k: 'Paid left', v: String(left), unit: ' trains' },
-    { k: 'Owed', v: owed ? money(owed * (l.price || PRICE)) : '$0', hot: false },
+    { k: 'Owed', v: owed ? short(owed * (l.price || PRICE)) : '$0', unit: owed ? ' · ' + owed + ' trains' : '' },
     { k: 'To check', v: String(list.length), hot: list.length > 0 },
   ]);
   const at = kit.store.get(KEY_LAST, 0);
-  v.meta((busy ? 'Syncing… · ' : at ? 'Synced ' + ago(at) + ' · ' : '') + money(l.price || PRICE) + ' a train');
+  v.meta((busy ? 'Syncing… · ' : at ? 'Synced ' + ago(at) + ' · ' : '') + '<button type="button" class="occ-pd-price" title="Change the price per train">' + money(l.price || PRICE) + ' a train ✎</button>');
+  const pb = document.querySelector('#occ-root .occ-pd-price');
+  if (pb)
+    pb.addEventListener('click', () => {
+      pricing = !pricing;
+      render(v);
+    });
+  if (pricing) wrap.appendChild(priceCard(l, () => ((pricing = false), render(v))));
   if (snap && !l.imported) {
     const c = importCard(snap);
     if (c) wrap.appendChild(c);
@@ -1849,18 +1918,7 @@ function settings(c, k) {
     c.appendChild(kit.el('div', 'occ-muted', 'Open the Trains tab once to start tracking.'));
     return;
   }
-  const row1 = kit.el('div', 'occ-pd-ctl');
-  const price = kit.el('span', 'occ-pd-n', money(l.price || PRICE));
-  row1.appendChild(kit.el('span', 'occ-muted', 'Price per train'));
-  const setPrice = (d) => (btn) =>
-    act(btn, (x) => {
-      x.price = Math.max(PRICE_STEP, (x.price || PRICE) + d);
-      return x;
-    }).then(() => (price.textContent = money(doc.value.price)));
-  row1.appendChild(small('−', setPrice(-PRICE_STEP)));
-  row1.appendChild(price);
-  row1.appendChild(small('+', setPrice(PRICE_STEP)));
-  c.appendChild(row1);
+  priceField(c, l);
   const row2 = kit.el('div', 'occ-pd-ctl');
   row2.appendChild(kit.el('span', 'occ-muted', 'Payments that mention "train"'));
   const auto = small(l.auto !== false ? 'Add on their own' : 'Ask me', (btn) =>
@@ -1917,6 +1975,11 @@ return {
     #occ-root .occ-pd-b:active{background:var(--occ-btn-active-bg)}
     #occ-root .occ-pd-b:disabled{opacity:.5;cursor:default}
     #occ-root .occ-pd-b.go{color:var(--occ-good)}
+    #occ-root .occ-pd-in{display:inline-block;width:110px;height:24px;margin:0}
+    #occ-root .occ-pd-b.shut{margin-left:auto}
+    #occ-root .occ-pd-price{color:var(--occ-accent);font:inherit;text-decoration:underline dotted}
+    #occ-root .occ-pd-price:hover{color:var(--occ-accent-hi)}
+    #occ-root .occ-pd-emp .occ-car{display:inline-block;width:12px;font-size:8px;color:var(--occ-muted)}
     #occ-root .occ-pd-n{min-width:22px;text-align:center;font:bold 12px/1 Arial,Helvetica,sans-serif;font-variant-numeric:tabular-nums;color:var(--occ-hi)}
     #occ-root .occ-pd-emp{cursor:pointer}
     #occ-root .occ-pd-emp:hover td:first-child{text-decoration:underline}

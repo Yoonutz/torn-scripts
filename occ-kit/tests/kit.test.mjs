@@ -101,6 +101,16 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   assert.equal(b["2239897"].left, -527 + 200 - 2);
   assert.equal(b["3783283"].left, -1);
   assert.equal(b["9"].daily, true);
+  // Free daily: trains given don't spend the balance, an old debt stays.
+  l.emp["2239897"].daily = true;
+  assert.equal(P.balances(l, news, staff)["2239897"].left, -527 + 200);
+  delete l.emp["2239897"].daily;
+  assert.equal(P.parsePrice("600k"), 600000);
+  assert.equal(P.parsePrice("$600,000"), 600000);
+  assert.equal(P.parsePrice("0.6m"), 600000);
+  assert.equal(P.parsePrice("600000"), 600000);
+  assert.equal(P.parsePrice("abc"), 0);
+  assert.equal(P.parsePrice("5"), 0);
   assert.equal(P.needFrom(l), 100);
 
   const imp = P.fromSnapshot({ updatedAtIso: "2026-10-28T14:25:02.000Z", paidTrainsLeftByEmployee: { Hookah12: -527, Alex: -1, Keoholodeee: "" } }, staff);
