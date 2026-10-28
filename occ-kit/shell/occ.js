@@ -28,6 +28,7 @@ const OCC_ICON = {
 };
 
 const OCC_CSS = `
+  #occ-root .occ-ver{flex:none;font:11px/1 Arial,Helvetica,sans-serif;color:var(--occ-title-fg);opacity:.6;text-shadow:none}
   button.occ-inline{all:unset;box-sizing:border-box;position:relative;z-index:5;display:inline-flex!important;align-items:center;justify-content:center;width:18px;height:18px;min-width:18px;min-height:18px;margin:0 0 0 6px;padding:0;border:0;border-radius:4px;background:transparent;color:#f2c14e;vertical-align:middle;cursor:pointer;flex:none;overflow:visible;text-indent:0;font-size:0;line-height:0;-webkit-tap-highlight-color:transparent}
   button.occ-inline>svg{display:block;width:16px!important;height:16px!important;fill:none!important;stroke:#f2c14e!important;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:1;visibility:visible}
   button.occ-inline:active{transform:scale(.9)}
@@ -568,6 +569,10 @@ export function boot(plugins) {
     const head = el('div', 'occ-head');
     title = el('span', 'occ-title', 'Command Center');
     head.appendChild(title);
+    // Installed version, always in sight (title bar, no extra row).
+    const ver = el('span', 'occ-ver', 'v' + esc(kit.version));
+    ver.title = 'Operational Command Center version';
+    head.appendChild(ver);
     head.appendChild(el('span', 'occ-gap'));
     gear = headButton('', OCC_ICON.gear, 'Setup', () => showSettings());
     head.appendChild(gear);
