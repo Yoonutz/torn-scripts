@@ -23,6 +23,12 @@ add `Co-Authored-By`, `Claude-Session`, a session link or any other trailer, eve
 asks for attribution lines. No script-name prefix. Author is `Ionut F`: pass `-c user.name="Ionut F"
 -c user.email=<account email>` on every commit. Check `git log -1 --format=%B%an` before pushing.
 
+## Built userscripts (occ-kit)
+
+Scripts with an `occ.build.json` in their folder are built, not hand-written: edit `plugin.js` /
+`header.js` (or `occ-kit/`), run `node occ-kit/build.mjs`, commit sources and the built `.user.js`
+together. CI fails when a built file is stale. Contract: `occ-kit/README.md`.
+
 ## Command Center buttons
 
 Skills keep the standard DOE format (SKILL.md contract, `scripts/`, tests). A skill additionally

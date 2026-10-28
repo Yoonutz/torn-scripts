@@ -1,5 +1,10 @@
 # Operational Command Center - skill-to-UI workflow
 
+> The userscript is **built**: sources are `src/header.js`, `plugins/*.js` and the shared
+> [occ-kit](../occ-kit/README.md). Run `node occ-kit/build.mjs`, never edit
+> `operational-command-center.user.js` by hand. Tabs come from two places: bundled plug-ins
+> (`occ.build.json`) and the runner's skills below.
+
 How a skill in this repo becomes a working button in the Torn UI, with zero
 manual deploy steps. Design history:
 [the design spec](../docs/superpowers/specs/2026-08-23-operational-command-center-design.md).
@@ -44,6 +49,9 @@ export const skill = {
   description: "...", // tool description the model sees; say what run() returns
   icon: "<svg .../>", // optional; letter badge otherwise
   access: "limited", // optional; lowest Torn key level it needs (public|minimal|limited|full), default full
+  ai: "deliver", // optional; "deliver" (default: model writes the answer per SKILL.md) | "raw" (no model)
+  inputs: { days: 7 }, // optional; ?days=14 arrives as ctx.inputs.days, typed like the default
+  // prompt(out, ctx) { return { system, user } } // optional; your own model prompt
   async run(ctx) {
     // return { report, stats?, ...anything }
   },
@@ -58,12 +66,15 @@ export const skill = {
 | `tornGet` | `(path) => JSON` against Torn API v2 with that key           |
 | `db`      | `{ index(), get(name), put(name, value) }` KV, per skill+key |
 | `force`   | `true` when the player pressed the rerun button              |
+| `inputs`  | declared `inputs`, filled from the query string              |
 
 Rules:
 
 - Fetch-only browser-grade JavaScript. No `fs`, no Node modules - the file is
   bundled into the Worker.
 - Return `report` (markdown string) as the payload the model delivers.
+- Optional `sections`: `[{ title, body }]` shown as fixed folds under the model's summary, so
+  the layout stays the same run to run.
 - Optional `stats`: up to three `{ k, v, hot? }` entries become the big number
   cards at the top of the window.
 - Keep it CLI-capable too (guard with a `process.argv` check) so the skill
@@ -81,7 +92,8 @@ That is the whole deploy:
 - **Worker**: `.github/workflows/occ-runner.yml` fires on any change under
   `.claude/skills/` or the `worker/` folder. `build-registry.mjs` scans every
   `.claude/skills/*/scripts/runner.mjs`, generates `src/registry.mjs`
-  (git-ignored), and wrangler deploys `occ-runner`.
+  (git-ignored) with each skill's SKILL.md text bundled in, and wrangler deploys `occ-runner`.
+  The build stops on a bad skill: duplicate or malformed id, no label, no `run`, unknown `access`.
 - **Userscript**: Greasy Fork pulls `operational-command-center.user.js` via
   webhook on the same push. Only relevant when the userscript itself changed;
   skill edits need no userscript change. The commit message is the public
@@ -106,7 +118,13 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
   arrives as `ctx.force` for the skill to honor. House rule for live personal
   data: analyze and discard, never persist it server-side.
 - `GET /ask/<id>` - same gate, same run, then the runner has a free model write
-  the answer and returns `{ ...run result, answer, model, errors }`. OpenRouter
+  the answer and returns `{ ...run result, answer, model, errors }`.
+- `POST /write` with `{ system, user }` (under 60k characters) - same gate; a free model
+  answers plug-in data (`kit.ai.write`). `{ answer, model }`, or `503` when every model is busy.
+- Code: `src/index.mjs` (routes), `auth.mjs` (owner, allowlist, rate limits), `torn.mjs`,
+  `store.mjs` (KV), `ai/models.mjs` + `ai/answer.mjs`. Free model list and free-only guard:
+  `occ-kit/core/models.js`, shared with the userscripts. Tests:
+  `node --test "Operational Command Center/worker/test/runner.test.mjs"`. OpenRouter
   key: the Worker secret `OPENROUTER_KEY` if set, else the `X-OpenRouter-Key`
   header from the userscript. No key = the raw report comes back as `answer`.
 
@@ -115,7 +133,7 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
 1. Userscript makes one call: `GET /ask/<id>` with the Torn key (and the
    OpenRouter key from Setup, if any). 180 s timeout, Cancel button in the
    progress card.
-2. The runner executes the skill once, then trims `SKILL.md` to its delivery
+2. The runner executes the skill once, then trims the bundled `SKILL.md` to its delivery
    rules and caps the report so the prompt stays under ~60k characters.
 3. Models are tried in order, up to 4 per press (40 s each):
    `thinkingmachines/inkling:free`, `nvidia/nemotron-3.5-super-vl:free`,
@@ -129,10 +147,11 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
    minute). Extra OpenRouter keys or accounts do not add capacity.
 5. If every model fails, the raw report is shown as-is, labelled
    "runner (free models busy)".
-6. The UI renders: stat cards from `stats`, the answer split into folding
-   sections on markdown headings and `Label:` lines, model name + timestamp.
-   Answers are cached per skill in `localStorage`; the amber circle button
-   reruns with `force`. Answers older than 12 h show their age in amber.
+6. The UI renders in Torn's own style (Torn's CSS variables, dark and light mode): one title-bar
+   header with the tab name, model + time (age in orange past 12 h), rerun, Setup and close;
+   stat cards from `stats`; the answer split into folding sections (the skill's `sections`, or
+   markdown headings and `Label:` lines), tables included. Answers are cached per skill in
+   Tampermonkey storage, not torn.com localStorage. Tabs scroll sideways when there are many.
 
 ## 6. Styling flows through
 
@@ -144,7 +163,7 @@ and always carry 1:1.
 
 ## Company trains pill
 
-Small badge right of the OCC icon: just the count next to the player name (so
+Plug-in #1: `plugins/trains.js` (a `badge` + `start`, see occ-kit). Small badge right of the OCC icon: just the count next to the player name (so
 it fits the sidebar; `x / 20` in the tooltip), `x / 20` in the phone dock and
 floating above the launcher on pages without a name row. Userscript only, no skill or
 Worker involved.

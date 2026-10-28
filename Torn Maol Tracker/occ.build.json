@@ -1,0 +1,6 @@
+{
+  "out": "torn-maol-tracker.user.js",
+  "header": "header.js",
+  "shell": "standalone",
+  "plugins": ["plugin.js"]
+}
