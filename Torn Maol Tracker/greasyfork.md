@@ -13,7 +13,6 @@
 <li><b>M'aol's timetable.</b> Where he is, when he leaves and his next stops with times, even before the bond breaks.</li>
 <li><b>Stay or fly.</b> The first stop you can reach while he's still there.</li>
 <li><b>Next summon countdown.</b> While all are dormant: when the next summon is due, about 48h after M'aol's kill.</li>
-<li><b>AI tips (optional).</b> Add a free OpenRouter key and a free AI model words the Next tips from the tracker's own numbers (marked Next · AI). Built-in tips show whenever there's no AI answer.</li>
 <li><b>Sleeps when there's no event.</b> Zero API calls outside Halloween week. Times show in your own clock.</li>
 </ul>
 <h2>How to use</h2>
@@ -21,13 +20,11 @@
 <li>Click the new button left of the search magnifier.</li>
 <li>Paste a Minimal access API key (Torn PDA fills it in by itself).</li>
 <li>Follow the tips; "Have business ticket?" switches the times to business class.</li>
-<li>Optional: "keys" in the footer, paste a free OpenRouter key for AI tips.</li>
 </ol>
 <h2>Good to know</h2>
 <ul>
 <li>Refreshes every 15 s: at most 28 API calls a minute, only while a Torn tab is visible, shared across tabs. Dead NPCs are checked every 10 min. When everything is dormant: 1 call every 10 min in Halloween week, none outside it.</li>
 <li>Key in your userscript manager's storage, last snapshot in this browser. Torn calls go only to api.torn.com.</li>
-<li>AI tips only with your own OpenRouter key: the panel's numbers (NPC status and HP, your location, state and travel method) go to free OpenRouter models, which may log them. Never your Torn key or name. At most once per 2 min, only while the event runs.</li>
 <li>When it missed guard deaths or M'aol's kill, it reads the public M'aol feed at live.chain-race.workers.dev (by LDP [1580562]) at most every 2 min, every 10 min while dormant. Nothing is sent to it: no key, no name. Your userscript manager asks once to allow that site.</li>
 <li>Never attacks or travels for you: links open the attack or travel page.</li>
 <li>Missed some guard deaths? It takes the defeat times from that feed, or else learns M'aol's route from his own moves within one loop.</li>
@@ -45,7 +42,7 @@
 <summary><b>API key use (Torn API ToS)</b></summary>
 <ul>
 <li><b>Data storage:</b> only locally, in this browser.</li>
-<li><b>Data sharing:</b> nobody, unless you add an OpenRouter key: then the panel's numbers go to free OpenRouter models (no key, no name).</li>
+<li><b>Data sharing:</b> nobody.</li>
 <li><b>Purpose of use:</b> personal M'aol and Praetorian tracking.</li>
 <li><b>Key storage and sharing:</b> stored locally, never shared.</li>
 <li><b>Key access level:</b> Minimal.</li>
