@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.8.15
+// @version      0.8.16
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -21,7 +21,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.8.15';
+const VERSION = '0.8.16';
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
@@ -1246,7 +1246,7 @@ const PLUGIN_1 = (function () {
 //   user/events                "You were sent $X from <employee>": payments
 //   company/employees          names and ids
 // The only state Torn does not keep is the ledger: confirmed payments, price per train, start
-// balances and who trains free daily. It lives on the private runner (/data/paid), one document per
+// balances and who is trained for free (pro bono). It lives on the private runner (/data/paid), one document per
 // player, so phone and PC show the same numbers; Tampermonkey storage keeps a copy.
 // No timed calls: it syncs when the company page or the tab opens, when a Torn tab comes back, and
 // a few seconds after a Train click on the company page (it only listens to that click).
@@ -1335,8 +1335,9 @@ function needFrom(ledger) {
   return m;
 }
 
-// left = start balance + paid trains since start - trains given since start. Someone who trains
-// free daily spends nothing, so their trains are not taken off, but an old debt still shows.
+// left = start balance + paid trains since start - trains given since start. Someone trained for
+// free (pro bono, ledger flag `daily` from the old sheet's -1 marker) has no balance at all: left 0,
+// never owing, never counted in the totals.
 function balances(ledger, trainings, staff) {
   const out = {};
   const ids = new Set(Object.keys(ledger.emp).concat((staff || []).map((s) => s.id)));
@@ -1357,7 +1358,7 @@ function balances(ledger, trainings, staff) {
       start,
       paid,
       used,
-      left: (e.carry || 0) + paid - (e.daily ? 0 : used),
+      left: e.daily ? 0 : (e.carry || 0) + paid - used,
       last: pays.length ? pays[pays.length - 1] : null,
     };
   });
@@ -1386,7 +1387,7 @@ function autoTrains(ledger, p) {
 }
 
 // Old Companion snapshot { paidTrainsLeftByEmployee: { name: value }, updatedAtIso } -> start balances.
-// -1 was its "trains free daily" marker.
+// -1 was its "trained for free" marker.
 function fromSnapshot(snap, staff) {
   const map = (snap && snap.paidTrainsLeftByEmployee) || {};
   const at = Math.floor(Date.parse((snap && snap.updatedAtIso) || '') / 1000);
@@ -1543,9 +1544,44 @@ async function sync(force, withEvents) {
   }
 }
 
+// Balance taps (+1, -10...) show at once and are saved together a moment after the last tap, so a
+// burst of taps is one write to the runner, not one each. No Torn API call either way.
+let pending = {};
+let pendTimer = 0;
+const PEND_MS = 1200;
+
+function withPending(l) {
+  Object.keys(pending).forEach((id) => {
+    const e = (l.emp[id] = l.emp[id] || { carry: 0, start: l.since });
+    e.carry = (e.carry || 0) + pending[id];
+  });
+  return l;
+}
+
+function bump(id, name, start, d, btn) {
+  pending[id] = (pending[id] || 0) + d;
+  paintAll();
+  clearTimeout(pendTimer);
+  pendTimer = setTimeout(() => {
+    const p = pending;
+    pending = {};
+    save((l) => {
+      Object.keys(p).forEach((k) => {
+        const e = (l.emp[k] = l.emp[k] || { carry: 0, start });
+        if (k === id) e.name = name;
+        e.carry = (e.carry || 0) + p[k];
+      });
+      return l;
+    })
+      .catch((e) => kit.toast.show(btn && btn.isConnected ? btn : document.querySelector('#occ-root .occ-pd-price'), 'Not saved: ' + e.message, true))
+      .then(paintAll);
+  }, PEND_MS);
+}
+
 function view() {
   if (!doc || !doc.value) return null;
-  return balances(doc.value, (news && news.list) || [], emps && emps.list);
+  const l = Object.keys(pending).length ? withPending(JSON.parse(JSON.stringify(doc.value))) : doc.value;
+  return balances(l, (news && news.list) || [], emps && emps.list);
 }
 
 // ---------- company page column ----------
@@ -1556,14 +1592,14 @@ function onCompany() {
 
 function cellText(b) {
   if (!b) return '-';
-  if (b.daily && !b.left) return 'D';
+  if (b.daily) return 'Free';
   return String(b.left);
 }
 
 function cellTip(b) {
   if (!b) return 'Paid trains: not synced yet';
-  if (b.daily && !b.left) return b.name + ': trains free daily';
-  return b.name + (b.daily ? ' (free daily)' : '') + ': ' + b.left + ' paid trains left (' + (b.carry ? 'start ' + b.carry + ', ' : '') + b.paid + ' paid, ' + b.used + ' given since ' + day(b.start) + ')';
+  if (b.daily) return b.name + ': trained for free (pro bono)';
+  return b.name + ': ' + b.left + ' paid trains left (' + (b.carry ? 'start ' + b.carry + ', ' : '') + b.paid + ' paid, ' + b.used + ' given since ' + day(b.start) + ')';
 }
 
 function paintPage() {
@@ -1596,7 +1632,7 @@ function paintPage() {
     const t = cellText(x);
     if (v.textContent !== t) v.textContent = t;
     v.classList.toggle('neg', !!x && x.left < 0);
-    v.classList.toggle('daily', !!x && x.daily && !x.left);
+    v.classList.toggle('daily', !!x && x.daily);
     v.classList.toggle('stale', busy || !!errs.news);
     v.title = cellTip(x);
   });
@@ -1680,7 +1716,7 @@ function importCard(snap) {
   const c = kit.ui.card('Import from the old Companion');
   const list = imp.rows
     .filter((r) => r.carry || r.daily)
-    .map((r) => kit.esc(r.name) + ' ' + (r.daily ? 'D' : r.carry))
+    .map((r) => kit.esc(r.name) + ' ' + (r.daily ? 'free' : r.carry))
     .join(', ');
   c.appendChild(kit.el('div', 'occ-muted', 'Sheet numbers saved by the old script, from ' + day(imp.at) + '. ' + (list ? 'Non-zero: ' + list + '.' : 'All zero.') + ' Trains and payments after that time count on top.'));
   const bar = kit.el('div', 'occ-bar');
@@ -1755,7 +1791,7 @@ function staffCard(b, snap) {
   list.forEach((x) => {
     const tr = kit.el('tr', 'occ-pd-emp' + (x.staff ? '' : ' gone'));
     const num = '<span class="' + (x.left < 0 ? 'occ-pd-neg' : x.left > 0 ? 'occ-pd-pos' : '') + '">' + x.left + '</span>';
-    const left = x.daily ? (x.left ? num + ' ' : '') + '<span class="occ-pd-d" title="Trains free daily">D</span>' : num;
+    const left = x.daily ? '<span class="occ-pd-d" title="Trained for free (pro bono)">Free</span>' : num;
     const sheet = old && Object.prototype.hasOwnProperty.call(old, x.name) ? kit.esc(String(old[x.name] === '' ? 0 : old[x.name])) : '';
     tr.innerHTML = '<td><span class="occ-car">' + (open[x.id] ? '▼' : '▶') + '</span>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>' + (old ? '<td class="occ-muted">' + sheet + '</td>' : '');
     tr.addEventListener('click', () => {
@@ -1767,7 +1803,7 @@ function staffCard(b, snap) {
   });
   t.appendChild(table);
   c.appendChild(t);
-  c.appendChild(kit.el('div', 'occ-muted', 'Tap a name to open or close it: adjust the balance, free daily trains, undo a payment.'));
+  c.appendChild(kit.el('div', 'occ-muted', 'Tap a name to open or close it: adjust the balance, mark it free (pro bono), undo a payment.'));
   return c;
 }
 
@@ -1775,7 +1811,7 @@ function detail(x, cols) {
   const tr = kit.el('tr', 'occ-pd-more');
   const td = kit.el('td');
   td.colSpan = cols;
-  td.appendChild(kit.el('div', 'occ-muted', 'Since ' + day(x.start) + ': start ' + x.carry + ' + ' + x.paid + ' paid - ' + (x.daily ? '0 (' + x.used + ' given free)' : x.used + ' given') + ' = ' + x.left));
+  td.appendChild(kit.el('div', 'occ-muted', x.daily ? 'Trained for free: ' + x.used + ' trains since ' + day(x.start) + ', nothing owed.' : 'Since ' + day(x.start) + ': start ' + x.carry + ' + ' + x.paid + ' paid - ' + x.used + ' given = ' + x.left));
   const bar = kit.el('div', 'occ-pd-ctl');
   const edit = (fn) => (btn) =>
     act(btn, (l) => {
@@ -1784,8 +1820,8 @@ function detail(x, cols) {
       fn(e);
       return l;
     });
-  bar.appendChild(small(x.daily ? 'Free daily: yes' : 'Free daily: no', edit((e) => (e.daily = !e.daily)), x.daily ? 'go' : ''));
-  [-10, -1, 1, 10].forEach((d) => bar.appendChild(small((d > 0 ? '+' : '−') + Math.abs(d), edit((e) => (e.carry = (e.carry || 0) + d)))));
+  bar.appendChild(small(x.daily ? 'Free: yes' : 'Free: no', edit((e) => (e.daily = !e.daily)), x.daily ? 'go' : ''));
+  if (!x.daily) [-10, -1, 1, 10].forEach((d) => bar.appendChild(small((d > 0 ? '+' : '−') + Math.abs(d), (btn) => bump(x.id, x.name, x.start, d, btn))));
   bar.appendChild(
     small('✕ Close', () => {
       open[x.id] = false;

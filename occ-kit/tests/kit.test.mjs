@@ -101,9 +101,9 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   assert.equal(b["2239897"].left, -527 + 200 - 2);
   assert.equal(b["3783283"].left, -1);
   assert.equal(b["9"].daily, true);
-  // Free daily: trains given don't spend the balance, an old debt stays.
+  // Free (pro bono): no balance, never owing.
   l.emp["2239897"].daily = true;
-  assert.equal(P.balances(l, news, staff)["2239897"].left, -527 + 200);
+  assert.equal(P.balances(l, news, staff)["2239897"].left, 0);
   delete l.emp["2239897"].daily;
   assert.equal(P.parsePrice("600k"), 600000);
   assert.equal(P.parsePrice("$600,000"), 600000);

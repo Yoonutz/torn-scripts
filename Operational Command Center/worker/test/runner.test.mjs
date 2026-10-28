@@ -177,6 +177,8 @@ test("/data has its own rate limit, separate from skill runs", async () => {
   fakeFetch();
   const r = await worker.fetch(req("/data/paid"), env({ RUN_PER_KEY: { limit: async () => ({ success: false }) }, DATA_PER_KEY: { limit: async () => ({ success: true }) } }));
   assert.equal(r.status, 200);
+  const r1 = await worker.fetch(req("/data/paid"), env({ RUN_PER_IP: { limit: async () => ({ success: false }) }, DATA_PER_KEY: { limit: async () => ({ success: true }) } }));
+  assert.equal(r1.status, 200);
   const r2 = await worker.fetch(req("/data/paid"), env({ DATA_PER_KEY: { limit: async () => ({ success: false }) } }));
   assert.equal(r2.status, 429);
 });
