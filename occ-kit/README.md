@@ -38,6 +38,7 @@ export default {
   skill: 'maol',                   // optional: the runner skill this tab replaces in OCC
   start(kit) {},                   // optional: runs once on every page (page buttons, timers)
   async mount(view, kit, { force }) {}, // optional: draws a tab / the standalone window
+  solo: false,                     // optional: no standalone window (the plug-in has its own UI)
   badge(kit) { return element; },  // optional: small pill right of the OCC icon
   launcher(kit, toggle) {},        // optional, standalone: own page button instead of the round one
   settings(card, kit) {},          // optional: extra Setup fields
@@ -56,7 +57,8 @@ export default {
 ## AI
 
 `kit.ai.write({ system, user })`: the owner's key goes to the private runner (`POST /write`, free
-model rotation). Anyone else uses their own OpenRouter key straight from the browser. Both call
+model rotation). Anyone else uses their own OpenRouter key straight from the browser. Standalone
+builds never call the runner, so a Greasy Fork user's Torn key never leaves for it. Both call
 **free models only** (`core/models.js`, shared with the runner). A standalone script with AI needs
 `@connect occ-runner.yoonutz.workers.dev` and `@connect openrouter.ai`.
 

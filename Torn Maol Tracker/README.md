@@ -18,6 +18,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 - **M'aol's timetable.** Where he is, when he leaves and his next stops with times, even before the bond breaks.
 - **Stay or fly.** The first stop you can reach while he's still there: "Stay in Mexico, he's here 16:15–16:30" or "Fly to Canada".
 - **Next summon countdown.** While all are dormant: when the next summon is due, about 48h after M'aol's kill.
+- **AI tips (optional).** With a free [OpenRouter](https://openrouter.ai/keys) key (the *keys* link in the footer), a free AI model words the *Next* tips from the tracker's own numbers; *Next · AI* shows when they are on screen. Asked only while the event runs, when the situation changes, at most once per 2 min. A reply with a time that isn't in the numbers is thrown away, and the built-in tips show whenever there's no AI answer.
 - **Sleeps when there's no event.** Zero API calls outside Halloween week.
 - **Times in your own clock.** The footer shows the offset from TCT.
 
@@ -25,6 +26,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 1. Get a userscript manager ([Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)).
 2. Install from [Greasy Fork](https://greasyfork.org/en/scripts/602300-torn-m-aol-tracker) (or `torn-maol-tracker.user.js` from this folder).
 3. Click the button left of the search and paste a Minimal access API key. Torn PDA fills it in by itself.
+4. Optional: *keys* in the footer, paste a free OpenRouter key for AI tips.
 
 <details><summary><b>How it works</b></summary>
 
@@ -43,6 +45,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
   | Halloween week, everything dormant | 1 call (M'aol) every 10 min, to catch a new summon |
   | Outside Halloween week | None |
   | Extras | `user/travel` while you fly, `user/perks` every 6 h |
+  | AI tips (not Torn, optional) | Free OpenRouter models, at most 1 ask per 2 min while the event runs, none otherwise |
   | chain-race feed (not Torn) | Only when deaths or M'aol's kill were missed: every 2 min during the event, every 10 min while dormant |
 
 - A failed call keeps the last data on screen and retries on the next refresh.
@@ -55,14 +58,14 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 <details><summary><b>Compliance</b></summary>
 
 Reads the Torn API with your own key, at most 28 calls a minute only while a Torn tab is visible, none outside Halloween week.
-No other requests to Torn. The only other site is the public chain-race feed (`@connect live.chain-race.workers.dev`), read-only: nothing is sent to it, no key, no name. Adds one header button
+No other requests to Torn. Other sites: the public chain-race feed (`@connect live.chain-race.workers.dev`), read-only: nothing is sent to it, no key, no name. And, only if you add an OpenRouter key, OpenRouter (`@connect openrouter.ai`): the numbers the panel shows (NPC status and HP, your location, state and travel method) go to free models only, which may log them; never your Torn key or name. Adds one header button
 and a dropdown; never clicks, attacks or travels for you. Links take you to the attack or travel page, you act yourself.
 The key stays in Tampermonkey's own storage (a key saved by an older version moves there by itself), the last snapshot in this browser's localStorage.
 
 | Torn API ToS | |
 | --- | --- |
 | Data storage | Only locally, in this browser |
-| Data sharing | Nobody |
+| Data sharing | Nobody, unless you add an OpenRouter key: then the panel's numbers go to free OpenRouter models (no key, no name) |
 | Purpose of use | Personal M'aol and Praetorian tracking |
 | Key storage & sharing | Stored locally, never shared |
 | Key access level | Minimal |
@@ -71,4 +74,4 @@ The key stays in Tampermonkey's own storage (a key saved by an older version mov
 
 ## Source
 
-The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-maol-tracker.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand. The same plug-in also runs inside the private Command Center; when both are installed this copy steps aside so nothing runs twice.
+The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-maol-tracker.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand. The same plug-in also runs inside the private Command Center (tab, badge, Setup switch for AI tips, AI through its private runner); when both are installed this copy steps aside so nothing runs twice.

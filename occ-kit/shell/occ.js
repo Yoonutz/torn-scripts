@@ -273,6 +273,14 @@ export function boot(plugins) {
     const c2 = el('div', 'occ-card');
     keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in Tampermonkey storage; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
     wrap.appendChild(c2);
+    plugins.forEach((p) => {
+      if (typeof p.settings !== 'function') return;
+      const c = el('div', 'occ-card');
+      try {
+        p.settings(c, kit);
+        wrap.appendChild(c);
+      } catch (e) {}
+    });
     const c3 = el('div', 'occ-card');
     c3.appendChild(el('h3', '', 'Answers'));
     const row = el('div', 'occ-bar');
