@@ -11,7 +11,7 @@
 <li><b>Your flight times.</b> Reads your airstrip, WLT and travel book perks, adds the trip home and any hospital, jail or flight time left.</li>
 <li><b>What to do next.</b> Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land.</li>
 <li><b>M'aol's timetable.</b> Where he is, when he leaves and his next stops with times, even before the bond breaks.</li>
-<li><b>Stay or fly.</b> The first stop you can reach while he's still there.</li>
+<li><b>Stay or fly.</b> The first stop where you get at least 3 min of hitting. While the bond holds it tells you when to leave, so you never land early to a boss that can't be hit.</li>
 <li><b>Next summon countdown.</b> While all are dormant: when the next summon is due, about 48h after M'aol's kill.</li>
 <li><b>Sleeps when there's no event.</b> Zero API calls outside Halloween week. Times show in your own clock.</li>
 </ul>

@@ -16,7 +16,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
   and any hospital, jail or flight you are still in. Toggle *business ticket* to see those times.
 - **What to do next.** Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land.
 - **M'aol's timetable.** Where he is, when he leaves and his next stops with times, even before the bond breaks.
-- **Stay or fly.** The first stop you can reach while he's still there: "Stay in Mexico, he's here 16:15–16:30" or "Fly to Canada".
+- **Stay or fly.** The first stop where you get at least 3 min of hitting: "Stay in Mexico, he's here 16:15–16:30" or "Fly to Canada". While the bond holds it says when to leave ("Leave for Canada at 15:16"), with a safety margin on the break time, so you never land early to a boss that can't be hit.
 - **Next summon countdown.** While all are dormant: when the next summon is due, about 48h after M'aol's kill.
 - **Sleeps when there's no event.** Zero API calls outside Halloween week.
 - **Times in your own clock.** The footer shows the offset from TCT.

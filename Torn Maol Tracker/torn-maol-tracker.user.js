@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.27
+// @version      1.0.28
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-const VERSION = '1.0.27';
+const VERSION = '1.0.28';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -1401,16 +1401,25 @@ function advice() {
 }
 
 // Stay where you are or fly: the first stop you can reach while he's still there (and alive).
+// Only a stop that leaves at least MIN_HIT_S of hitting counts. While bonded the break time is an
+// estimate, so it gets a margin (a quarter of the time left, at least 3 min), a break more than
+// an hour out gets no flight plan at all, and "fly now" only shows when leaving later would miss
+// the window: otherwise the tip says when to leave, so nobody lands early to a boss that can't be hit.
+const MIN_HIT_S = 3 * 60;
 function stayOrFly(P, maol, me, method, bonded) {
   const t = now();
   const eta = killEta(MAOL.id, maol.hp, maol.max);
   const deathAt = bonded || !isFinite(eta) ? Infinity : t + eta * 60;
-  const opens = bonded ? P.bondAt : t;
+  const left = Math.max(0, P.bondAt - t);
+  if (bonded && left > 60 * 60) {
+    return { c: 'info', t: `Bond holds until ~${hm(P.bondAt)}. Too early to fly to M'aol, he can't be hit before then.` };
+  }
+  const opens = bonded ? P.bondAt + Math.max(3 * 60, left / 4) : t;
   const windows = [{ c: maol.country, from: t, to: P.leaves }, ...P.stops.map((s) => ({ c: s.c, from: s.at, to: s.at + HOP_S }))];
   const fits = windows.map((w) => {
     const arrive = t + tripMin(me, w.c, method) * 60 + 60;
     const start = Math.max(w.from, arrive, opens);
-    return { ...w, arrive, start, ok: start < Math.min(w.to, deathAt) - 60 };
+    return { ...w, arrive, start, ok: start <= Math.min(w.to, deathAt) - MIN_HIT_S };
   }).filter((w) => w.ok);
   const lowHp = shielded(maol) ? ' He is under 5% and his shield slows the kill, so the end time is uncertain.' : '';
   if (!fits.length) {
@@ -1425,6 +1434,11 @@ function stayOrFly(P, maol, me, method, bonded) {
     return { c: 'go', t: (best.from > t ? `Stay in ${best.c}. M'aol arrives ${hm(best.from)} (in ${fmtMin((best.from - t) / 60)}) and leaves ${hm(best.to)}.` : `Stay in ${best.c}. M'aol is here until ${hm(best.to)}.`) + (bonded ? ' Only once the bond breaks.' : '') + lowHp };
   }
   const home = me.where && me.where !== 'Torn' && fits.some((w) => w.c === me.where) ? ` Or stay: he's back in ${me.where} ${hm(fits.find((w) => w.c === me.where).from)}.` : '';
+  const trip = tripMin(me, best.c, method);
+  const flyAt = best.start - trip * 60 - 60;
+  if (bonded && flyAt - t > 2 * 60) {
+    return { c: 'info', t: `Don't fly yet: M'aol can't be hit until the bond breaks (~${hm(P.bondAt)}). Leave for ${best.c} at ${hm(flyAt)} (${METHOD_NAME[method]}, ${fmtMin(trip)}), he's there ${win}.` + home + lowHp };
+  }
   return { c: 'go', t: `Fly to ${best.c} now (${METHOD_NAME[method]}, ${fmtMin(tripMin(me, best.c, method))}). M'aol is there ${win}.` + (bonded ? ' First stop after the bond breaks.' : '') + home + lowHp, href: 'https://www.torn.com/page.php?sid=travel' };
 }
 
@@ -1447,6 +1461,8 @@ const AI_SYSTEM = [
   'written (HH:MM). Durations only as given in minutes. Plain English, no markdown, each text under 160 characters.',
   'The "calculated" list is the script\'s own advice: keep its decisions, you may merge, reorder or reword them and add',
   'one tactical point the facts support. Never suggest scripts, automation, or anything against Torn rules.',
+  'While maol.bonded is true M\'aol cannot be hit: never tell the player to fly to him now. Repeat only a leave time',
+  'the calculated list gives, and never suggest a flight the calculated list does not.',
 ].join('\n');
 
 let aiBusy = false;
