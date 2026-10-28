@@ -7,7 +7,7 @@ import { http, parseJson } from '../core/http.js';
 import { tornKey, KEY_TORN } from '../core/torn.js';
 import { ai, KEY_OR, RUNNER } from '../core/ai.js';
 import { injectTheme } from '../core/theme.js';
-import { frameCss } from '../core/frame.js';
+import { frameCss, trapScroll } from '../core/frame.js';
 import { errCard, accordion, fillStats, keyField, button } from '../core/ui.js';
 import { mdToHtml, mdSections } from '../core/md.js';
 import { makeKit } from '../core/kit.js';
@@ -63,7 +63,7 @@ export function boot(plugins) {
   const badges = plugins.filter((p) => typeof p.badge === 'function');
   let remote = (store.get(KEY_SKILLS, []) || []).map(fromRunner);
   let tabs = [];
-  let win, main, title, sub, launch, tabBar, statsRow, rerun, gear;
+  let win, main, title, sub, launch, tabBar, statsRow, tool, rerun, gear;
   const btns = {};
   const inflight = {};
   let current = null;
@@ -103,7 +103,7 @@ export function boot(plugins) {
     current = id;
     Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
     gear.classList.toggle('occ-act', id === SETUP);
-    rerun.hidden = !id || id === SETUP;
+    tool.hidden = !id || id === SETUP;
   }
 
   function setHead(label, meta) {
@@ -560,17 +560,23 @@ export function boot(plugins) {
     const head = el('div', 'occ-head');
     title = el('span', 'occ-title', 'Command Center');
     head.appendChild(title);
-    sub = el('span', 'occ-sub', '');
-    head.appendChild(sub);
-    rerun = headButton('occ-run', OCC_ICON.refresh, 'Run again with fresh data', () => {
-      if (current && current !== SETUP) openTab(current, true);
-    });
-    rerun.hidden = true;
-    head.appendChild(rerun);
+    head.appendChild(el('span', 'occ-gap'));
     gear = headButton('', OCC_ICON.gear, 'Setup', () => showSettings());
     head.appendChild(gear);
     head.appendChild(headButton('', '&times;', 'Close', () => setOpen(false)));
     win.appendChild(head);
+
+    // The open tab's own line: when its data is from, and its refresh button.
+    tool = el('div', 'occ-tool');
+    tool.hidden = true;
+    sub = el('span', 'occ-sub', '');
+    tool.appendChild(sub);
+    rerun = button(OCC_ICON.refresh + 'Refresh', () => {
+      if (current && current !== SETUP) openTab(current, true);
+    });
+    rerun.title = 'Run this tab again with fresh data';
+    tool.appendChild(rerun);
+    win.appendChild(tool);
 
     statsRow = el('div', 'occ-stats');
     win.appendChild(statsRow);
@@ -581,6 +587,7 @@ export function boot(plugins) {
     tabBar = el('div', 'occ-tabs');
     win.appendChild(tabBar);
     root.appendChild(win);
+    trapScroll(win);
 
     renderTabs();
     main.appendChild(el('div', 'occ-empty', '<div>Pick a tab below.</div><div class="occ-muted">' + (tabs.length ? tabs.length + ' available' : 'loading skills...') + '</div>'));
