@@ -3,7 +3,7 @@
 > The userscript is **built**: sources are `src/header.js`, `plugins/*.js` and the shared
 > [occ-kit](../occ-kit/README.md). Run `node occ-kit/build.mjs`, never edit
 > `operational-command-center.user.js` by hand. Tabs come from two places: bundled plug-ins
-> (`occ.build.json`: company trains pill, M'aol tracker with its own tab, badge and AI tips via
+> (`occ.build.json`: company trains pill, Trains tab with paid trains per employee, M'aol tracker with its own tab, badge and AI tips via
 > `kit.ai.write`, Keys tab with 14-day Torn key and free AI usage vs their caps) and the runner's skills below. Each plug-in's `settings(card, kit)` shows in Setup.
 > Size is no concern: Torn PDA loaded a 400 KB test script (2026-10-28).
 
@@ -197,6 +197,29 @@ Worker involved.
 - Needs `@connect api.torn.com`, so Tampermonkey asks to approve it once after
   the update.
 
+## Trains tab (paid trains)
+
+Plug-in `plugins/paid.js`, replacing the Company Training Companion and its Google Sheet.
+Shows how many paid trains each employee has left, as a **Paid** column next to Train on the
+company employee list (desktop) and as the **Trains** tab.
+
+- Trains given: `company/news?cat=training` (the news links carry the XID, so renames don't break
+  it). Payments: `user/events` lines "You were sent $X from <employee>". Staff: `company/employees`.
+- Left = start balance + paid trains since start - trains given since start. Price per train in
+  Setup (default $500,000). "D" = trains free daily. Negative = owes, in red.
+- New payments from staff land in the tab: money becomes `amount / price` trains with one tap, items
+  get a trains count picked with -/+ buttons, or **Not trains**. Payments whose message mentions
+  "train" are added on their own (Setup can turn that off). Undo puts a payment back in the list.
+- First run: **Import** reads the numbers the old Companion cached in this browser
+  (`tcw_paid_trains_snapshot_v1`), no Google call. The tab shows a Sheet column next to the new
+  numbers while that cache exists, for a side-by-side check.
+- Ledger (confirmed payments, start balances, daily flags, price) lives on the runner:
+  `GET/POST /data/paid`, one KV document per player ID (`data:<player>:paid`), writes carry the
+  revision they were based on, a stale write gets 409 and the tab re-applies its change. Copies of the
+  ledger, the training news and payment events stay in Tampermonkey storage (`occ.paid.*`).
+- Calls only when the company page or the tab opens, a Torn tab comes back, and 4 s / 15 s after a
+  Train click on the company page. No timed polling.
+
 ## Keys the player pastes once
 
 Both live in the userscript settings pane, stored in Tampermonkey's own storage
@@ -212,11 +235,11 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 
 | Item          | Answer                                                                                                    |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
-| Data storage  | Answers cached in your browser only. The runner keeps only key hash -> player ID for a day (access check); its request logs are off. |
+| Data storage  | Answers cached in your browser only. The runner keeps key hash -> player ID for a day (access check) and the Trains ledger (payments you confirmed, balances) per player; its request logs are off. |
 | Data sharing  | The runner sends skill reports (money, networth, company numbers) to free OpenRouter models, which may log them. |
-| Purpose       | Personal dashboards: the skill buttons and the company trains pill.                                      |
+| Purpose       | Personal dashboards: the skill buttons, the company trains pill and paid trains per employee.            |
 | Key storage   | Tampermonkey storage in your browser; sent per run to the runner over HTTPS, never stored there.          |
-| Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill: Limited.     |
+| Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill and tab: Limited. |
 | Who can use   | Private: the runner only serves the owner's player ID; any other key is refused server side.             |
 
 ## Compliance
@@ -226,6 +249,8 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 - Never clicks or acts for you. The Train-click watcher on the company page only listens, then
   refreshes the pill through the API.
 - The trains pill makes no timed call while the tab is hidden; it catches up when the tab is back.
+- The Paid column reads only the employee list on the company page you opened (each row's player
+  ID) and adds a cell to it. All its numbers come from the Torn API.
 - The donator star and award icons right after the owner's own sidebar name are hidden to make
   room for the icon; other players keep theirs.
 

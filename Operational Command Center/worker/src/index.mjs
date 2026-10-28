@@ -5,9 +5,12 @@
 //   GET  /ask/<id>[?force=1&...]   same, then a free model turns the report into the answer
 //   POST /write                    { system, user } from a userscript plug-in; a free model answers
 //   GET  /usage                    Keys tab: the runner's model calls and OpenRouter's free count, 14 days
+//   GET  /data/<name>              a plug-in's private document for the key's owner: { rev, value, at }
+//   POST /data/<name>              { rev, value } replaces it; 409 + current document when rev is stale
 // Cron (wrangler.toml): hourly OpenRouter snapshot, so the daily trend fills even with OCC closed.
 // Private: only keys owned by a player in ALLOWED_PLAYERS (wrangler.toml) get past auth.mjs.
-// Parts: auth.mjs (owner, allowlist, rate limits), torn.mjs, store.mjs (KV), ai/ (models, answers), usage.mjs,
+// Parts: auth.mjs (owner, allowlist, rate limits), torn.mjs, store.mjs (KV), data.mjs (per-player documents),
+// ai/ (models, answers), usage.mjs,
 // registry.mjs (generated at build from .claude/skills/*/scripts/runner.mjs, SKILL.md bundled).
 import { REGISTRY } from "./registry.mjs";
 import { gate } from "./auth.mjs";
@@ -15,6 +18,7 @@ import { tornClient, TornError } from "./torn.mjs";
 import { store } from "./store.mjs";
 import { answer, skillPrompt, BUDGET } from "./ai/answer.mjs";
 import { usage, orSnapshot } from "./usage.mjs";
+import { readData, writeData, validName } from "./data.mjs";
 
 const RAW = "https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/";
 
@@ -89,6 +93,20 @@ export default {
     const isWrite = url.pathname === "/write" && req.method === "POST";
     const isUsage = url.pathname === "/usage" && req.method === "GET";
     const m = url.pathname.match(/^\/(run|ask)\/([a-z0-9_-]+)$/);
+    const d = url.pathname.match(/^\/data\/([^/]+)$/);
+    if (d && (req.method === "GET" || req.method === "POST")) {
+      if (!validName(d[1])) return json({ error: "bad name" }, 400);
+      try {
+        const auth = await gate(req, env, env.DATA_PER_KEY);
+        if (auth.error) return json({ error: auth.error }, auth.status);
+        if (req.method === "GET") return json(await readData(env, auth.owner, d[1]));
+        const [status, body] = await writeData(env, auth.owner, d[1], await req.json().catch(() => null));
+        return json(body, status);
+      } catch (e) {
+        if (e instanceof TornError && e.code === 2) return json({ error: "Torn rejected the API key" }, 401);
+        return json({ error: String((e && e.message) || e) }, 502);
+      }
+    }
     if (!isWrite && !isUsage && (!m || req.method !== "GET")) return json({ error: "unknown route" }, 404);
     const entry = m ? REGISTRY.find((e) => e.skill.id === m[2]) : null;
     if (m && !entry) return json({ error: "unknown skill " + m[2] }, 404);
