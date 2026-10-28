@@ -12,6 +12,7 @@
 <li><b>What to do next.</b> Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land.</li>
 <li><b>M'aol's timetable.</b> Where he is, when he leaves and his next stops with times, even before the bond breaks.</li>
 <li><b>Stay or fly.</b> The first stop you can reach while he's still there.</li>
+<li><b>Next summon countdown.</b> While all are dormant: when the next summon is due, about 48h after M'aol's kill.</li>
 <li><b>Sleeps when there's no event.</b> Zero API calls outside Halloween week. Times show in your own clock.</li>
 </ul>
 <h2>How to use</h2>
@@ -23,9 +24,10 @@
 <h2>Good to know</h2>
 <ul>
 <li>Refreshes every 15 s: at most 28 API calls a minute, only while a Torn tab is visible, shared across tabs. Dead NPCs are checked every 10 min. When everything is dormant: 1 call every 10 min in Halloween week, none outside it.</li>
-<li>Key and last snapshot stay in this browser (localStorage). Calls go only to api.torn.com.</li>
+<li>Key and last snapshot stay in this browser (localStorage). Torn calls go only to api.torn.com.</li>
+<li>When it missed guard deaths or M'aol's kill, it reads the public M'aol feed at live.chain-race.workers.dev (by LDP [1580562]) at most every 2 min, every 10 min while dormant. Nothing is sent to it: no key, no name. Your userscript manager asks once to allow that site.</li>
 <li>Never attacks or travels for you: links open the attack or travel page.</li>
-<li>Missed some guard deaths? The script learns M'aol's route from his own moves within one loop.</li>
+<li>Missed some guard deaths? It takes the defeat times from that feed, or else learns M'aol's route from his own moves within one loop.</li>
 </ul>
 <details>
 <summary><b>How the numbers work</b></summary>

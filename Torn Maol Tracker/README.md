@@ -17,6 +17,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 - **What to do next.** Hit now, fly to the nearest guard you can still reach, skip the ones that die before you land.
 - **M'aol's timetable.** Where he is, when he leaves and his next stops with times, even before the bond breaks.
 - **Stay or fly.** The first stop you can reach while he's still there: "Stay in Mexico, he's here 16:15–16:30" or "Fly to Canada".
+- **Next summon countdown.** While all are dormant: when the next summon is due, about 48h after M'aol's kill.
 - **Sleeps when there's no event.** Zero API calls outside Halloween week.
 - **Times in your own clock.** The footer shows the offset from TCT.
 
@@ -31,7 +32,8 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 - M'aol's route (checked live on 26 Oct 2026, 9 of 9 stops right): he loops through the dead guards' countries in the order
   they died, one stop every quarter hour (:00 :15 :30 :45 TCT), with no flight in between. A guard that dies later joins the
   end of the loop, and he starts moving while the bond still holds.
-- Missed deaths: if the script didn't see some guards die, it learns the loop from M'aol's own moves (one full loop).
+- Missed deaths: if the script didn't see some guards die, it takes their defeat times from the public
+  [chain-race M'aol feed](https://live.chain-race.workers.dev/maol.html) (by LDP [1580562]), or else learns the loop from M'aol's own moves (one full loop).
 - API use (refresh every 15 s, only while a Torn tab is visible, shared across tabs):
 
   | When | Calls |
@@ -41,6 +43,7 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
   | Halloween week, everything dormant | 1 call (M'aol) every 10 min, to catch a new summon |
   | Outside Halloween week | None |
   | Extras | `user/travel` while you fly, `user/perks` every 6 h |
+  | chain-race feed (not Torn) | Only when deaths or M'aol's kill were missed: every 2 min during the event, every 10 min while dormant |
 
 - A failed call keeps the last data on screen and retries on the next refresh.
 - Flight times: standard minutes from the [wiki](https://wiki.torn.com/wiki/Travel), airstrip ×0.7, WLT ×0.5,
@@ -51,7 +54,8 @@ A button in Torn's header, left of the search, opens a Torn-styled dropdown.
 
 <details><summary><b>Compliance</b></summary>
 
-Reads the Torn API with your own key, at most 28 calls a minute only while a Torn tab is visible, none outside Halloween week. Adds one header button
+Reads the Torn API with your own key, at most 28 calls a minute only while a Torn tab is visible, none outside Halloween week.
+No other requests to Torn. The only other site is the public chain-race feed (`@connect live.chain-race.workers.dev`), read-only: nothing is sent to it, no key, no name. Adds one header button
 and a dropdown; never clicks, attacks or travels for you. Links take you to the attack or travel page, you act yourself.
 The key and the last snapshot stay in this browser's localStorage.
 

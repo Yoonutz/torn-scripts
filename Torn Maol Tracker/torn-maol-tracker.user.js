@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.18
+// @version      1.0.19
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      live.chain-race.workers.dev
 // ==/UserScript==
 
 (function () {
@@ -19,6 +20,9 @@
   const ETA_WINDOW_S = 5 * 60;     // kill rate from the last 5 min: damage speeds up as guards fall
   const SHIELD_PCT = 0.05;         // below 5% HP M'aol's shield slows the kill too much to extrapolate
   const HOP_S = 15 * 60;           // M'aol moves on every quarter hour (:00 :15 :30 :45 TCT)
+  const RESUMMON_S = 48 * 3600;    // next summon about 48h after M'aol's kill (chain-race's estimate)
+  const FEED = 'https://live.chain-race.workers.dev/npc.json';   // public M'aol feed by LDP: defeat times, next summon
+  const FEED_LIVE_S = 120;         // feed check while deaths are missing during the event
 
   const K = { key: 'tmt.apikey', state: 'tmt.state', ui: 'tmt.ui' };
   const PDA_KEY_PLACEHOLDER = '###' + 'PDA-APIKEY' + '###';
@@ -59,8 +63,8 @@
   }
 
   // samples: { id: [[t, hp], ...] }, deaths: { id: { t, country } }, hops: [[t, country], ...] (M'aol's moves),
-  // polled: { id: t }, perks: {...}, snap: last snapshot
-  let ST = Object.assign({ samples: {}, deaths: {}, hops: [], polled: {}, perks: null, perksAt: 0 }, load(K.state, {}));
+  // polled: { id: t }, perks: {...}, snap: last snapshot, nextSummon: feed's estimate, summonAt: when we saw the summon
+  let ST = Object.assign({ samples: {}, deaths: {}, hops: [], polled: {}, perks: null, perksAt: 0, feedAt: 0, nextSummon: 0, summonAt: 0 }, load(K.state, {}));
   let UI = Object.assign({ open: true, biz: false }, load(K.ui, {}));
   const saveState = () => store(K.state, ST);
   const saveUi = () => store(K.ui, UI);
@@ -96,6 +100,22 @@
     try { data = JSON.parse(text); } catch (e) { throw new Error('Bad API response'); }
     if (data.error) throw new Error(`Torn API error ${data.error.code}: ${data.error.error}`);
     return data;
+  }
+
+  // Public feed, not Torn: it has no CORS headers, so it goes through the userscript manager (or PDA).
+  async function feedGet() {
+    const url = `${FEED}?ts=${now()}`;
+    let text;
+    if (typeof GM_xmlhttpRequest === 'function') {
+      text = await new Promise((ok, fail) => GM_xmlhttpRequest({ method: 'GET', url, timeout: 15000,
+        onload: (r) => (r.status === 200 ? ok(r.responseText) : fail(new Error(r.status))), onerror: fail, ontimeout: fail }));
+    } else if (typeof window.PDA_httpGet === 'function') {
+      const r = await window.PDA_httpGet(url, {});
+      text = (r && (r.responseText || r.text || r.body)) || (typeof r === 'string' ? r : '');
+    } else {
+      text = await (await fetch(url)).text();
+    }
+    return JSON.parse(text);
   }
 
   function countryOf(desc) {
@@ -243,7 +263,7 @@
     });
     // M'aol's moves: every country change is one hop. They teach the loop order when deaths were missed.
     const m = list[0];
-    if (quiet && m.state === 'Awoken' && ask.some((a) => a.id === MAOL.id)) ST.polled = {};   // new summon: check everyone on the next refresh
+    if (quiet && m.state === 'Awoken' && ask.some((a) => a.id === MAOL.id)) { ST.polled = {}; ST.summonAt = t; ST.nextSummon = 0; }   // new summon: check everyone on the next refresh
     if (m.state === 'Awoken' && !m.country) ST.hops = [];   // summoned, not moving yet
     const last = ST.hops[ST.hops.length - 1];
     if (m.state === 'Awoken' && m.country && (!last || last[1] !== m.country)) ST.hops = [...ST.hops, [t, m.country]].slice(-40);
@@ -268,8 +288,40 @@
     D = { t, maol: m, guards: list.slice(1), me };
     ST.snap = D;
     err = failed.length ? 'Some API calls failed, retrying' : '';
+    await syncFeed(t);
     saveState();
     render();
+  }
+
+  // The chain-race feed fills what this tab didn't see: guard deaths before you opened Torn (so M'aol's
+  // loop is exact straight away) and M'aol's kill time (for the next-summon countdown).
+  // Only asked when something is missing: every 2 min while deaths are missing, every 10 min while dormant.
+  async function syncFeed(t) {
+    const missing = D.guards.some((g) => g.hp <= 0 && !ST.deaths[g.id]) && anyAwake(D);
+    const noSummonTime = !anyAwake(D) && !nextSummonAt();
+    if (!missing && !noSummonTime) return;
+    if (t - ST.feedAt < (missing ? FEED_LIVE_S : IDLE_POLL_S)) return;
+    ST.feedAt = t;
+    let f;
+    try { f = await feedGet(); } catch (e) { return; }   // the feed is optional: no data, no change
+    if (!anyAwake(D) && f?.next_summon?.t > t - RESUMMON_S) ST.nextSummon = f.next_summon.t;
+    const ids = Object.fromEntries(GUARDS.map((g) => [g.name, g.id]));
+    for (const s of f?.route?.stops || []) {
+      const id = ids[s.npc];
+      const g = D.guards.find((x) => x.id === id);
+      // Only this summon's deaths: the guard is dead now, in the same country, and fell after the summon.
+      if (!g || g.hp > 0 || ST.deaths[id] || s.where !== g.country || !(s.defeated > 0)) continue;
+      if (s.defeated < (ST.summonAt || t - 7 * 86400) - 60 || s.defeated > t + 60) continue;
+      ST.deaths[id] = { t: s.defeated, country: s.where };
+    }
+  }
+
+  // Next summon: ~48h after M'aol's kill, from our own sighting or else the feed. 0 when unknown,
+  // or once it's 6h overdue (a summon needs a player to start it, so it can come late).
+  function nextSummonAt() {
+    const own = ST.deaths[MAOL.id] ? ST.deaths[MAOL.id].t + RESUMMON_S : 0;
+    const ns = own || ST.nextSummon || 0;
+    return ns > now() - 6 * 3600 ? ns : 0;
   }
 
   // ------------------------------------------------------------- M'aol's route
@@ -352,7 +404,10 @@
     }
 
     if (maol.state === 'Dormant' && !alive.length) {
-      tips.push({ c: 'info', t: "M'aol and his Praetorians are dormant. Nothing to fight right now." });
+      const ns = nextSummonAt();
+      const left = ns ? (ns - t) / 60 : 0;
+      tips.push({ c: 'info', t: !ns || !inSummonWindow(ns) ? "M'aol and his Praetorians are dormant. Nothing to fight right now."
+        : left > 0 ? `All dormant. Next summon ~${hm(ns)} (in ${fmtMin(left)}).` : 'All dormant. Next summon any time now.' });
       return tips;
     }
 
@@ -401,7 +456,7 @@
       }
     }
 
-    tips.push({ c: 'note', t: "Loot: every turn you land damage is 1 lottery ticket, however small the hit. Tickets count until the kill, so keep hitting." });
+    tips.push({ c: 'note', t: "Loot: every turn you land damage is 1 lottery ticket, however small the hit. Tickets count until the kill, so keep hitting. Every guard drops the same 1,101 items, so a less crowded fight means better odds." });
     tips.push({ c: 'note', t: 'Healing: bring medical items (first aid kits, blood bags, morphine) so a loss doesn\'t keep you in hospital and you can keep hitting.' });
     return tips;
   }
