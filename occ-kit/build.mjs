@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '..');
-const PDA_LIMIT = 120 * 1024; // Torn PDA refuses larger scripts
 const check = process.argv.includes('--check');
 
 const rel = (p) => relative(repo, p).split('\\').join('/');
@@ -129,16 +128,15 @@ for (const { dir, cfg } of targets()) {
   const out = resolve(dir, cfg.out);
   const { text, ver } = buildTarget(dir, cfg);
   const kb = (Buffer.byteLength(text) / 1024).toFixed(1);
-  const warn = Buffer.byteLength(text) > PDA_LIMIT ? '  WARNING: over the 120 KB Torn PDA limit' : '';
   if (check) {
     const cur = existsSync(out) ? readFileSync(out, 'utf8') : '';
     if (cur !== text) {
       failed = true;
       console.error('stale: ' + rel(out) + ' (run node occ-kit/build.mjs and commit the result)');
-    } else console.log('ok    ' + rel(out) + ' v' + ver + ' ' + kb + ' KB' + warn);
+    } else console.log('ok    ' + rel(out) + ' v' + ver + ' ' + kb + ' KB');
   } else {
     writeFileSync(out, text);
-    console.log('built ' + rel(out) + ' v' + ver + ' ' + kb + ' KB' + warn);
+    console.log('built ' + rel(out) + ' v' + ver + ' ' + kb + ' KB');
   }
 }
 if (failed) process.exit(1);

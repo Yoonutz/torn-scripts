@@ -71,4 +71,4 @@ The key stays in Tampermonkey's own storage (a key saved by an older version mov
 
 ## Source
 
-The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-maol-tracker.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand.
+The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-maol-tracker.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand. The same plug-in also runs inside the private Command Center; when both are installed this copy steps aside so nothing runs twice.

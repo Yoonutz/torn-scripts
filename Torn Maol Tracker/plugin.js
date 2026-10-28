@@ -59,7 +59,8 @@ let UI = Object.assign({ open: true, biz: false }, load(K.ui, {}));
 const saveState = () => store(K.state, ST);
 const saveUi = () => store(K.ui, UI);
 let kit = null;
-const apiKey = () => (IS_PDA ? PDA_KEY : (kit.keys.get(K.key) || ''));
+// Inside the Command Center its Torn key is used when no own key was saved, so it is entered once.
+const apiKey = () => (IS_PDA ? PDA_KEY : (kit.keys.get(K.key) || (kit.host === 'occ' ? kit.tornKey() : '')));
 
 const now = () => Math.floor(Date.now() / 1000);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

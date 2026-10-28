@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.21
+// @version      1.0.22
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-const VERSION = '1.0.21';
+const VERSION = '1.0.22';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -992,7 +992,8 @@ let UI = Object.assign({ open: true, biz: false }, load(K.ui, {}));
 const saveState = () => store(K.state, ST);
 const saveUi = () => store(K.ui, UI);
 let kit = null;
-const apiKey = () => (IS_PDA ? PDA_KEY : (kit.keys.get(K.key) || ''));
+// Inside the Command Center its Torn key is used when no own key was saved, so it is entered once.
+const apiKey = () => (IS_PDA ? PDA_KEY : (kit.keys.get(K.key) || (kit.host === 'occ' ? kit.tornKey() : '')));
 
 const now = () => Math.floor(Date.now() / 1000);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -71,6 +71,6 @@ model rotation). Anyone else uses their own OpenRouter key straight from the bro
 ## Workflow
 
 1. Edit `plugin.js` / `header.js` (raise `@version`) or `occ-kit/*`.
-2. `node occ-kit/build.mjs` - rebuilds every target, warns over Torn PDA's 120 KB.
+2. `node occ-kit/build.mjs` - rebuilds every target. Size is no issue: Torn PDA loaded a 400 KB test script fine (2026-10-28).
 3. Commit sources **and** built files together. CI (`.github/workflows/occ-kit.yml`) fails if a
    built file does not match its sources.

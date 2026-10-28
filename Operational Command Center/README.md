@@ -3,7 +3,8 @@
 > The userscript is **built**: sources are `src/header.js`, `plugins/*.js` and the shared
 > [occ-kit](../occ-kit/README.md). Run `node occ-kit/build.mjs`, never edit
 > `operational-command-center.user.js` by hand. Tabs come from two places: bundled plug-ins
-> (`occ.build.json`) and the runner's skills below.
+> (`occ.build.json`: company trains pill, M'aol tracker) and the runner's skills below.
+> Size is no concern: Torn PDA loaded a 400 KB test script (2026-10-28).
 
 How a skill in this repo becomes a working button in the Torn UI, with zero
 manual deploy steps. Design history:
