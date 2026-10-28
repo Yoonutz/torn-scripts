@@ -41,7 +41,9 @@ export async function gate(req, env, limiter) {
   const hash = await keyHash(key);
   const lim = limiter || env.RUN_PER_KEY;
   const perKey = lim ? await lim.limit({ key: hash }) : { success: true };
-  const perIp = env.RUN_PER_IP && ip ? await env.RUN_PER_IP.limit({ key: ip }) : { success: true };
+  // The data route brings its own per-key limit and skips the per-IP one, which is sized for skill
+  // runs: a few quick balance taps used to hit it ("Too many runs").
+  const perIp = !limiter && env.RUN_PER_IP && ip ? await env.RUN_PER_IP.limit({ key: ip }) : { success: true };
   if (!perKey.success || !perIp.success) return { status: 429, error: "Too many runs, wait a minute" };
   const owner = await keyOwner(env, key, hash);
   if (!allowed(env, owner)) return { status: 403, error: "This Command Center is private" };
