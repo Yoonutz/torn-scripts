@@ -11,3 +11,8 @@ id = "bcdd4092e01f4ca4b4ff8cdf55b19759"
 
 [observability]
 enabled = true
+
+# The caller's Torn key arrives in the Authorization header, and invocation logs record
+# request headers. Off, so the key is never kept in Workers Logs; console errors still log.
+[observability.logs]
+invocation_logs = false

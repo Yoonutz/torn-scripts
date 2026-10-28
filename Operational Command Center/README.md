@@ -111,7 +111,10 @@ New skill = SKILL.md + runner.mjs + push. Edited skill = push.
 4. The UI renders: stat cards from `stats`, the answer split into folding
    sections on markdown headings and `Label:` lines, model name + timestamp.
 5. Answers are cached per skill in `localStorage`; the amber circle button
-   reruns with `force`.
+   reruns with `force`. Answers older than 12 h show their age in amber.
+6. One script run per press: if the model asks for the tool again it gets the same
+   result. A Cancel button sits in the progress card; busy models are retried
+   after a short pause (45 s timeout per try).
 
 If the model never calls the tool, the userscript runs the script itself and
 hands the output back; if the model produces no answer at all, the raw report
@@ -157,10 +160,34 @@ Worker involved.
 
 ## Keys the player pastes once
 
-Both live in the userscript settings pane, stored in `localStorage`:
+Both live in the userscript settings pane, stored in Tampermonkey's own storage
+(`GM_setValue`), so clearing torn.com site data, logging out or Torn wiping its
+`localStorage` no longer loses them, and other scripts on the page cannot read them.
+Keys saved by older versions in `localStorage` move over on their own. Torn PDA keeps
+`localStorage` (it fills the Torn key itself).
 
 - OpenRouter API key (free tier is enough).
 - Torn API key (full access) - doubles as the runner credential.
+
+## Torn API key use (ToS)
+
+| Item          | Answer                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| Data storage  | Answers cached in your browser only. The runner keeps nothing; its request logs are off.                  |
+| Data sharing  | Skill reports (money, networth, company numbers) go to free OpenRouter models, which may log them.        |
+| Purpose       | Personal dashboards: the skill buttons and the company trains pill.                                      |
+| Key storage   | Tampermonkey storage in your browser; sent per run to the runner over HTTPS, never stored there.          |
+| Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill: Limited.     |
+
+## Compliance
+
+- Only Torn API calls (`api.torn.com`) plus the runner, GitHub raw files and OpenRouter. No page
+  scraping, no extra requests to torn.com.
+- Never clicks or acts for you. The Train-click watcher on the company page only listens, then
+  refreshes the pill through the API.
+- The trains pill makes no timed call while the tab is hidden; it catches up when the tab is back.
+- The donator star and award icons right after your sidebar name are hidden to make room for the
+  icon.
 
 ## Verifying a change landed
 
