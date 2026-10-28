@@ -25,6 +25,14 @@ export function skillPrompt(md, report) {
   };
 }
 
+// Some free models (or their providers) mask names and places with a privacy placeholder such as
+// [ADDRESS] or [NAME]. A reply with an all-caps bracket token the prompt didn't have is treated as
+// a failed try, so the next model answers instead.
+export function placeholder(text, prompt) {
+  const sent = prompt.system + "\n" + prompt.user;
+  return (String(text).match(/\[[A-Z][A-Z_ ]{2,}\]/g) || []).find((t) => !sent.includes(t)) || "";
+}
+
 // fallback: what to return when no model answers (the raw report, or "" for /write).
 export async function answer(env, prompt, orKey, fallback) {
   const key = env.OPENROUTER_KEY || orKey;
@@ -50,7 +58,8 @@ export async function answer(env, prompt, orKey, fallback) {
       }
       const msg = j.choices && j.choices[0] && j.choices[0].message;
       const text = msg && msg.content ? String(msg.content).trim() : "";
-      if (res.ok && text) {
+      const masked = res.ok && text ? placeholder(text, prompt) : "";
+      if (res.ok && text && !masked) {
         tries.push([model, "ok"]);
         h.last = model;
         delete h.cool[model];
@@ -59,7 +68,7 @@ export async function answer(env, prompt, orKey, fallback) {
       }
       tries.push([model, res.status === 429 ? "rl" : "fail"]);
       h.cool[model] = Date.now() + COOL_MS;
-      errors.push(model + ": " + res.status + " " + ((j.error && j.error.message) || "empty reply"));
+      errors.push(model + ": " + (masked ? "masked text with " + masked : res.status + " " + ((j.error && j.error.message) || "empty reply")));
     } catch (e) {
       tries.push([model, "fail"]);
       h.cool[model] = Date.now() + COOL_MS;
