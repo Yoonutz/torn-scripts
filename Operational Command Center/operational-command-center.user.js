@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.7.15
+// @version      0.7.16
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each hands its skill file to a free OpenRouter model, the model runs the skill on a Cloudflare runner with your Torn key, and the result lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -20,7 +20,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.15';
+  const VERSION = '0.7.16';
   const KEY_OPEN = 'occ.open';
   const KEY_SKILL = 'occ.skill';
   const KEY_OR = 'occ.or_key';
@@ -28,6 +28,7 @@
   const KEY_TORN = 'occ.torn_key';
   const KEY_SKILLS = 'occ.skills';
   const PDA_KEY = '###PDA-APIKEY###';
+  const OWNER_ID = '2805199';
   const RUNNER = 'https://occ-runner.yoonutz.workers.dev';
   const RAW = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/';
   const OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -229,6 +230,7 @@
     .occ-trains.full{border-color:#7a2f2b}
     .occ-trains.full .n{color:#e5534b}
     .occ-trains.stale{opacity:.55}
+    .occ-trains.occ-none{display:none!important}
     .occ-trains.busy{animation:occ-tpulse 1s ease-in-out infinite}
     @keyframes occ-tpulse{50%{opacity:.35}}
     .occ-dock{display:flex;align-items:center;justify-content:flex-start;box-sizing:border-box;width:100%;margin:0;padding:3px 12px 0;background:transparent;pointer-events:none;position:relative;z-index:1}
@@ -541,6 +543,7 @@
       label: r.label,
       icon: safeIcon(r.icon) || '<span style="font:700 15px Verdana">' + esc(String(r.label || '?').charAt(0)) + '</span>',
       md: r.md,
+      access: r.access || 'full',
       tool: { name: 'run_script', path: '/run/' + r.id + '?', description: r.description || "Runs this skill's script on the runner and returns its printed output." },
     };
   }
@@ -781,7 +784,7 @@
     skills.forEach((s) => {
       const b = el('button', 'occ-tab', s.icon + '<span>' + esc(s.label) + '</span>');
       b.type = 'button';
-      b.title = s.label;
+      b.title = s.label + ' (needs a ' + s.access + ' key)';
       b.addEventListener('click', () => runSkill(s.id));
       btns[s.id] = b;
       tabs.appendChild(b);
@@ -885,9 +888,11 @@
     }
     const b = inlineButton();
     // Torn appends badges (donator star, awards) right after the name link. Ionuț wants
-    // only his icon there, so those badges are hidden and the button takes their spot.
+    // only his icon there, so on his own name those badges are hidden and the button takes
+    // their spot. Everyone else keeps their badges.
     let ref = a;
-    while (ref.nextElementSibling && !ref.nextElementSibling.matches('button,.occ-inline,a') && ref.nextElementSibling.getBoundingClientRect().width <= 24) {
+    const mine = new URLSearchParams(a.search || '').get('XID') === OWNER_ID;
+    while (mine && ref.nextElementSibling && !ref.nextElementSibling.matches('button,.occ-inline,a') && ref.nextElementSibling.getBoundingClientRect().width <= 24) {
       ref = ref.nextElementSibling;
       ref.style.display = 'none';
     }
@@ -926,6 +931,7 @@
   function trainsNext(c, key) {
     if (!c || typeof c.tried !== 'number' || c.kh !== trainsTail(key)) return 0;
     if (c.bad) return Infinity;
+    if (c.none) return c.tried + 86400000;
     const now = Date.now();
     if (c.tried < lastGrant(now)) return 0;
     let at = Math.min(lastGrant(now) + 86400000, c.tried + TRAINS_SAFETY);
@@ -976,6 +982,7 @@
       p.classList.toggle('hot', n > 0 && n < TRAINS_MAX);
       p.classList.toggle('stale', !has || !!(trains && trains.err));
       p.classList.toggle('busy', trainsBusy);
+      p.classList.toggle('occ-none', !!(trains && trains.none));
       if (p.innerHTML !== html) p.innerHTML = html;
       if (p.getAttribute('data-tip') !== tip) p.setAttribute('data-tip', tip);
     });
@@ -1106,7 +1113,10 @@
       try {
         j = JSON.parse(r.text);
       } catch (e) {}
-      if (j && j.error) {
+      if (j && j.error && (j.error.code === 6 || j.error.code === 7)) {
+        // Not in a company (wrong ID / ID-entity relation): same as not a director.
+        rec.none = true;
+      } else if (j && j.error) {
         const code = j.error.code;
         rec.err = TRAINS_ERR[code] || 'Torn error ' + code + (j.error.error ? ': ' + j.error.error : '');
         if (TRAINS_STOP.indexOf(code) !== -1) rec.bad = true;
@@ -1115,7 +1125,8 @@
         rec.n = j.profile.trains;
         rec.ts = Date.now();
       } else if (j && j.profile) {
-        rec.err = 'Key owner is not the company director';
+        // Not a company director: hide the pill and only look again once a day.
+        rec.none = true;
       } else {
         rec.err = 'Unexpected reply from Torn (HTTP ' + r.status + '): ' + String(r.text || '').slice(0, 60);
       }
@@ -1133,6 +1144,8 @@
     }
     if (rec.err) {
       say(rec.err + (net ? '. If Tampermonkey asked about api.torn.com, choose Always allow, then click again.' : ''), true);
+    } else if (rec.none) {
+      say('No company trains: this key is not a company director.');
     } else {
       say('Company trains: ' + rec.n + ' / ' + TRAINS_MAX + (rec.n >= TRAINS_MAX ? '. Full: daily trains are being lost.' : '.'));
     }
