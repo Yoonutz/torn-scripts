@@ -2,5 +2,6 @@
   "out": "operational-command-center.user.js",
   "header": "src/header.js",
   "shell": "occ",
-  "plugins": ["plugins/trains.js", "plugins/paid.js", "../Torn Maol Tracker/plugin.js", "plugins/keys.js"]
+  "plugins": ["plugins/trains.js", "plugins/paid.js", "../Torn Maol Tracker/plugin.js", "plugins/keys.js"],
+  "live": { "dir": "live", "url": "https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Operational%20Command%20Center/live/" }
 }

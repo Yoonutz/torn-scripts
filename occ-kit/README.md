@@ -8,6 +8,10 @@ build step makes two installable files from it:
 | Standalone `.user.js` | kit + this plug-in + small window | Greasy Fork, readable, one file (Torn PDA safe) |
 | Command Center | kit + every plug-in in its `occ.build.json` as tabs/badges | private, never on Greasy Fork |
 
+The Command Center build is live (`"live"` in its `occ.build.json`): the build also writes
+`live/occ.bundle.js` + `live/occ.manifest.json`, and the installed file runs the newest bundle it
+kept from GitHub (`shell/live.js`). Standalones never load remote code (Greasy Fork bans it).
+
 When both are installed, the standalone copy sees the Command Center already runs that plug-in
 (`<html data-occ-plugins="...">`) and steps aside, so nothing runs or calls the API twice.
 

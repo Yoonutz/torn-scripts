@@ -2,6 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
 import { mdToHtml, mdSections } from "../core/md.js";
@@ -138,4 +140,13 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
     { id: "3783283", name: "Keoholodeee", carry: 0, daily: false },
     { id: "9", name: "Alex", carry: 0, daily: true },
   ]);
+});
+
+test("live manifest names the bundle next to it, and the loader carries the same build", () => {
+  const dir = resolve(repo, "Operational Command Center");
+  const bundle = readFileSync(resolve(dir, "live/occ.bundle.js"), "utf8");
+  const m = JSON.parse(readFileSync(resolve(dir, "live/occ.manifest.json"), "utf8"));
+  assert.equal(createHash("sha256").update(bundle).digest("hex"), m.sha256);
+  assert.equal(m.sha256.slice(0, m.id.length), m.id);
+  assert.match(readFileSync(resolve(dir, "operational-command-center.user.js"), "utf8"), new RegExp("const OCC_BAKED = '" + m.id + "';"));
 });
