@@ -108,6 +108,11 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   assert.equal(P.parsePrice("600k"), 600000);
   assert.equal(P.parsePrice("$600,000"), 600000);
   assert.equal(P.parsePrice("0.6m"), 600000);
+  assert.deepEqual(P.parsePay("60m", 600000), { money: 60000000, trains: 100 });
+  assert.deepEqual(P.parsePay("100t", 600000), { money: 0, trains: 100 });
+  assert.deepEqual(P.parsePay("7 trains", 600000), { money: 0, trains: 7 });
+  assert.equal(P.parsePay("100k", 600000), null);
+  assert.equal(P.parsePay("abc", 600000), null);
   assert.equal(P.parsePrice("600000"), 600000);
   assert.equal(P.parsePrice("abc"), 0);
   assert.equal(P.parsePrice("5"), 0);

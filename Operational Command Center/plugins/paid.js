@@ -131,6 +131,16 @@ export function inbox(ledger, payments, staff) {
   return payments.filter((p) => p.ts >= ledger.since && who.has(p.emp) && !done.has(p.id));
 }
 
+// What you type to record a payment by hand: "60m", "$60,000,000" (money, trains at the price) or
+// "100t" / "100 trains" (trains straight). null when it does not read as either.
+export function parsePay(text, price) {
+  const t = /^\s*(\d+)\s*t(rains?)?\s*$/i.exec(String(text || ''));
+  if (t) return Number(t[1]) > 0 ? { money: 0, trains: Number(t[1]) } : null;
+  const m = parsePrice(text);
+  const trains = m && price ? Math.floor(m / price) : 0;
+  return trains > 0 ? { money: m, trains } : null;
+}
+
 // hold: payments you took back with Undo, never added on their own again.
 // "600k", "$600,000", "0.6m" -> 600000. 0 when it is not a usable price.
 export function parsePrice(text) {
@@ -543,7 +553,7 @@ function staffCard(b, snap) {
   const old = snap && snap.paidTrainsLeftByEmployee;
   const t = kit.el('div', 'occ-tbl');
   const table = kit.el('table');
-  table.innerHTML = '<tr><th>Name</th><th>Left</th><th>Last paid</th>' + (old ? '<th>Sheet</th>' : '') + '</tr>';
+  table.innerHTML = '<tr><th>Name</th><th title="Trains paid for">Paid</th><th title="Trains given">Used</th><th>Left</th><th>Last paid</th>' + (old ? '<th>Sheet</th>' : '') + '</tr>';
   const list = Object.values(b)
     .filter((x) => x.staff || x.left || x.daily)
     .sort((a, z) => Number(z.staff) - Number(a.staff) || a.left - z.left || a.name.localeCompare(z.name));
@@ -552,17 +562,17 @@ function staffCard(b, snap) {
     const num = '<span class="' + (x.left < 0 ? 'occ-pd-neg' : x.left > 0 ? 'occ-pd-pos' : '') + '">' + x.left + '</span>';
     const left = x.daily ? '<span class="occ-pd-d" title="Trained for free (pro bono)">Free</span>' : num;
     const sheet = old && Object.prototype.hasOwnProperty.call(old, x.name) ? kit.esc(String(old[x.name] === '' ? 0 : old[x.name])) : '';
-    tr.innerHTML = '<td><span class="occ-car">' + (open[x.id] ? '▼' : '▶') + '</span>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>' + (old ? '<td class="occ-muted">' + sheet + '</td>' : '');
+    tr.innerHTML = '<td><span class="occ-car">' + (open[x.id] ? '▼' : '▶') + '</span>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + (x.daily ? '-' : x.carry + x.paid) + '</td><td>' + x.used + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>' + (old ? '<td class="occ-muted">' + sheet + '</td>' : '');
     tr.addEventListener('click', () => {
       open[x.id] = !open[x.id];
       paintAll();
     });
     table.appendChild(tr);
-    if (open[x.id]) table.appendChild(detail(x, old ? 4 : 3));
+    if (open[x.id]) table.appendChild(detail(x, old ? 6 : 5));
   });
   t.appendChild(table);
   c.appendChild(t);
-  c.appendChild(kit.el('div', 'occ-muted', 'Tap a name to open or close it: adjust the balance, mark it free (pro bono), undo a payment.'));
+  c.appendChild(kit.el('div', 'occ-muted', 'Paid = trains paid for, Used = trains given, Left = Paid - Used. Tap a name to add a payment, mark it free (pro bono) or undo.'));
   return c;
 }
 
@@ -570,7 +580,8 @@ function detail(x, cols) {
   const tr = kit.el('tr', 'occ-pd-more');
   const td = kit.el('td');
   td.colSpan = cols;
-  td.appendChild(kit.el('div', 'occ-muted', x.daily ? 'Trained for free: ' + x.used + ' trains since ' + day(x.start) + ', nothing owed.' : 'Since ' + day(x.start) + ': start ' + x.carry + ' + ' + x.paid + ' paid - ' + x.used + ' given = ' + x.left));
+  td.appendChild(kit.el('div', 'occ-muted', x.daily ? 'Trained for free: ' + x.used + ' trains since ' + day(x.start) + ', nothing owed.' : 'Since ' + day(x.start) + ': ' + (x.carry ? 'start ' + x.carry + ' + ' : '') + x.paid + ' paid - ' + x.used + ' used = ' + x.left + ' left'));
+  if (!x.daily) td.appendChild(payField(x));
   const bar = kit.el('div', 'occ-pd-ctl');
   const edit = (fn) => (btn) =>
     act(btn, (l) => {
@@ -580,7 +591,10 @@ function detail(x, cols) {
       return l;
     });
   bar.appendChild(small(x.daily ? 'Free: yes' : 'Free: no', edit((e) => (e.daily = !e.daily)), x.daily ? 'go' : ''));
-  if (!x.daily) [-10, -1, 1, 10].forEach((d) => bar.appendChild(small((d > 0 ? '+' : '−') + Math.abs(d), (btn) => bump(x.id, x.name, x.start, d, btn))));
+  if (!x.daily) {
+    bar.appendChild(kit.el('span', 'occ-muted', 'Fix'));
+    [-1, 1].forEach((d) => bar.appendChild(small((d > 0 ? '+' : '−') + '1', (btn) => bump(x.id, x.name, x.start, d, btn))));
+  }
   bar.appendChild(
     small('✕ Close', () => {
       open[x.id] = false;
@@ -605,6 +619,43 @@ function detail(x, cols) {
   });
   tr.appendChild(td);
   return tr;
+}
+
+// Add payment: type what they paid ("60m") or the trains ("100t"). Saved as a payment dated now, so it
+// counts in Paid and shows in the list below with Undo.
+function payField(x) {
+  const row = kit.el('div', 'occ-pd-ctl');
+  row.appendChild(kit.el('span', 'occ-muted', 'Add payment'));
+  const input = kit.el('input', 'occ-field occ-pd-in');
+  input.type = 'text';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = '60m or 100t';
+  const hint = kit.el('span', 'occ-muted', '');
+  const price = doc.value.price || PRICE;
+  input.addEventListener('input', () => {
+    const v = parsePay(input.value, price);
+    hint.textContent = v ? '= ' + v.trains + ' trains' : '';
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+  row.appendChild(input);
+  const go = small('Add', () => {
+    const v = parsePay(input.value, price);
+    if (!v) return kit.toast.show(go, 'Type money like 60m or trains like 100t', true);
+    act(go, (l) => {
+      const e = (l.emp[x.id] = l.emp[x.id] || { name: x.name, carry: 0, start: x.start });
+      e.name = x.name;
+      l.pays.push({ id: 'm' + Date.now(), emp: x.id, ts: nowSec(), money: v.money || undefined, items: v.money ? undefined : 'by hand', trains: v.trains, manual: true });
+      l.pays.sort((a, b) => a.ts - b.ts);
+      return l;
+    }).then(() => kit.toast.show(go, 'Added ' + v.trains + ' trains'));
+  }, 'go');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') go.click();
+  });
+  row.appendChild(go);
+  row.appendChild(hint);
+  return row;
 }
 
 // Price per train: a themed text field (no native number spinner). Saved on the runner.
@@ -764,6 +815,7 @@ export default {
     #occ-root .occ-pd-txt{flex:1 1 160px;min-width:0;overflow-wrap:anywhere}
     #occ-root .occ-pd-ctl{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px}
     #occ-root .occ-pd-row .occ-pd-ctl{margin-top:0}
+    #occ-root .occ-pd-more .occ-pd-ctl{justify-content:flex-start}#occ-root .occ-pd-more .occ-pd-ctl>*{flex:none;width:auto}#occ-root .occ-pd-more .occ-pd-ctl>.shut{margin-left:auto}
     #occ-root .occ-pd-ctl>.occ-muted{margin-right:auto}
     #occ-root .occ-pd-b{height:22px;padding:0 8px;border-radius:4px;border:var(--occ-btn-border);background:var(--occ-btn-bg);color:var(--occ-btn-fg);text-shadow:var(--occ-btn-shadow);font:bold 11px/1 Arial,Helvetica,sans-serif;white-space:nowrap}
     #occ-root .occ-pd-b:hover{background:var(--occ-btn-hover-bg);color:var(--occ-btn-hover-fg)}

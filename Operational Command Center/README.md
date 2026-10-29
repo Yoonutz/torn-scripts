@@ -210,8 +210,11 @@ company employee list (desktop) and as the **Trains** tab.
 
 - Trains given: `company/news?cat=training` (the news links carry the XID, so renames don't break
   it). Payments: `user/events` lines "You were sent $X from <employee>". Staff: `company/employees`.
-- Left = start balance + paid trains since start - trains given since start. Price per train in
-  Setup (default $500,000). "D" = trains free daily. Negative = owes, in red.
+- Each row shows **Paid** (start balance + paid trains), **Used** (trains given) and **Left** (Paid -
+  Used), all since tracking began. Price per train in Setup. **Free** = trained pro bono, nothing
+  owed. Negative = owes, in red.
+- Paid outside the events feed? Open the row, type `60m` (money, trains at the price) or `100t`
+  (trains) in **Add payment**. **Fix -1 / +1** nudges the start balance.
 - New payments from staff land in the tab: money becomes `amount / price` trains with one tap, items
   get a trains count picked with -/+ buttons, or **Not trains**. Payments whose message mentions
   "train" are added on their own (Setup can turn that off). Undo puts a payment back in the list.
