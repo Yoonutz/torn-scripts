@@ -250,10 +250,28 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 | Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill and tab: Limited. |
 | Who can use   | Private: the runner only serves the owner's player ID; any other key is refused server side.             |
 
+## Live tabs (no reinstall per fix)
+
+The installed file is a loader with every tab built in. At most every 10 minutes it reads
+`live/occ.manifest.json` from this repo (raw.githubusercontent.com); when the build there is new it
+downloads `live/occ.bundle.js`, checks its sha256 and keeps it. The next Torn page runs the kept
+build. So a push to `main` reaches the player about 5 minutes later (GitHub's cache), on a refresh,
+with no version bump.
+
+- The title bar shows `v<installed version> · <build id>`, the id is the start of the bundle's
+  sha256 (`live/occ.manifest.json`).
+- A kept build that fails to compile or start is dropped; the built-in copy runs from the next page.
+- Raise `@version` in `src/header.js` only when the header changes (a new `@grant` or `@connect`)
+  or `occ-kit/shell/live.js` does. Those need the new file installed.
+- Needs eval. Violentmonkey allows it only with `@inject-into content` (Torn's page rules block it
+  in the page); Torn PDA allows it as is. Probe results (29 Oct 2026): `tools/occ-loader-probe/`.
+
 ## Compliance
 
 - Only Torn API calls (`api.torn.com`) plus the runner (which talks to OpenRouter). No page
   scraping, no extra requests to torn.com.
+- The tabs' code is loaded from this repo on GitHub (see Live tabs). That request carries no Torn
+  data and no key.
 - Never clicks or acts for you. The Train-click watcher on the company page only listens, then
   refreshes the pill through the API.
 - The trains pill makes no timed call while the tab is hidden; it catches up when the tab is back.

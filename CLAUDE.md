@@ -15,6 +15,9 @@ Invoke via the Skill tool when the task matches. Scripts run from the repo root;
 One commit per push. Raise the last number of `// @version` in the same commit as the change
 (`1.2.0` -> `1.2.1`), with that commit's message as the changelog. A changed script with the same `@version`
 never reaches installed users.
+Exception, Operational Command Center: its tabs load live from `Operational Command Center/live/`,
+so a rebuilt OCC goes out without a bump. Raise its `@version` only when `src/header.js` or
+`occ-kit/shell/live.js` changes.
 
 ## Commits
 

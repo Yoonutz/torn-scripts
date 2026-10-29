@@ -3,14 +3,19 @@
 //   node occ-kit/build.mjs --check   fail if a committed .user.js is not what its sources build
 //
 // occ.build.json (paths relative to that folder):
-//   { "out": "x.user.js", "header": "src/header.js", "shell": "occ" | "standalone", "plugins": ["plugins/a.js"] }
+//   { "out": "x.user.js", "header": "src/header.js", "shell": "occ" | "standalone", "plugins": ["plugins/a.js"],
+//     "live": { "dir": "live", "url": "https://raw.githubusercontent.com/.../live/" } }
+// "live" (Command Center only): the build also writes <dir>/occ.bundle.js (the script without its
+// header) and <dir>/occ.manifest.json (its id and sha256), and the .user.js becomes a loader that
+// runs the newest bundle kept from that URL, with this build's copy built in (shell/live.js).
 //
 // How a file is put together: every core module the shell and plug-ins import is inlined once, in
 // dependency order, with its import lines and export keywords removed (top-level names must be
 // unique across core, the build checks). Each plug-in is wrapped in its own function scope, so its
 // own helpers never collide; its `export default` becomes the value the shell receives. The result
 // is one readable file: Torn PDA and Greasy Fork need no @require.
-import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve, dirname, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,13 +78,11 @@ function buildTarget(dir, cfg) {
   });
 
   const parts = [];
-  parts.push(header);
-  parts.push('');
-  parts.push('// Built by occ-kit/build.mjs from the sources named below. Edit those, then rebuild.');
   parts.push('(function () {');
   parts.push("  'use strict';");
   parts.push('');
-  parts.push("const VERSION = '" + ver + "';");
+  // A live bundle shows which build runs next to the installed version (OCC_BUILD comes from live.js).
+  parts.push(cfg.live ? "const VERSION = '" + ver + "' + (typeof OCC_BUILD === 'string' ? ' \\u00b7 ' + OCC_BUILD : '');" : "const VERSION = '" + ver + "';");
   order.forEach((f) => {
     parts.push('');
     parts.push('// ---- ' + rel(f));
@@ -103,13 +106,47 @@ function buildTarget(dir, cfg) {
   parts.push('');
   parts.push('boot([' + ids.join(', ') + ']);');
   parts.push('})();');
-  parts.push('');
-  const text = parts.join('\n');
+  const body = parts.join('\n');
+  const files = [];
+  let text;
+  if (cfg.live) {
+    const bundle = body + '\n';
+    const sha = createHash('sha256').update(bundle).digest('hex');
+    const id = sha.slice(0, 6);
+    const ldir = resolve(dir, cfg.live.dir);
+    files.push({ path: join(ldir, 'occ.bundle.js'), text: bundle });
+    files.push({ path: join(ldir, 'occ.manifest.json'), text: JSON.stringify({ id, version: ver, sha256: sha, bytes: Buffer.byteLength(bundle) }, null, 2) + '\n' });
+    text = [
+      header,
+      '',
+      '// Built by occ-kit/build.mjs from the sources named below. Edit those, then rebuild.',
+      '// Loader: runs the newest build kept from GitHub, else the copy built in below (occ-kit/shell/live.js).',
+      '(function () {',
+      "  'use strict';",
+      '',
+      "const OCC_BAKED = '" + id + "';",
+      "const OCC_LIVE_URL = '" + cfg.live.url + "';",
+      '',
+      'function occBaked(GM_xmlhttpRequest, GM_getValue, GM_setValue, GM_deleteValue, OCC_BUILD) {',
+      body,
+      '}',
+      '',
+      '// ---- ' + rel(resolve(here, 'shell', 'live.js')),
+      readFileSync(resolve(here, 'shell', 'live.js'), 'utf8').trimEnd(),
+      '})();',
+      '',
+    ].join('\n');
+  } else {
+    text = [header, '', '// Built by occ-kit/build.mjs from the sources named below. Edit those, then rebuild.', body, ''].join('\n');
+  }
+  files.unshift({ path: resolve(dir, cfg.out), text });
   // Torn PDA turns every curly quote in a script into a straight one before running it, so one
   // inside a JS string silently breaks the whole script there. Use \u2019 etc. instead.
-  const curly = text.split('\n').findIndex((l) => /[\u2018\u2019\u201C\u201D]/.test(l));
-  if (curly !== -1) throw new Error(rel(dir) + ': curly quote on built line ' + (curly + 1) + ' (Torn PDA rewrites them): use \\u2018/\\u2019/\\u201C/\\u201D');
-  return { text, ver };
+  files.forEach((f) => {
+    const curly = f.text.split('\n').findIndex((l) => /[\u2018\u2019\u201C\u201D]/.test(l));
+    if (curly !== -1) throw new Error(rel(f.path) + ': curly quote on built line ' + (curly + 1) + ' (Torn PDA rewrites them): use \\u2018/\\u2019/\\u201C/\\u201D');
+  });
+  return { files, ver };
 }
 
 function targets() {
@@ -125,18 +162,20 @@ function targets() {
 
 let failed = false;
 for (const { dir, cfg } of targets()) {
-  const out = resolve(dir, cfg.out);
-  const { text, ver } = buildTarget(dir, cfg);
-  const kb = (Buffer.byteLength(text) / 1024).toFixed(1);
-  if (check) {
-    const cur = existsSync(out) ? readFileSync(out, 'utf8') : '';
-    if (cur !== text) {
-      failed = true;
-      console.error('stale: ' + rel(out) + ' (run node occ-kit/build.mjs and commit the result)');
-    } else console.log('ok    ' + rel(out) + ' v' + ver + ' ' + kb + ' KB');
-  } else {
-    writeFileSync(out, text);
-    console.log('built ' + rel(out) + ' v' + ver + ' ' + kb + ' KB');
+  const { files, ver } = buildTarget(dir, cfg);
+  for (const { path: out, text } of files) {
+    const kb = (Buffer.byteLength(text) / 1024).toFixed(1);
+    if (check) {
+      const cur = existsSync(out) ? readFileSync(out, 'utf8') : '';
+      if (cur !== text) {
+        failed = true;
+        console.error('stale: ' + rel(out) + ' (run node occ-kit/build.mjs and commit the result)');
+      } else console.log('ok    ' + rel(out) + ' v' + ver + ' ' + kb + ' KB');
+    } else {
+      mkdirSync(dirname(out), { recursive: true });
+      writeFileSync(out, text);
+      console.log('built ' + rel(out) + ' v' + ver + ' ' + kb + ' KB');
+    }
   }
 }
 if (failed) process.exit(1);
