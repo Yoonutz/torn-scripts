@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OCC Loader Probe
 // @namespace    Torn.OCC-Loader-Probe
-// @version      1.0.0
+// @version      1.0.1
 // @description  One-off test: can this browser fetch script code from GitHub, keep it and run it? Tap the probe pill, screenshot the result, then uninstall. Makes no Torn requests.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -13,6 +13,7 @@
 // @grant        GM_info
 // @connect      raw.githubusercontent.com
 // @run-at       document-idle
+// @inject-into  content
 // ==/UserScript==
 
 // Tests what a "thin loader" Command Center would need: fetch code from GitHub, store it, compile
