@@ -9,10 +9,13 @@ import { RUNNER } from '../../occ-kit/core/ai.js';
 
 const KEY_HIST = 'occ.keys.hist';
 const KEY_LOCK = 'occ.keys.lock';
+const KEY_TRY = 'occ.keys.try';
 const TORN_CAP = 100; // calls per minute, per player, all keys together
 const AI_CAP = 1000; // free model requests per UTC day (account bought credits once)
 const SAMPLE_MS = 30 * 60000;
 const LOCK_MS = 60000;
+const RETRY_MS = 5 * 60000; // after a failed read
+const FORCE_MS = 20000; // Refresh never reads the log more often than this
 const DAYS = 14;
 const MIN_KEEP = 3 * 3600; // seconds of per-minute counts kept to merge peaks across samples
 
@@ -37,8 +40,8 @@ export function mergeLog(hist, log, now) {
   const self = (list.find((x) => x.type === 'key' && x.selections === 'log') || {}).ip;
   const oldest = Math.min(...list.map((x) => x.timestamp));
   if (h.edge.ts && oldest > h.edge.ts && list.length >= 100) {
-    for (let t = h.edge.ts; t <= oldest; t += 86400) (h.days[dayOf(t)] = h.days[dayOf(t)] || { n: 0, peak: 0, src: {} }).gap = true;
-    h.days[dayOf(oldest)].gap = true;
+    // Every day from the last call seen to the oldest one now, both ends included.
+    for (let t = Math.floor(h.edge.ts / 86400) * 86400; t <= oldest; t += 86400) (h.days[dayOf(t)] = h.days[dayOf(t)] || { n: 0, peak: 0, src: {} }).gap = true;
   }
   const fresh = list.filter((x) => x.timestamp > h.edge.ts || (x.timestamp === h.edge.ts && h.edge.sigs.indexOf(sig(x)) === -1));
   fresh.forEach((x) => {
@@ -67,16 +70,22 @@ export function mergeLog(hist, log, now) {
   return h;
 }
 
+// Every read is logged with its time, success or not, so a failing read can never turn into a
+// read on every Torn page load: next try after SAMPLE_MS, RETRY_MS after a failure.
 async function sample(force) {
   const now = Date.now();
   const hist = kit.vault.get(KEY_HIST, null);
-  if (!force && hist && now - hist.last < SAMPLE_MS) return hist;
-  if (!force && now - kit.store.get(KEY_LOCK, 0) < LOCK_MS) return hist;
+  const tried = kit.store.get(KEY_TRY, { at: 0, ok: true });
+  const wait = force ? FORCE_MS : tried.ok ? SAMPLE_MS : RETRY_MS;
+  if (now - tried.at < wait || (!force && hist && now - hist.last < SAMPLE_MS)) return hist;
+  if (now - kit.store.get(KEY_LOCK, 0) < LOCK_MS) return hist;
   kit.store.set(KEY_LOCK, now);
+  kit.store.set(KEY_TRY, { at: now, ok: false });
   try {
     const j = await kit.torn('key/log?limit=100&comment=OCC');
     const merged = mergeLog(kit.vault.get(KEY_HIST, null), j.log, Date.now());
     kit.vault.set(KEY_HIST, merged);
+    kit.store.set(KEY_TRY, { at: now, ok: true });
     return merged;
   } finally {
     kit.store.del(KEY_LOCK);
@@ -191,7 +200,8 @@ async function mount(view, k, opt) {
   const orToday = u && u.live && typeof u.live.used === 'number' ? u.live : null;
   const aiUsed = orToday ? orToday.used : null;
   const aiCap = (orToday && orToday.limit) || AI_CAP;
-  const peak14 = h ? Math.max(0, ...days.map((d) => (h.days[d] ? h.days[d].peak : 0))) : 0;
+  const peakDay = h ? days.reduce((a, d) => (h.days[d] && h.days[d].peak > ((h.days[a] || {}).peak || 0) ? d : a), days[DAYS - 1]) : days[DAYS - 1];
+  const peak14 = h && h.days[peakDay] ? h.days[peakDay].peak : 0;
   const aiTop = u ? Math.max(0, ...(u.days || []).map((d) => (d.or && d.or.used) || 0)) : 0;
   const tl = level(peak14 / TORN_CAP);
   const al = level(Math.max(aiTop, aiUsed || 0) / aiCap);
@@ -200,8 +210,10 @@ async function mount(view, k, opt) {
     { k: 'Torn calls today', v: fmt(today.n) },
     { k: 'AI free today', v: aiUsed === null ? '?' : fmt(aiUsed), unit: ' / ' + fmt(aiCap), hot: al !== 'good' },
   ]);
-  const say = { good: 'plenty of room', warn: 'getting busy', bad: 'near the cap: poll less or spread calls out' };
-  view.meta('<span class="occ-kv-' + tl + '">Torn: ' + say[tl] + '</span> · <span class="occ-kv-' + al + '">AI: ' + say[al] + '</span>');
+  const say = { good: 'plenty of room', warn: 'getting busy', bad: 'near the cap' };
+  // Say which minute set the Torn verdict, so a busy day earlier in the 14 never reads as today.
+  const tornWhy = tl === 'good' ? '' : ', busiest minute ' + peak14 + '/' + TORN_CAP + (peakDay === days[DAYS - 1] ? ' today' : ' on ' + new Date(peakDay).toUTCString().slice(5, 11));
+  view.meta('<span class="occ-kv-' + tl + '">Torn: ' + say[tl] + tornWhy + '</span> · <span class="occ-kv-' + al + '">AI: ' + say[al] + '</span>');
   const wrap = kit.el('div');
   if (hist && hist.err) wrap.appendChild(kit.ui.errCard('Torn key log failed', hist.err));
   wrap.appendChild(tornCard(h, days));
