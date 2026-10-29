@@ -60,6 +60,19 @@ test("Keys tab merges Torn key logs without double counting and flags missed cal
   assert.equal(h.days[day].gap, true);
 });
 
+test("Keys tab: a missed stretch across midnight marks every day and never throws", async () => {
+  const { mergeLog } = await import("../../Operational Command Center/plugins/keys.js");
+  const last = Date.UTC(2026, 9, 28, 23, 0, 0) / 1000;
+  const e = (ts) => ({ timestamp: ts, type: "user", selections: "bars", id: 1, ip: "1.x", comment: null });
+  let h = mergeLog(null, [e(last)], last * 1000);
+  // Next read the following morning, 100 calls all after the last one seen (the 0.8.19 crash).
+  const full = Array.from({ length: 100 }, (_, i) => e(last + 9 * 3600 + i * 20));
+  h = mergeLog(h, full, (last + 10 * 3600) * 1000);
+  assert.equal(h.days["2026-10-28"].gap, true);
+  assert.equal(h.days["2026-10-29"].gap, true);
+  assert.equal(h.days["2026-10-29"].n, 100);
+});
+
 test("Trains tab: parses Torn news and events, counts paid trains left per employee", async () => {
   const P = await import("../../Operational Command Center/plugins/paid.js");
   const tr = P.parseTraining({ id: "a1", timestamp: 200, text: "Consultant <a href = http://www.torn.com/profiles.php?XID=2239897>Hookah12</a> has been trained by the director" });
