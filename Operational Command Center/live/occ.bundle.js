@@ -1613,11 +1613,12 @@ function paintPage() {
   if (!onCompany() || !document.querySelector('.d .manage-company')) return;
   const header = document.querySelector('ul.employee-list-title.bold');
   const rows = document.querySelectorAll('ul.employee-list li[data-user]');
-  if (!header || !rows.length) return;
+  if (!rows.length) return;
   // Phones (Torn PDA) keep the .d class but hide the column titles and squeeze the list: no column
   // there, and never widen the page, or the whole page shrinks to fit 1018px on a narrow screen.
-  const tr = header.querySelector('li.train');
-  if (!tr || !tr.offsetWidth || innerWidth < 1018) return;
+  // A small Paid badge goes after each name instead.
+  const tr = header && header.querySelector('li.train');
+  if (!tr || !tr.offsetWidth || innerWidth < 1018) return paintPhone(rows);
   // The old Companion's own column (.paid-trains) is hidden by the CSS below while this one is on.
   document.documentElement.classList.add('occ-paid-on');
   if (!header.querySelector('li.occ-paid')) {
@@ -1652,6 +1653,26 @@ function paintPage() {
   if (main && main.style.width !== '1018px') main.style.width = '1018px';
 }
 
+function paintPhone(rows) {
+  const b = view();
+  rows.forEach((row) => {
+    let v = row.querySelector('.occ-paid-m');
+    if (!v) {
+      const link = Array.from(row.querySelectorAll('a[href*="XID="]')).find((a) => a.offsetWidth);
+      if (!link) return;
+      v = kit.el('span', 'occ-paid-m');
+      link.after(v);
+    }
+    const x = b && b[row.getAttribute('data-user')];
+    const t = cellText(x);
+    if (v.textContent !== t) v.textContent = t;
+    v.classList.toggle('neg', !!x && x.left < 0);
+    v.classList.toggle('daily', !!x && x.daily);
+    v.classList.toggle('stale', busy || !!errs.news);
+    v.title = cellTip(x);
+  });
+}
+
 function watchPage() {
   let queued = false;
   new MutationObserver(() => {
@@ -1660,8 +1681,10 @@ function watchPage() {
     requestAnimationFrame(() => {
       queued = false;
       const h = document.querySelector('ul.employee-list-title.bold');
-      if (!h) return;
-      const missing = !h.querySelector('li.occ-paid') || Array.from(document.querySelectorAll('ul.employee-list li[data-user] .acc-body')).some((b) => !b.querySelector('.occ-paid'));
+      if (!document.querySelector('ul.employee-list li[data-user]')) return;
+      // Phones never get li.occ-paid, so this repaints there on each change; paintPhone only writes
+      // when a badge is missing or its value changed, so it settles.
+      const missing = !h || !h.querySelector('li.occ-paid') || Array.from(document.querySelectorAll('ul.employee-list li[data-user] .acc-body')).some((b) => !b.querySelector('.occ-paid'));
       if (missing) paintPage();
     });
   }).observe(document.body, { childList: true, subtree: true });
@@ -2064,6 +2087,8 @@ return {
     .d .manage-company .employees .employee-list .occ-paid .occ-paid-v.neg{color:var(--default-red-color,#E54C19);font-weight:bold}
     .d .manage-company .employees .employee-list .occ-paid .occ-paid-v.stale{opacity:.55}
     .occ-paid-on .d .manage-company .paid-trains{display:none!important}
+    .occ-paid-m{display:inline-block;margin-left:6px;padding:0 4px;border:1px solid var(--default-panel-divider-outer-side-color,#444);border-radius:3px;font:bold 11px/14px Arial,sans-serif;color:var(--default-color,#ccc);vertical-align:middle;font-variant-numeric:tabular-nums}
+    .occ-paid-m.neg{color:var(--default-red-color,#E54C19)}.occ-paid-m.daily{color:var(--default-green-color,#82c91e)}.occ-paid-m.stale{opacity:.55}.occ-paid-on .occ-paid-m{display:none}
     .occ-paid-on .d .manage-company .company-tabs>li a{width:194.5px!important}
     .occ-paid-on .d .company-wrap .company-stats-list>li{width:273.33px!important}
     #occ-root .occ-pd-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--occ-div-dark);box-shadow:inset 0 1px 0 var(--occ-div-light);min-width:0;flex-wrap:wrap}
