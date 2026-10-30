@@ -128,6 +128,9 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   assert.deepEqual(P.parsePay("7 trains", 600000), { money: 0, trains: 7 });
   assert.equal(P.parsePay("100k", 600000), null);
   assert.equal(P.parsePay("abc", 600000), null);
+  const pd = P.perDay([["a", 86400 * 10 + 5, "7"], ["b", 86400 * 10 + 9, "7"], ["c", 86400 * 12, "7"], ["d", 86400 * 12, "8"]], "7", 86400 * 9, 86400 * 12 + 100, 7);
+  assert.deepEqual(pd.map((d) => d.n), [0, 2, 0, 1]);
+  assert.equal(P.perDay([], "7", 0, 86400 * 30, 7).length, 7);
   assert.equal(P.parsePrice("600000"), 600000);
   assert.equal(P.parsePrice("abc"), 0);
   assert.equal(P.parsePrice("5"), 0);
