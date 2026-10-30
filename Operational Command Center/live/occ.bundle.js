@@ -1245,6 +1245,7 @@ const EMP_GAP = 6 * 3600000;
 const LOCK_MS = 30000;
 const PAGES = 40;
 const AFTER_TRAIN = [4000, 15000];
+const WDAY = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 let kit = null;
@@ -1256,6 +1257,7 @@ let errs = {};
 let busy = false;
 let tabView = null;
 let open = {}; // employee rows expanded in the tab
+let allPays = {}; // employee rows showing every payment, not just the last 3
 let steps = {}; // trains picked for item payments in the inbox
 let pricing = false; // price editor open in the tab
 
@@ -1350,6 +1352,21 @@ function inbox(ledger, payments, staff) {
   const who = new Set(Object.keys(ledger.emp).concat((staff || []).map((s) => s.id)));
   const done = new Set(ledger.pays.map((p) => p.id).concat(ledger.skip));
   return payments.filter((p) => p.ts >= ledger.since && who.has(p.emp) && !done.has(p.id));
+}
+
+// Trains given to one employee on each of the last n UTC days (Torn days), oldest first. Days before
+// tracking began for them are left out, so a short history is not padded with zeros.
+function perDay(trainings, id, start, now, n) {
+  const today = Math.floor(now / 86400);
+  const first = Math.max(today - n + 1, Math.floor(start / 86400));
+  const out = [];
+  for (let d = first; d <= today; d++) out.push({ d: d * 86400, n: 0 });
+  trainings.forEach((t) => {
+    if (t[2] !== id || t[1] < start) return;
+    const i = Math.floor(t[1] / 86400) - first;
+    if (i >= 0 && i < out.length) out[i].n++;
+  });
+  return out;
 }
 
 // What you type to record a payment by hand: "60m", "$60,000,000" (money, trains at the price) or
@@ -1597,6 +1614,10 @@ function paintPage() {
   const header = document.querySelector('ul.employee-list-title.bold');
   const rows = document.querySelectorAll('ul.employee-list li[data-user]');
   if (!header || !rows.length) return;
+  // Phones (Torn PDA) keep the .d class but hide the column titles and squeeze the list: no column
+  // there, and never widen the page, or the whole page shrinks to fit 1018px on a narrow screen.
+  const tr = header.querySelector('li.train');
+  if (!tr || !tr.offsetWidth || innerWidth < 1018) return;
   // The old Companion's own column (.paid-trains) is hidden by the CSS below while this one is on.
   document.documentElement.classList.add('occ-paid-on');
   if (!header.querySelector('li.occ-paid')) {
@@ -1823,7 +1844,17 @@ function detail(x, cols) {
     }, 'shut')
   );
   td.appendChild(bar);
-  const pays = doc.value.pays.filter((p) => p.emp === x.id).slice(-3).reverse();
+  const days = perDay((news && news.list) || [], x.id, x.start, nowSec(), 7);
+  if (days.length) td.appendChild(kit.el('div', 'occ-pd-days', '<span class="occ-muted">Trains a day</span> ' + days.map((d) => '<span title="' + day(d.d) + '"><i>' + WDAY[new Date(d.d * 1000).getUTCDay()] + '</i>' + d.n + '</span>').join('')));
+  const mine = doc.value.pays.filter((p) => p.emp === x.id);
+  const pays = (allPays[x.id] ? mine : mine.slice(-3)).slice().reverse();
+  if (mine.length > 3)
+    td.appendChild(
+      small(allPays[x.id] ? 'Last 3 payments' : 'All ' + mine.length + ' payments', () => {
+        allPays[x.id] = !allPays[x.id];
+        paintAll();
+      })
+    );
   pays.forEach((p) => {
     const r = kit.el('div', 'occ-pd-row');
     r.appendChild(kit.el('div', 'occ-pd-txt', day(p.ts) + ' · ' + (p.money ? money(p.money) : kit.esc(p.items || '')) + ' = ' + p.trains + ' trains' + (p.auto ? ' <span class="occ-muted">(auto)</span>' : '')));
@@ -1945,7 +1976,10 @@ function render(v) {
     { k: 'To check', v: String(list.length), hot: list.length > 0 },
   ]);
   const at = kit.store.get(KEY_LAST, 0);
-  v.meta((busy ? 'Syncing… · ' : at ? 'Synced ' + ago(at) + ' · ' : '') + '<button type="button" class="occ-pd-price" title="Change the price per train">' + money(l.price || PRICE) + ' a train ✎</button>');
+  // Company trains in the bank: the Trains pill keeps the count in the same store.
+  const bank = kit.store.get('occ.trains', null);
+  const bankTxt = bank && typeof bank.n === 'number' ? '<span title="Company trains in the bank (max 20)">Company ' + bank.n + '/20</span> · ' : '';
+  v.meta(bankTxt + (busy ? 'Syncing… · ' : at ? 'Synced ' + ago(at) + ' · ' : '') + '<button type="button" class="occ-pd-price" title="Change the price per train">' + money(l.price || PRICE) + ' a train ✎</button>');
   const pb = document.querySelector('#occ-root .occ-pd-price');
   if (pb)
     pb.addEventListener('click', () => {
@@ -2034,6 +2068,7 @@ return {
     .occ-paid-on .d .company-wrap .company-stats-list>li{width:273.33px!important}
     #occ-root .occ-pd-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--occ-div-dark);box-shadow:inset 0 1px 0 var(--occ-div-light);min-width:0;flex-wrap:wrap}
     #occ-root .occ-pd-txt{flex:1 1 160px;min-width:0;overflow-wrap:anywhere}
+    #occ-root .occ-pd-days{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin-top:4px}#occ-root .occ-pd-days>span:not(.occ-muted){font-weight:700}#occ-root .occ-pd-days i{font-style:normal;font-weight:400;color:var(--occ-muted,#999);margin-right:3px}
     #occ-root .occ-pd-ctl{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px}
     #occ-root .occ-pd-row .occ-pd-ctl{margin-top:0}
     #occ-root .occ-pd-more .occ-pd-ctl{justify-content:flex-start}#occ-root .occ-pd-more .occ-pd-ctl>*{flex:none;width:auto}#occ-root .occ-pd-more .occ-pd-ctl>.shut{margin-left:auto}
