@@ -8,7 +8,7 @@ import { tornKey, KEY_TORN } from '../core/torn.js';
 import { ai, KEY_OR, RUNNER } from '../core/ai.js';
 import { injectTheme } from '../core/theme.js';
 import { frameCss, trapScroll } from '../core/frame.js';
-import { errCard, accordion, fillStats, keyField, button } from '../core/ui.js';
+import { errCard, accordion, fillStats, keyField, button, panelField, applyHeight } from '../core/ui.js';
 import { mdToHtml, mdSections } from '../core/md.js';
 import { makeKit } from '../core/kit.js';
 
@@ -272,10 +272,14 @@ export function boot(plugins) {
     if (note) wrap.appendChild(el('div', 'occ-card occ-err', esc(note)));
     const c1 = el('div', 'occ-card');
     keyField(c1, { key: KEY_OR, title: 'OpenRouter key', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. The runner sends skill reports (your money, networth, company numbers) to free OpenRouter models only, which may log them.', empty: 'Optional. Without it you get the raw report. With it, free OpenRouter models (never paid ones) write the answer; they may log the report.' });
-    wrap.appendChild(c1);
     const c2 = el('div', 'occ-card');
-    keyField(c2, { key: KEY_TORN, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in Tampermonkey storage; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
+    keyField(c2, { key: KEY_TORN, fallback: tornKey, title: 'Torn API token', placeholder: 'Torn API key (full access)', saved: 'Token saved in Tampermonkey storage; sent to the runner per run, never stored there.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No token yet. The runner pulls your live numbers with it; it is never stored server side.' });
+    // Torn key first: it is the one every tab needs.
     wrap.appendChild(c2);
+    wrap.appendChild(c1);
+    const cp = el('div', 'occ-card');
+    panelField(cp, win);
+    wrap.appendChild(cp);
     plugins.forEach((p) => {
       if (typeof p.settings !== 'function') return;
       const c = el('div', 'occ-card');
@@ -623,6 +627,7 @@ export function boot(plugins) {
     tabBar = el('div', 'occ-tabs');
     win.appendChild(tabBar);
     root.appendChild(win);
+    applyHeight(win);
     trapScroll(win);
 
     renderTabs();

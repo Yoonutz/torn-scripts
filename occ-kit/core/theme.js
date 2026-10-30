@@ -97,6 +97,10 @@ export function themeCss(R) {
     ${R} .occ-cancel{margin-left:auto}
     ${R} .occ-field{display:block;width:100%;height:30px;padding:0 9px;margin:7px 0 2px;border:1px solid var(--occ-input-border);border-radius:5px;background:var(--occ-input-bg);color:var(--occ-input-fg);font:12px/1 Arial,Helvetica,sans-serif;outline:none;appearance:none;-webkit-appearance:none;color-scheme:light}
     body.dark-mode ${R} .occ-field{color-scheme:dark}
+    ${R} .occ-keystat{display:inline-block;margin:2px 0 4px;padding:2px 8px;border-radius:4px;font:bold 12px/1.4 Arial,Helvetica,sans-serif}
+    ${R} .occ-keystat.ok{color:var(--occ-good);background:var(--occ-good-bg)}
+    ${R} .occ-keystat.no{color:var(--occ-bad);background:var(--occ-bad-bg)}
+    ${R} .occ-hval{min-width:44px;text-align:center;font-weight:bold;font-variant-numeric:tabular-nums}
     ${R} .occ-field:hover{border-color:var(--occ-input-hover-border)}
     ${R} .occ-field:focus{border-color:var(--occ-input-focus-border);box-shadow:var(--occ-input-focus-shadow)}
     ${R} .occ-field::placeholder{color:var(--occ-muted)}

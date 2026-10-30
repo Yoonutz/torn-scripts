@@ -9,7 +9,7 @@ import { tornKey, KEY_TORN } from '../core/torn.js';
 import { KEY_OR } from '../core/ai.js';
 import { injectTheme } from '../core/theme.js';
 import { frameCss, trapScroll } from '../core/frame.js';
-import { errCard, fillStats, keyField, button } from '../core/ui.js';
+import { errCard, fillStats, keyField, button, panelField, applyHeight } from '../core/ui.js';
 import { makeKit } from '../core/kit.js';
 
 const SOLO_WAIT = 1500; // the Command Center runs at document-idle too: give it time to claim its plug-ins
@@ -78,13 +78,16 @@ export function boot(plugins) {
     fillStats(statsRow, null);
     const wrap = el('div');
     const c1 = el('div', 'occ-card');
-    keyField(c1, { key: KEY_TORN, title: 'Torn API key', placeholder: 'Torn API key (' + (p.access || 'minimal') + ' access)', saved: 'Key saved in Tampermonkey storage, used only for Torn API calls from your browser.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No key yet. Needs ' + (p.access || 'minimal') + ' access.' });
+    keyField(c1, { key: KEY_TORN, fallback: tornKey, title: 'Torn API key', placeholder: 'Torn API key (' + (p.access || 'minimal') + ' access)', saved: 'Key saved in Tampermonkey storage, used only for Torn API calls from your browser.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No key yet. Needs ' + (p.access || 'minimal') + ' access.' });
     wrap.appendChild(c1);
     if (p.ai) {
       const c2 = el('div', 'occ-card');
       keyField(c2, { key: KEY_OR, title: 'OpenRouter key (AI)', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. Only free models are called; they may log what is sent.', empty: 'Optional, for AI answers. Only free OpenRouter models are ever called with it.' });
       wrap.appendChild(c2);
     }
+    const cp = el('div', 'occ-card');
+    panelField(cp, win);
+    wrap.appendChild(cp);
     if (typeof p.settings === 'function') {
       const c3 = el('div', 'occ-card');
       p.settings(c3, kit);
@@ -133,6 +136,7 @@ export function boot(plugins) {
     main = el('div', 'occ-main occ-scroll');
     win.appendChild(main);
     root.appendChild(win);
+    applyHeight(win);
     trapScroll(win);
     const toggle = () => setOpen(!win.classList.contains('occ-on'));
     if (typeof p.launcher === 'function') p.launcher(kit, toggle);
