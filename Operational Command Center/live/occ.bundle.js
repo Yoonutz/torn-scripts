@@ -493,10 +493,11 @@ function injectTheme(root, R, extra) {
 
 // ---- occ-kit/core/frame.js
 // The floating window both shells draw: title-bar header, stats row, scrolling body, tab bar.
-// Phone: fills the screen with a 10px margin. Desktop: 420x640, bottom right.
+// Phone: fills the screen with an 8px margin, above Torn's sticky header and footer bars (they
+// covered the title bar and its close button in Torn PDA). Desktop: 420x640, bottom right.
 function frameCss(R) {
   return `
-  ${R} .occ-win{position:fixed;top:10px;left:10px;right:10px;bottom:10px;z-index:99991;display:none;grid-template-rows:34px auto auto 1fr 50px;grid-template-areas:"head" "tool" "stats" "main" "tabs";background:var(--occ-bg);color:var(--occ-fg);font:var(--occ-font);overflow:hidden;text-align:left;color-scheme:light;border:1px solid var(--occ-div-dark);border-radius:5px;box-shadow:0 0 12px rgba(0,0,0,.7)}
+  ${R} .occ-win{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:2147483000;display:none;grid-template-rows:34px auto auto 1fr 50px;grid-template-areas:"head" "tool" "stats" "main" "tabs";background:var(--occ-bg);color:var(--occ-fg);font:var(--occ-font);overflow:hidden;text-align:left;color-scheme:light;border:1px solid var(--occ-div-dark);border-radius:5px;box-shadow:0 0 12px rgba(0,0,0,.7)}
   ${R} .occ-win.occ-on{display:grid}
   body.dark-mode ${R} .occ-win{color-scheme:dark}
   ${R} .occ-head{grid-area:head;display:flex;align-items:center;gap:4px;padding:0 4px 0 10px;min-width:0;background:var(--occ-title-bg);color:var(--occ-title-fg);text-shadow:var(--occ-title-shadow);border-bottom:1px solid var(--occ-div-dark)}
