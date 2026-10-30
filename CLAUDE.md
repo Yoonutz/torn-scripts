@@ -18,6 +18,9 @@ never reaches installed users.
 Exception, Operational Command Center: its tabs load live from `Operational Command Center/live/`,
 so a rebuilt OCC goes out without a bump. Raise its `@version` only when `src/header.js` or
 `occ-kit/shell/live.js` changes.
+Standalone kit scripts (e.g. Torn Maol Tracker) are rebuilt when `occ-kit/` changes, but bump their
+`@version` only when the script's own `plugin.js`/`header.js` changes. OCC-driven kit changes (panel,
+Setup) ride along silently until the script's next own release; never ship a standalone update per OCC fix.
 
 ## Commits
 

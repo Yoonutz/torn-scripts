@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-const VERSION = '0.9.0' + (typeof OCC_BUILD === 'string' ? ' \u00b7 ' + OCC_BUILD : '');
+const VERSION = '0.9.1' + (typeof OCC_BUILD === 'string' ? ' \u00b7 ' + OCC_BUILD : '');
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
