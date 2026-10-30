@@ -219,8 +219,9 @@ company employee list (desktop) and as the **Trains** tab.
   get a trains count picked with -/+ buttons, or **Not trains**. Payments whose message mentions
   "train" are added on their own (Setup can turn that off). Undo puts a payment back in the list.
 - First run: **Import** reads the numbers the old Companion cached in this browser
-  (`tcw_paid_trains_snapshot_v1`), no Google call. The tab shows a Sheet column next to the new
-  numbers while that cache exists, for a side-by-side check.
+  (`tcw_paid_trains_snapshot_v1`), no Google call.
+- A **Train** click on the company page counts at once; Torn's news confirms it within 50 s, or the
+  count goes back (cancelled or failed train).
 - Ledger (confirmed payments, start balances, daily flags, price) lives on the runner:
   `GET/POST /data/paid`, one KV document per player ID (`data:<player>:paid`), writes carry the
   revision they were based on, a stale write gets 409 and the tab re-applies its change. Copies of the

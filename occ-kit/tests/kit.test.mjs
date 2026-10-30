@@ -131,6 +131,17 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   const pd = P.perDay([["a", 86400 * 10 + 5, "7"], ["b", 86400 * 10 + 9, "7"], ["c", 86400 * 12, "7"], ["d", 86400 * 12, "8"]], "7", 86400 * 9, 86400 * 12 + 100, 7);
   assert.deepEqual(pd.map((d) => d.n), [0, 2, 0, 1]);
   assert.equal(P.perDay([], "7", 0, 86400 * 30, 7).length, 7);
+  const qb = { 7: { used: 3, left: 5 }, 8: { used: 1, left: 0, daily: true } };
+  const q = { 7: { n: 2, base: 3, at: 1000 }, 8: { n: 1, base: 1, at: 1000 }, 9: { n: 1, base: 0, at: 1000 } };
+  P.addQuick(qb, q, 2000);
+  assert.deepEqual([qb[7].used, qb[7].left, qb[8].used, qb[8].left], [5, 3, 2, 0]);
+  assert.ok(!q[9]);
+  const q2 = { 7: { n: 2, base: 3, at: 1000 } };
+  P.addQuick({ 7: { used: 5, left: 3 } }, q2, 2000);
+  assert.ok(!q2[7]);
+  const q3 = { 7: { n: 1, base: 3, at: 0 } };
+  P.addQuick({ 7: { used: 3, left: 5 } }, q3, 60000);
+  assert.ok(!q3[7]);
   assert.equal(P.parsePrice("600000"), 600000);
   assert.equal(P.parsePrice("abc"), 0);
   assert.equal(P.parsePrice("5"), 0);

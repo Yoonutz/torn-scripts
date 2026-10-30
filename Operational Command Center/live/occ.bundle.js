@@ -1244,7 +1244,8 @@ const EV_GAP = 5 * 60000;
 const EMP_GAP = 6 * 3600000;
 const LOCK_MS = 30000;
 const PAGES = 40;
-const AFTER_TRAIN = [4000, 15000];
+const AFTER_TRAIN = [4000, 15000, 40000];
+const QUICK_MS = 50000; // a Train click counts at once; the news must confirm it within this time
 const WDAY = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -1585,10 +1586,35 @@ function bump(id, name, start, d, btn) {
   }, PEND_MS);
 }
 
+// Train clicks on the company page count straight away (emp -> { n, base, at }): base is the trains
+// given Torn's news showed at the first click. Once the news shows them, or after QUICK_MS without
+// (a cancelled or failed train), the guess is dropped.
+let quick = {};
+
+function addQuick(b, q, now) {
+  Object.keys(q).forEach((id) => {
+    const x = b[id];
+    const extra = x ? q[id].base + q[id].n - x.used : 0;
+    if (!x || extra <= 0 || now - q[id].at > QUICK_MS) return delete q[id];
+    x.used += extra;
+    if (!x.daily) x.left -= extra;
+  });
+  return b;
+}
+
 function view() {
   if (!doc || !doc.value) return null;
   const l = Object.keys(pending).length ? withPending(JSON.parse(JSON.stringify(doc.value))) : doc.value;
-  return balances(l, (news && news.list) || [], emps && emps.list);
+  return addQuick(balances(l, (news && news.list) || [], emps && emps.list), quick, Date.now());
+}
+
+function trainClicked(id) {
+  const real = doc && doc.value && balances(doc.value, (news && news.list) || [], emps && emps.list)[id];
+  if (!real) return;
+  const q = quick[id];
+  quick[id] = { n: (q ? q.n : 0) + 1, base: q ? q.base : real.used, at: Date.now() };
+  paintAll();
+  setTimeout(paintAll, QUICK_MS + 500);
 }
 
 // ---------- company page column ----------
@@ -1694,6 +1720,8 @@ function watchPage() {
     (e) => {
       const a = e.target && e.target.closest ? e.target.closest('.employee-list .train a, button, a') : null;
       if (!a || a.closest('#occ-root') || !/\btrain/i.test(a.textContent || '')) return;
+      const row = a.closest('ul.employee-list li[data-user]');
+      if (row) trainClicked(row.getAttribute('data-user'));
       timers.forEach(clearTimeout);
       timers = AFTER_TRAIN.map((ms) => setTimeout(() => sync(true, false), ms));
     },
@@ -1813,12 +1841,11 @@ function inboxCard(list, l) {
   return c;
 }
 
-function staffCard(b, snap) {
+function staffCard(b) {
   const c = kit.ui.card('Employees');
-  const old = snap && snap.paidTrainsLeftByEmployee;
   const t = kit.el('div', 'occ-tbl');
   const table = kit.el('table');
-  table.innerHTML = '<tr><th>Name</th><th title="Trains paid for">Paid</th><th title="Trains given">Used</th><th>Left</th><th>Last paid</th>' + (old ? '<th>Sheet</th>' : '') + '</tr>';
+  table.innerHTML = '<tr><th>Name</th><th title="Trains paid for">Paid</th><th title="Trains given">Used</th><th>Left</th><th>Last paid</th></tr>';
   const list = Object.values(b)
     .filter((x) => x.staff || x.left || x.daily)
     .sort((a, z) => Number(z.staff) - Number(a.staff) || a.left - z.left || a.name.localeCompare(z.name));
@@ -1826,14 +1853,13 @@ function staffCard(b, snap) {
     const tr = kit.el('tr', 'occ-pd-emp' + (x.staff ? '' : ' gone'));
     const num = '<span class="' + (x.left < 0 ? 'occ-pd-neg' : x.left > 0 ? 'occ-pd-pos' : '') + '">' + x.left + '</span>';
     const left = x.daily ? '<span class="occ-pd-d" title="Trained for free (pro bono)">Free</span>' : num;
-    const sheet = old && Object.prototype.hasOwnProperty.call(old, x.name) ? kit.esc(String(old[x.name] === '' ? 0 : old[x.name])) : '';
-    tr.innerHTML = '<td><span class="occ-car">' + (open[x.id] ? '▼' : '▶') + '</span>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + (x.daily ? '-' : x.carry + x.paid) + '</td><td>' + x.used + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>' + (old ? '<td class="occ-muted">' + sheet + '</td>' : '');
+    tr.innerHTML = '<td><span class="occ-car">' + (open[x.id] ? '▼' : '▶') + '</span>' + kit.esc(x.name) + (x.staff ? '' : ' <span class="occ-muted">(left)</span>') + '</td><td>' + (x.daily ? '-' : x.carry + x.paid) + '</td><td>' + x.used + '</td><td>' + left + '</td><td>' + (x.last ? day(x.last.ts) : '-') + '</td>';
     tr.addEventListener('click', () => {
       open[x.id] = !open[x.id];
       paintAll();
     });
     table.appendChild(tr);
-    if (open[x.id]) table.appendChild(detail(x, old ? 6 : 5));
+    if (open[x.id]) table.appendChild(detail(x, 5));
   });
   t.appendChild(table);
   c.appendChild(t);
@@ -2015,7 +2041,7 @@ function render(v) {
     if (c) wrap.appendChild(c);
   }
   if (list.length) wrap.appendChild(inboxCard(list, l));
-  wrap.appendChild(staffCard(b, snap));
+  wrap.appendChild(staffCard(b));
   v.body(wrap);
 }
 
