@@ -1,9 +1,10 @@
 // The floating window both shells draw: title-bar header, stats row, scrolling body, tab bar.
-// Phone: fills the screen with an 8px margin, above Torn's sticky header and footer bars (they
-// covered the title bar and its close button in Torn PDA). Desktop: 420x640, bottom right.
+// Phone: a compact sheet at the bottom, at most 60% of the screen tall so Torn stays visible above it,
+// drawn above Torn's sticky header and footer bars (they covered the close button in Torn PDA).
+// Desktop: 420x640, bottom right.
 export function frameCss(R) {
   return `
-  ${R} .occ-win{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:2147483000;display:none;grid-template-rows:34px auto auto 1fr 50px;grid-template-areas:"head" "tool" "stats" "main" "tabs";background:var(--occ-bg);color:var(--occ-fg);font:var(--occ-font);overflow:hidden;text-align:left;color-scheme:light;border:1px solid var(--occ-div-dark);border-radius:5px;box-shadow:0 0 12px rgba(0,0,0,.7)}
+  ${R} .occ-win{position:fixed;top:auto;left:6px;right:6px;bottom:calc(6px + env(safe-area-inset-bottom,0px));height:min(460px,60vh);height:min(460px,60dvh);z-index:2147483000;display:none;grid-template-rows:34px auto auto 1fr 50px;grid-template-areas:"head" "tool" "stats" "main" "tabs";background:var(--occ-bg);color:var(--occ-fg);font:var(--occ-font);overflow:hidden;text-align:left;color-scheme:light;border:1px solid var(--occ-div-dark);border-radius:5px;box-shadow:0 0 12px rgba(0,0,0,.7)}
   ${R} .occ-win.occ-on{display:grid}
   body.dark-mode ${R} .occ-win{color-scheme:dark}
   ${R} .occ-head{grid-area:head;display:flex;align-items:center;gap:4px;padding:0 4px 0 10px;min-width:0;background:var(--occ-title-bg);color:var(--occ-title-fg);text-shadow:var(--occ-title-shadow);border-bottom:1px solid var(--occ-div-dark)}
@@ -42,6 +43,12 @@ export function frameCss(R) {
   ${R} .occ-launch:active{background:var(--occ-btn-active-bg)}
   ${R} .occ-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 1px #000)}
   ${R} .occ-win.occ-solo{grid-template-rows:34px auto auto 1fr;grid-template-areas:"head" "tool" "stats" "main"}
+  @media (max-width:767px){
+    ${R} .occ-win{grid-template-rows:30px auto auto 1fr 40px}
+    ${R} .occ-win.occ-solo{grid-template-rows:30px auto auto 1fr}
+    ${R} .occ-tab{gap:2px;padding:3px 4px}
+    ${R} .occ-tab svg{width:15px;height:15px}
+  }
   @media (min-width:768px){
     ${R} .occ-launch{bottom:24px;right:24px}
     ${R} .occ-win{top:auto;left:auto;right:24px;bottom:84px;width:420px;height:640px;max-height:calc(100vh - 108px)}
