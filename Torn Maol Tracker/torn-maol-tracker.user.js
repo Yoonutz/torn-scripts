@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn M'aol tracker
 // @namespace    kamiren.torn-maol-tracker
-// @version      1.0.32
+// @version      1.0.33
 // @description  Live M'aol and Praetorian status with flight times for your own travel perks and what to do next
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,7 +17,7 @@
 (function () {
   'use strict';
 
-const VERSION = '1.0.32';
+const VERSION = '1.0.33';
 
 // ---- occ-kit/core/dom.js
 // DOM helpers shared by shells and plug-ins.
@@ -462,6 +462,10 @@ function themeCss(R) {
     ${R} .occ-cancel{margin-left:auto}
     ${R} .occ-field{display:block;width:100%;height:30px;padding:0 9px;margin:7px 0 2px;border:1px solid var(--occ-input-border);border-radius:5px;background:var(--occ-input-bg);color:var(--occ-input-fg);font:12px/1 Arial,Helvetica,sans-serif;outline:none;appearance:none;-webkit-appearance:none;color-scheme:light}
     body.dark-mode ${R} .occ-field{color-scheme:dark}
+    ${R} .occ-keystat{display:inline-block;margin:2px 0 4px;padding:2px 8px;border-radius:4px;font:bold 12px/1.4 Arial,Helvetica,sans-serif}
+    ${R} .occ-keystat.ok{color:var(--occ-good);background:var(--occ-good-bg)}
+    ${R} .occ-keystat.no{color:var(--occ-bad);background:var(--occ-bad-bg)}
+    ${R} .occ-hval{min-width:44px;text-align:center;font-weight:bold;font-variant-numeric:tabular-nums}
     ${R} .occ-field:hover{border-color:var(--occ-input-hover-border)}
     ${R} .occ-field:focus{border-color:var(--occ-input-focus-border);box-shadow:var(--occ-input-focus-shadow)}
     ${R} .occ-field::placeholder{color:var(--occ-muted)}
@@ -649,9 +653,21 @@ function fillStats(row, list) {
 }
 
 // Paste-once secret field (Torn key, OpenRouter key), kept in Tampermonkey storage.
+// A key field always shows in one line whether a key is saved: green with its last 4 characters, or
+// red when there is none. opts.fallback() can name a key that works without saving one (Torn PDA).
 function keyField(c, opts) {
   c.appendChild(el('h3', '', opts.title));
   const has = !!keys.get(opts.key);
+  const badge = el('div', 'occ-keystat');
+  const paint = () => {
+    const own = keys.get(opts.key);
+    const other = !own && opts.fallback ? opts.fallback() : '';
+    const k = own || other;
+    badge.className = 'occ-keystat ' + (k ? 'ok' : 'no');
+    badge.textContent = k ? (own ? '✓ Key saved' : '✓ Using Torn PDA key') + ' · ends in ' + String(k).slice(-4) : '✗ No key saved';
+  };
+  paint();
+  c.appendChild(badge);
   const st = el('div', 'occ-muted', has ? opts.saved : opts.empty);
   c.appendChild(st);
   const input = el('input', 'occ-field');
@@ -668,6 +684,7 @@ function keyField(c, opts) {
       keys.set(opts.key, v);
       input.value = '';
       st.textContent = opts.saved;
+      paint();
       input.placeholder = 'Paste a new value to replace';
       if (opts.onChange) opts.onChange(v);
     })
@@ -678,6 +695,7 @@ function keyField(c, opts) {
       () => {
         keys.del(opts.key);
         st.textContent = opts.empty;
+        paint();
         input.placeholder = opts.placeholder;
         if (opts.onChange) opts.onChange('');
       },
@@ -685,6 +703,39 @@ function keyField(c, opts) {
     )
   );
   c.appendChild(row);
+}
+
+// Panel height, the standard setting every kit window has: a share of the screen height, saved per
+// device (a phone and a PC want different sizes). 0 = the built-in size.
+const KEY_PANEL_H = 'occ.panel.h';
+
+function applyHeight(win) {
+  const n = store.get(KEY_PANEL_H, 0);
+  win.style.height = n ? n + 'vh' : '';
+  if (!n) return (win.style.maxHeight = '');
+  const bottom = parseFloat(getComputedStyle(win).bottom) || 0;
+  win.style.maxHeight = 'calc(100vh - ' + Math.round(bottom + 8) + 'px)';
+}
+
+function panelField(c, win) {
+  c.appendChild(el('h3', '', 'Panel'));
+  const row = el('div', 'occ-bar');
+  row.appendChild(el('span', 'occ-muted', 'Height'));
+  const val = el('span', 'occ-hval');
+  const now = () => store.get(KEY_PANEL_H, 0) || Math.max(30, Math.min(100, Math.round((win.offsetHeight / innerHeight) * 10) * 10));
+  const paint = () => (val.textContent = store.get(KEY_PANEL_H, 0) ? store.get(KEY_PANEL_H, 0) + '%' : 'Auto');
+  const set = (n) => {
+    store.set(KEY_PANEL_H, n);
+    applyHeight(win);
+    paint();
+  };
+  row.appendChild(button('−', () => set(Math.max(30, now() - 10)), true));
+  row.appendChild(val);
+  row.appendChild(button('+', () => set(Math.min(100, now() + 10)), true));
+  row.appendChild(button('Auto', () => set(0), true));
+  paint();
+  c.appendChild(row);
+  c.appendChild(el('div', 'occ-muted', 'Share of the screen height, saved on this device.'));
 }
 
 // Tooltip and toast boxes live in the script root (fixed, top z-index) so Torn's own panels and
@@ -2109,13 +2160,16 @@ function boot(plugins) {
     fillStats(statsRow, null);
     const wrap = el('div');
     const c1 = el('div', 'occ-card');
-    keyField(c1, { key: KEY_TORN, title: 'Torn API key', placeholder: 'Torn API key (' + (p.access || 'minimal') + ' access)', saved: 'Key saved in Tampermonkey storage, used only for Torn API calls from your browser.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No key yet. Needs ' + (p.access || 'minimal') + ' access.' });
+    keyField(c1, { key: KEY_TORN, fallback: tornKey, title: 'Torn API key', placeholder: 'Torn API key (' + (p.access || 'minimal') + ' access)', saved: 'Key saved in Tampermonkey storage, used only for Torn API calls from your browser.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No key yet. Needs ' + (p.access || 'minimal') + ' access.' });
     wrap.appendChild(c1);
     if (p.ai) {
       const c2 = el('div', 'occ-card');
       keyField(c2, { key: KEY_OR, title: 'OpenRouter key (AI)', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. Only free models are called; they may log what is sent.', empty: 'Optional, for AI answers. Only free OpenRouter models are ever called with it.' });
       wrap.appendChild(c2);
     }
+    const cp = el('div', 'occ-card');
+    panelField(cp, win);
+    wrap.appendChild(cp);
     if (typeof p.settings === 'function') {
       const c3 = el('div', 'occ-card');
       p.settings(c3, kit);
@@ -2164,6 +2218,7 @@ function boot(plugins) {
     main = el('div', 'occ-main occ-scroll');
     win.appendChild(main);
     root.appendChild(win);
+    applyHeight(win);
     trapScroll(win);
     const toggle = () => setOpen(!win.classList.contains('occ-on'));
     if (typeof p.launcher === 'function') p.launcher(kit, toggle);

@@ -57,6 +57,9 @@ export default {
 - `kit`: `keys` / `vault` (Tampermonkey storage), `store` (localStorage, UI state only), `http`,
   `torn(path)` + `TornApiError`, `tornKey()`, `ai.ask(skillId)` / `ai.write({ system, user })`,
   `ui.card/errCard/button/accordion/keyField/md/sections`, `tip`, `toast`, `el`, `esc`, `isPda()`.
+- Standard Setup, drawn by both shells for every script (plug-ins don't add these): the Torn key
+  field with a green/red "key saved · ends in abcd" line, and **Panel** height (share of the screen,
+  per device, `occ.panel.h`, Auto = built-in size). New shared settings go here, not in plug-ins.
 
 ## AI
 

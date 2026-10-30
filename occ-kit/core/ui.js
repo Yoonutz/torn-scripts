@@ -1,6 +1,6 @@
 // Building blocks every plug-in draws with. All styled by theme.js under the script's root.
 import { el, esc } from './dom.js';
-import { keys } from './storage.js';
+import { keys, store } from './storage.js';
 
 export function card(title, body) {
   const c = el('div', 'occ-card');
@@ -54,9 +54,21 @@ export function fillStats(row, list) {
 }
 
 // Paste-once secret field (Torn key, OpenRouter key), kept in Tampermonkey storage.
+// A key field always shows in one line whether a key is saved: green with its last 4 characters, or
+// red when there is none. opts.fallback() can name a key that works without saving one (Torn PDA).
 export function keyField(c, opts) {
   c.appendChild(el('h3', '', opts.title));
   const has = !!keys.get(opts.key);
+  const badge = el('div', 'occ-keystat');
+  const paint = () => {
+    const own = keys.get(opts.key);
+    const other = !own && opts.fallback ? opts.fallback() : '';
+    const k = own || other;
+    badge.className = 'occ-keystat ' + (k ? 'ok' : 'no');
+    badge.textContent = k ? (own ? '✓ Key saved' : '✓ Using Torn PDA key') + ' · ends in ' + String(k).slice(-4) : '✗ No key saved';
+  };
+  paint();
+  c.appendChild(badge);
   const st = el('div', 'occ-muted', has ? opts.saved : opts.empty);
   c.appendChild(st);
   const input = el('input', 'occ-field');
@@ -73,6 +85,7 @@ export function keyField(c, opts) {
       keys.set(opts.key, v);
       input.value = '';
       st.textContent = opts.saved;
+      paint();
       input.placeholder = 'Paste a new value to replace';
       if (opts.onChange) opts.onChange(v);
     })
@@ -83,6 +96,7 @@ export function keyField(c, opts) {
       () => {
         keys.del(opts.key);
         st.textContent = opts.empty;
+        paint();
         input.placeholder = opts.placeholder;
         if (opts.onChange) opts.onChange('');
       },
@@ -90,6 +104,39 @@ export function keyField(c, opts) {
     )
   );
   c.appendChild(row);
+}
+
+// Panel height, the standard setting every kit window has: a share of the screen height, saved per
+// device (a phone and a PC want different sizes). 0 = the built-in size.
+export const KEY_PANEL_H = 'occ.panel.h';
+
+export function applyHeight(win) {
+  const n = store.get(KEY_PANEL_H, 0);
+  win.style.height = n ? n + 'vh' : '';
+  if (!n) return (win.style.maxHeight = '');
+  const bottom = parseFloat(getComputedStyle(win).bottom) || 0;
+  win.style.maxHeight = 'calc(100vh - ' + Math.round(bottom + 8) + 'px)';
+}
+
+export function panelField(c, win) {
+  c.appendChild(el('h3', '', 'Panel'));
+  const row = el('div', 'occ-bar');
+  row.appendChild(el('span', 'occ-muted', 'Height'));
+  const val = el('span', 'occ-hval');
+  const now = () => store.get(KEY_PANEL_H, 0) || Math.max(30, Math.min(100, Math.round((win.offsetHeight / innerHeight) * 10) * 10));
+  const paint = () => (val.textContent = store.get(KEY_PANEL_H, 0) ? store.get(KEY_PANEL_H, 0) + '%' : 'Auto');
+  const set = (n) => {
+    store.set(KEY_PANEL_H, n);
+    applyHeight(win);
+    paint();
+  };
+  row.appendChild(button('−', () => set(Math.max(30, now() - 10)), true));
+  row.appendChild(val);
+  row.appendChild(button('+', () => set(Math.min(100, now() + 10)), true));
+  row.appendChild(button('Auto', () => set(0), true));
+  paint();
+  c.appendChild(row);
+  c.appendChild(el('div', 'occ-muted', 'Share of the screen height, saved on this device.'));
 }
 
 // Tooltip and toast boxes live in the script root (fixed, top z-index) so Torn's own panels and
