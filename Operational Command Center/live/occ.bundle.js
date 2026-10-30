@@ -3956,12 +3956,23 @@ function boot(plugins) {
 
   // Desktop sidebar: the last info row (Merits) under the name, so icon and badges get a row of
   // their own there. Next to the name the badges ran past the sidebar's edge and were cut off.
+  // On live Torn each info row sits in its own wrapper, so the rows are not siblings: climb from the
+  // name row to the first box that also holds the Merits row, then return the box's child that
+  // holds Merits (the dock goes right after it).
   function sidebarLastRow(a) {
     const ROW = '[class*="menuInfoRow"],[class*="menu-info-row"]';
     const row = a.closest(ROW);
-    if (!row || !row.parentNode) return null;
-    const rows = Array.prototype.filter.call(row.parentNode.children, (c) => c.matches(ROW));
-    return rows[rows.length - 1] || row;
+    if (!row) return null;
+    let box = row;
+    for (let i = 0; i < 6 && box.parentNode && box.parentNode !== document.body; i++) {
+      box = box.parentNode;
+      const rows = Array.prototype.filter.call(box.querySelectorAll(ROW), (r) => /^\s*Merits\b/i.test(r.textContent || ''));
+      if (!rows.length) continue;
+      let node = rows[rows.length - 1];
+      while (node.parentNode && node.parentNode !== box) node = node.parentNode;
+      return node;
+    }
+    return row;
   }
 
   // Phone layout: no room beside the name, so icon and badges get their own fixed slot on every
