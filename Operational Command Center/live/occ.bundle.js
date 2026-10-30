@@ -1258,6 +1258,7 @@ let errs = {};
 let busy = false;
 let tabView = null;
 let open = {}; // employee rows expanded in the tab
+let showIdle = false; // staff with no trains at all, folded into one line by default
 let allPays = {}; // employee rows showing every payment, not just the last 3
 let steps = {}; // trains picked for item payments in the inbox
 let pricing = false; // price editor open in the tab
@@ -1687,7 +1688,7 @@ function paintPhone(rows) {
       const link = Array.from(row.querySelectorAll('a[href*="XID="]')).find((a) => a.offsetWidth);
       if (!link) return;
       v = kit.el('span', 'occ-paid-m');
-      link.after(v);
+      link.before(v);
     }
     const x = b && b[row.getAttribute('data-user')];
     const t = cellText(x);
@@ -1849,7 +1850,11 @@ function staffCard(b) {
   const list = Object.values(b)
     .filter((x) => x.staff || x.left || x.daily)
     .sort((a, z) => Number(z.staff) - Number(a.staff) || a.left - z.left || a.name.localeCompare(z.name));
+  // Staff with nothing paid, given or owed fold into one line, so the table stays short on phones.
+  const idle = (x) => x.staff && !x.daily && !x.paid && !x.carry && !x.used && !x.left && !x.last && !open[x.id];
+  const quiet = list.filter(idle);
   list.forEach((x) => {
+    if (quiet.length > 1 && !showIdle && idle(x)) return;
     const tr = kit.el('tr', 'occ-pd-emp' + (x.staff ? '' : ' gone'));
     const num = '<span class="' + (x.left < 0 ? 'occ-pd-neg' : x.left > 0 ? 'occ-pd-pos' : '') + '">' + x.left + '</span>';
     const left = x.daily ? '<span class="occ-pd-d" title="Trained for free (pro bono)">Free</span>' : num;
@@ -1861,9 +1866,18 @@ function staffCard(b) {
     table.appendChild(tr);
     if (open[x.id]) table.appendChild(detail(x, 5));
   });
+  if (quiet.length > 1) {
+    const tr = kit.el('tr', 'occ-pd-emp occ-pd-idle');
+    tr.innerHTML = '<td colspan="5"><span class="occ-car">' + (showIdle ? '▼' : '▶') + '</span>' + (showIdle ? 'Hide the ' + quiet.length + ' with no trains' : quiet.length + ' more with no trains: ' + kit.esc(quiet.map((x) => x.name).join(', '))) + '</td>';
+    tr.addEventListener('click', () => {
+      showIdle = !showIdle;
+      paintAll();
+    });
+    table.appendChild(tr);
+  }
   t.appendChild(table);
   c.appendChild(t);
-  c.appendChild(kit.el('div', 'occ-muted', 'Paid = trains paid for, Used = trains given, Left = Paid - Used. Tap a name to add a payment, mark it free (pro bono) or undo.'));
+  c.appendChild(kit.el('div', 'occ-muted', 'Left = Paid - Used. Tap a name for payments, Free or Undo.'));
   return c;
 }
 
@@ -2113,7 +2127,7 @@ return {
     .d .manage-company .employees .employee-list .occ-paid .occ-paid-v.neg{color:var(--default-red-color,#E54C19);font-weight:bold}
     .d .manage-company .employees .employee-list .occ-paid .occ-paid-v.stale{opacity:.55}
     .occ-paid-on .d .manage-company .paid-trains{display:none!important}
-    .occ-paid-m{display:inline-block;margin-left:6px;padding:0 4px;border:1px solid var(--default-panel-divider-outer-side-color,#444);border-radius:3px;font:bold 11px/14px Arial,sans-serif;color:var(--default-color,#ccc);vertical-align:middle;font-variant-numeric:tabular-nums}
+    .occ-paid-m{display:inline-block;box-sizing:border-box;min-width:30px;margin-right:5px;padding:0 3px;text-align:center;border:1px solid var(--default-panel-divider-outer-side-color,#444);border-radius:3px;font:bold 11px/14px Arial,sans-serif;color:var(--default-color,#ccc);vertical-align:middle;font-variant-numeric:tabular-nums}
     .occ-paid-m.neg{color:var(--default-red-color,#E54C19)}.occ-paid-m.daily{color:var(--default-green-color,#82c91e)}.occ-paid-m.stale{opacity:.55}.occ-paid-on .occ-paid-m{display:none}
     .occ-paid-on .d .manage-company .company-tabs>li a{width:194.5px!important}
     .occ-paid-on .d .company-wrap .company-stats-list>li{width:273.33px!important}
@@ -2136,6 +2150,8 @@ return {
     #occ-root .occ-pd-emp .occ-car{display:inline-block;width:12px;font-size:8px;color:var(--occ-muted)}
     #occ-root .occ-pd-n{min-width:22px;text-align:center;font:bold 12px/1 Arial,Helvetica,sans-serif;font-variant-numeric:tabular-nums;color:var(--occ-hi)}
     #occ-root .occ-pd-emp{cursor:pointer}
+    #occ-root .occ-pd-idle td{white-space:normal;color:var(--occ-muted)}
+    @media (max-width:600px){#occ-root .occ-pd-emp td,#occ-root .occ-tbl th{padding:3px 5px}#occ-root .occ-stat{padding:4px 8px}}
     #occ-root .occ-pd-emp:hover td:first-child{text-decoration:underline}
     #occ-root .occ-pd-emp.gone td{opacity:.6}
     #occ-root .occ-pd-more td{white-space:normal}
