@@ -39,7 +39,7 @@ function fakeFetch({ owner = 2805199, models = [] } = {}) {
       const body = JSON.parse(opt.body);
       assert.ok(isFree(body.model), "paid model called: " + body.model);
       const next = models.shift() || { status: 429 };
-      return Response.json(next.text ? { choices: [{ message: { content: next.text } }], model: body.model } : { error: { message: "busy" } }, { status: next.status || 200 });
+      return Response.json(next.text ? { choices: [{ message: { content: next.text }, finish_reason: next.finish || "stop" }], model: body.model } : { error: { message: "busy" } }, { status: next.status || 200 });
     }
     return Response.json({ error: { code: 9, error: "not faked: " + url } });
   };
@@ -226,4 +226,38 @@ test("a bracket token the prompt itself sent is not a placeholder", async () => 
   fakeFetch({ models: [{ text: "Status [OK] as sent" }] });
   const j = await (await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ system: "s", user: "flag [OK]" }) }), env({ OPENROUTER_KEY: "k" }))).json();
   assert.equal(j.answer, "Status [OK] as sent");
+});
+
+test("a cut-off JSON reply goes to the next model, plain text and markdown links still pass", async () => {
+  fakeFetch({ models: [{ text: '[{"kind":"go","text":"Fly to Hawaii (Airstrip, 1h' }, { text: '[{"kind":"go","text":"Fly to Hawaii"}]' }] });
+  const e = env({ OPENROUTER_KEY: "k" });
+  const j = await (await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ system: "s", user: "u" }) }), e)).json();
+  assert.equal(j.answer, '[{"kind":"go","text":"Fly to Hawaii"}]');
+  const log = await (await worker.fetch(req("/ailog"), e)).json();
+  assert.match(log.entries[0].errors[0], /broken JSON/);
+  const { brokenJson } = await import("../src/ai/answer.mjs");
+  assert.equal(brokenJson("```json\n[{\"a\":1}]\n```"), false);
+  assert.equal(brokenJson("[Report](https://x) is ready"), false);
+  assert.equal(brokenJson("Plain answer."), false);
+  assert.equal(brokenJson('{"a":'), true);
+});
+
+test("a reply stopped by the token limit is a failed try", async () => {
+  fakeFetch({ models: [{ text: "Fly to Mexico and", finish: "length" }, { text: "Done." }] });
+  const e = env({ OPENROUTER_KEY: "k" });
+  const j = await (await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ user: "u" }) }), e)).json();
+  assert.equal(j.answer, "Done.");
+  const log = await (await worker.fetch(req("/ailog"), e)).json();
+  assert.match(log.entries[0].errors[0], /cut off/);
+});
+
+test("a model refused for good (403/404) or masking places pauses for hours, a busy one for minutes", async () => {
+  fakeFetch({ models: [{ status: 404 }, { status: 403 }, { status: 429 }, { text: "[ADDRESS] here" }, { text: "Ok." }] });
+  const e = env({ OPENROUTER_KEY: "k", MODELS: "a:free,b:free,c:free,d:free,e:free" });
+  const j = await (await worker.fetch(req("/write", { method: "POST", body: JSON.stringify({ user: "u" }) }), e)).json();
+  assert.equal(j.answer, "Ok.");
+  const h = JSON.parse(e.kv.get("ai:health"));
+  const hours = (m) => (h.cool[m] - Date.now()) / 3600000;
+  assert.ok(hours("a:free") > 5 && hours("b:free") > 5 && hours("d:free") > 5);
+  assert.ok(hours("c:free") < 1);
 });
