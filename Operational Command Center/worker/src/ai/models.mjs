@@ -1,10 +1,11 @@
 // Model order and health, shared by every run: the last model that answered goes first, models
-// that failed in the last 10 minutes go last. One small KV value, written only when it changes.
+// that failed lately go last (10 minutes, 6 hours when refused or masking). One small KV value, written only when it changes.
 // The free list and the free-only guard come from occ-kit, the same file the userscripts use.
 import { MODELS_FREE, isFree } from "../../../../occ-kit/core/models.js";
 
 export { isFree };
 export const COOL_MS = 10 * 60000;
+export const LONG_COOL_MS = 6 * 3600000; // refused for good (403/404) or masking names
 
 export function modelList(env) {
   const list = env.MODELS ? String(env.MODELS).split(",") : MODELS_FREE;
