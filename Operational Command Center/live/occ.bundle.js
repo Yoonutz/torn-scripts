@@ -1672,9 +1672,26 @@ function view() {
   return addQuick(balances(l, (news && news.list) || [], emps && emps.list), quick, Date.now());
 }
 
+// Company trains still in the bank at a Train click: the last known count (Trains pill, ms ts) less
+// the trains given since it was read. Those are the news entries after it or, while the news lags,
+// the clicks after it, whichever is more. null when no count is known, so the click counts as before.
+let clicks = []; // ms times of recent Train clicks
+function bankLeft(bank, list, times, now) {
+  if (!bank || typeof bank.n !== 'number' || typeof bank.ts !== 'number') return null;
+  const inNews = list.filter((t) => t[1] * 1000 > bank.ts).length;
+  const clicked = times.filter((t) => t > bank.ts && now - t <= QUICK_MS).length;
+  return bank.n - Math.max(inNews, clicked);
+}
+
 function trainClicked(id) {
   const real = doc && doc.value && balances(doc.value, (news && news.list) || [], emps && emps.list)[id];
   if (!real) return;
+  // No trains in the bank: Torn turns the train down, so the counter stays put.
+  const now = Date.now();
+  clicks = clicks.filter((t) => now - t <= QUICK_MS);
+  const left = bankLeft(kit.store.get('occ.trains', null), (news && news.list) || [], clicks, now);
+  if (left !== null && left <= 0) return;
+  clicks.push(now);
   const q = quick[id];
   quick[id] = { n: (q ? q.n : 0) + 1, base: q ? q.base : real.used, at: Date.now() };
   paintAll();
