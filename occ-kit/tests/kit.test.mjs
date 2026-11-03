@@ -142,6 +142,11 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   const q3 = { 7: { n: 1, base: 3, at: 0 } };
   P.addQuick({ 7: { used: 3, left: 5 } }, q3, 60000);
   assert.ok(!q3[7]);
+  assert.equal(P.bankLeft(null, [], [], 0), null);
+  assert.equal(P.bankLeft({ n: 0, ts: 5000 }, [], [], 6000), 0);
+  assert.equal(P.bankLeft({ n: 3, ts: 5000 }, [["a", 4, "7"], ["b", 6, "7"]], [5500], 6000), 2);
+  assert.equal(P.bankLeft({ n: 3, ts: 5000 }, [["b", 6, "7"]], [5500, 5600, 5700], 6000), 0);
+  assert.equal(P.bankLeft({ n: 3, ts: 5000 }, [], [5500], 5500 + 60000), 3);
   assert.equal(P.parsePrice("600000"), 600000);
   assert.equal(P.parsePrice("abc"), 0);
   assert.equal(P.parsePrice("5"), 0);
