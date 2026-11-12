@@ -229,6 +229,19 @@ company employee list (desktop) and as the **Trains** tab.
 - Calls only when the company page or the tab opens, a Torn tab comes back, and 4 s / 15 s after a
   Train click on the company page. No timed polling.
 
+## Stat gaps (employee list)
+
+Plug-in `plugins/gaps.js`, company employee list (director view, desktop and phone).
+
+- Each employee's **Stats (M/I/E)** show the gap to the requirements of the position picked in the
+  row: green `+29.6k` above, red `-40k` short, grey dash where the position needs none of that
+  stat. Hover the stats for the real numbers (Torn's own tooltip). Picking another position
+  (before Submit) updates the gaps at once.
+- The **Position** dropdown shows the same three gaps next to every position.
+- Stats: the exact numbers Torn already prints in the row. Requirements: `torn/companies` (all
+  company types, matched by position id), cached 7 days in this browser. One call a week, none
+  while the tab is hidden.
+
 ## Keys the player pastes once
 
 Both live in the userscript settings pane, stored in Tampermonkey's own storage
@@ -246,7 +259,7 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | Data storage  | Answers cached in your browser only. The runner keeps key hash -> player ID for a day (access check) and the Trains ledger (payments you confirmed, balances) per player; its request logs are off. |
 | Data sharing  | The runner sends skill reports (money, networth, company numbers) to free OpenRouter models, which may log them. |
-| Purpose       | Personal dashboards: the skill buttons, the company trains pill and paid trains per employee.            |
+| Purpose       | Personal dashboards: the skill buttons, the company trains pill, paid trains and stat gaps per employee.          |
 | Key storage   | Tampermonkey storage in your browser; sent per run to the runner over HTTPS, never stored there.          |
 | Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill and tab: Limited. |
 | Who can use   | Private: the runner only serves the owner's player ID; any other key is refused server side.             |
@@ -278,6 +291,8 @@ with no version bump.
 - The trains pill makes no timed call while the tab is hidden; it catches up when the tab is back.
 - The Paid column reads only the employee list on the company page you opened (each row's player
   ID) and adds a cell to it. All its numbers come from the Torn API.
+- Stat gaps read only the employee list on the company page you opened (stats and picked
+  position) and replace the stat numbers there. Requirements come from the Torn API.
 - The donator star and award icons right after the owner's own sidebar name are hidden to make
   room for the icon; other players keep theirs.
 
