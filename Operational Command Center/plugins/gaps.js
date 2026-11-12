@@ -1,7 +1,8 @@
 // Stat gaps on the company employee list (director view).
 // Each employee's Stats (M/I/E) show the gap to the requirements of the position picked in the row:
 // green "+12k" above, red "-40k" short, grey dash where the position needs none of that stat.
-// The Position dropdown shows the same gaps next to every position.
+// The Position dropdown shows the same gaps on a second line under every position (menu keeps Torn's
+// width, so it never gets a horizontal scrollbar).
 // Stats: the exact numbers Torn already prints in the row. Requirements: GET torn/companies
 // (all company types, matched by position id), kept for 7 days. No other API call, nothing on a hidden tab.
 
@@ -175,8 +176,9 @@ export default {
     .occ-sg.g,.occ-sg-dd .g{color:var(--default-green-color,#82c91e)}
     .occ-sg.r,.occ-sg-dd .r{color:var(--default-red-color,#E54C19)}
     .occ-sg.n,.occ-sg-dd .n{color:var(--default-gray-9-color,#999);font-weight:normal}
-    ul.occ-sg-menu{width:auto!important;min-width:250px}
-    ul.occ-sg-menu>li>a{display:flex!important;justify-content:space-between;gap:8px;white-space:nowrap}
-    .occ-sg-dd{font-size:11px}
+    ul.occ-sg-menu{overflow-x:hidden!important}
+    ul.occ-sg-menu::-webkit-scrollbar:horizontal{height:0;display:none}
+    ul.occ-sg-menu>li>a{height:auto!important;line-height:15px!important;padding-top:4px!important;padding-bottom:4px!important;white-space:nowrap}
+    .occ-sg-dd{display:block;font-size:11px;line-height:13px;overflow:hidden;text-overflow:clip}
   `,
 };
