@@ -237,7 +237,8 @@ Plug-in `plugins/gaps.js`, company employee list (director view, desktop and pho
   row: green `+29.6k` above, red `-40k` short, grey dash where the position needs none of that
   stat. Hover the stats for the real numbers (Torn's own tooltip). Picking another position
   (before Submit) updates the gaps at once.
-- The **Position** dropdown shows the same three gaps next to every position.
+- The **Position** dropdown shows the same three gaps on a second line under every position
+  (menu keeps Torn's width, no horizontal scrollbar).
 - Stats: the exact numbers Torn already prints in the row. Requirements: `torn/companies` (all
   company types, matched by position id), cached 7 days in this browser. One call a week, none
   while the tab is hidden.
