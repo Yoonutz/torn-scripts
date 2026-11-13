@@ -583,6 +583,7 @@ const AI_SYSTEM = [
   'one tactical point the facts support. Never suggest scripts, automation, or anything against Torn rules.',
   'While maol.bonded is true M\'aol cannot be hit: never tell the player to fly to him now. Repeat only a leave time',
   'the calculated list gives, and never suggest a flight the calculated list does not.',
+  'In "Fly to X" X is always a country from the facts, never a travel method such as Airstrip.',
 ].join('\n');
 
 let aiBusy = false;
@@ -624,6 +625,23 @@ function aiFacts() {
   };
 }
 
+// Where a tip sends the player ("Fly to X", "Leave for X") must be a place or NPC from the facts.
+// Some free providers mask country names, and the model then writes the travel method instead:
+// "Fly to Airstrip now". Such a reply is not used.
+function badPlace(t, facts) {
+  const known = ['torn', 'him', 'her', 'them', 'it', 'there', 'home', 'm\'aol'];
+  const add = (c) => { if (c) known.push(String(c).toLowerCase(), String(SHORT[c] || c).toLowerCase()); };
+  facts.guards.forEach((g) => { add(g.country); known.push(String(g.name).toLowerCase()); });
+  add(facts.maol.country);
+  facts.maol.next_stops.forEach((x) => add(x.country));
+  const re = /\b(?:fly(?: back)? to|leave for|head to)\s+(?:the\s+)?/gi;
+  for (let m; (m = re.exec(t));) {
+    const rest = t.slice(re.lastIndex).toLowerCase();
+    if (!known.some((k) => rest.startsWith(k) && !/[a-z0-9]/.test(rest.charAt(k.length)))) return rest.split(/[\s,.;:()]/)[0] || '?';
+  }
+  return '';
+}
+
 // The model's reply, checked. null: not usable, the built-in tips stay.
 function aiParse(text, facts) {
   const m = /\[[\s\S]*\]/.exec(String(text || ''));
@@ -640,6 +658,7 @@ function aiParse(text, facts) {
     const t = String((x && x.text) || '').replace(/\s+/g, ' ').trim();
     if (!kind || !t || t.length > 240) return null;
     if ((t.match(/\b\d{1,2}:\d{2}\b/g) || []).some((h) => !times.has(h.padStart(5, '0')))) return null;
+    if (badPlace(t, facts)) return null;
     const a = /^attack:(\d+)$/.exec(String(x.link || ''));
     const href = a && ids.has(+a[1]) ? `https://www.torn.com/loader.php?sid=attack&user2ID=${a[1]}`
       : x.link === 'travel' ? 'https://www.torn.com/page.php?sid=travel' : '';
