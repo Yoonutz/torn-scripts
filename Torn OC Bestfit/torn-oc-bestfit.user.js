@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn OC Best-Fit Role Recommender
 // @namespace    Torn.OC-Best-Fit
-// @version      1.1.1
+// @version      1.1.2
 // @description  Recommends the best Organized Crime role to join, ranking all available faction OCs by a blended success score (your exact API CPR discounted by your faction's real historical success rate). Color-coded green/yellow/red.
 // @author       KamiRen [2805199]
 // @match        https://www.torn.com/*
@@ -63,7 +63,7 @@
 	const factionAccess = () => GM_getValue(FACACC_STORE, true);
 	const SCORE_CACHE = "oc_bestfit_scorecache";
 	const POS_STORE = "oc_bestfit_panelpos";
-	const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "1.1.1";
+	const VERSION = typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version || "1.1.2";
 	const META_STORE = "oc_bestfit_meta";
 	const DATAVER_STORE = "oc_bestfit_dataver";
 	const DATA_VERSION = 4;
@@ -71,7 +71,10 @@
 	const IDB_STORE = "crimes";
 	const IDB_LOG = "cprlog";
 	const LOG_META = "oc_bestfit_logmeta";
-	const STATKEY_STORE = "oc_bestfit_statkey";
+	const PREFS_STORE = "oc_bestfit_prefs";
+	const BLOCKJOIN_STORE = "oc_bestfit_blockjoin";
+	const blockJoinOn = () => GM_getValue(BLOCKJOIN_STORE, true);
+	const NOTICE_STORE = "oc_bestfit_sharenotice";
 	const LOG_INTERVAL_MS = 3 * 60 * 60 * 1e3;
 	const HIST_TTL_MS = 2 * 60 * 60 * 1e3;
 	const HIST_RETRY_MS = 5 * 60 * 1e3;
@@ -572,6 +575,7 @@
 		if (j && j.error) throw new Error(`Torn API ${j.error.code||"?"}: ${j.error.error||j.error}`);
 		return j
 	}
+	window.__ocbfGet = gmGet;
 	async function supaFn(payload) {
 		const r = await httpRequest({
 			method: "POST",
@@ -591,9 +595,22 @@
 		throw new Error(j && j.error || `Gateway ${r.status}: ${(r.text||"").slice(0,160)}`)
 	}
 
+	function safeHtml(html) {
+		const t = document.createElement("template");
+		t.innerHTML = String(html || "");
+		t.content.querySelectorAll("script,iframe,object,embed,link,meta,base,form").forEach(n => n.remove());
+		t.content.querySelectorAll("*").forEach(n => {
+			for (const a of [...n.attributes]) {
+				const nm = a.name.toLowerCase(),
+					v = a.value.replace(/\s+/g, "").toLowerCase();
+				if (nm.startsWith("on") || (/^(href|src|xlink:href|action|formaction)$/.test(nm) && /^(javascript|data|vbscript):/.test(v))) n.removeAttribute(a.name)
+			}
+		});
+		return t.content
+	}
 	const STATIC_URL = SUPA_URL + "/storage/v1/object/public/static/oc-static.json";
 	const STATIC_STORE = "oc_bestfit_static";
-	const KNOWN_KEYS = [KEY_STORE, SHARE_STORE, REPLACE_CPR_STORE, ID_STORE, SELF_STORE, FACACC_STORE, SCORE_CACHE, POS_STORE, META_STORE, DATAVER_STORE, LOG_META, STATKEY_STORE, STATIC_STORE];
+	const KNOWN_KEYS = [KEY_STORE, SHARE_STORE, REPLACE_CPR_STORE, ID_STORE, SELF_STORE, FACACC_STORE, SCORE_CACHE, POS_STORE, META_STORE, DATAVER_STORE, LOG_META, PREFS_STORE, BLOCKJOIN_STORE, NOTICE_STORE, STATIC_STORE, "oc_bestfit_weights"];
 
 	function healState() {
 		const now = Date.now();
@@ -735,7 +752,7 @@
 		}));
 		wrap.append(el("div", {
 			style: `font-size:12px;color:${T.sub};line-height:1.5;margin-bottom:10px`,
-			textContent: "Needs a Limited access Torn API key. Stored only in your browser - it transits the gateway once to verify you, then is discarded. Nothing works until this is set."
+			textContent: "Needs a Limited access Torn API key. Stored only in your browser. It is sent with each request to the OC Best-Fit gateway, which checks it with Torn to find your faction and never stores it. Nothing works until this is set."
 		}));
 		const input = el("input", {
 			type: "text",
@@ -803,60 +820,6 @@
 		}
 		return out
 	}
-	let _statKeyP = null;
-
-	function statKey() {
-		if (_statKeyP) return _statKeyP;
-		_statKeyP = (async () => {
-			const b64 = GM_getValue(STATKEY_STORE, "");
-			if (b64) {
-				const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-				return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"])
-			}
-			const k = await crypto.subtle.generateKey({
-				name: "AES-GCM",
-				length: 256
-			}, true, ["encrypt", "decrypt"]);
-			const raw = new Uint8Array(await crypto.subtle.exportKey("raw", k));
-			GM_setValue(STATKEY_STORE, btoa(String.fromCharCode.apply(null, raw)));
-			return k
-		})();
-		return _statKeyP
-	}
-	async function encStats(obj) {
-		try {
-			const k = await statKey();
-			const iv = crypto.getRandomValues(new Uint8Array(12));
-			const data = (new TextEncoder).encode(JSON.stringify(obj));
-			const ct = new Uint8Array(await crypto.subtle.encrypt({
-				name: "AES-GCM",
-				iv: iv
-			}, k, data));
-			return {
-				iv: btoa(String.fromCharCode.apply(null, iv)),
-				ct: btoa(String.fromCharCode.apply(null, ct))
-			}
-		} catch (e) {
-			console.warn("ocbfstat encrypt failed (stats omitted):", e.message);
-			return null
-		}
-	}
-	async function decStats(enc) {
-		try {
-			if (!enc || !enc.iv || !enc.ct) return null;
-			const k = await statKey();
-			const iv = Uint8Array.from(atob(enc.iv), c => c.charCodeAt(0));
-			const ct = Uint8Array.from(atob(enc.ct), c => c.charCodeAt(0));
-			const pt = await crypto.subtle.decrypt({
-				name: "AES-GCM",
-				iv: iv
-			}, k, ct);
-			return JSON.parse((new TextDecoder).decode(pt))
-		} catch (e) {
-			console.warn("ocbfstat decrypt failed:", e.message);
-			return null
-		}
-	}
 	async function logSnapshot(key, slots, force) {
 		const meta = GM_getValue(LOG_META, {
 			last: 0,
@@ -878,23 +841,8 @@
 			});
 			return
 		}
-		let stats = {};
-		try {
-			const bs = await gmGet(`${API}/user/battlestats?key=${encodeURIComponent(key)}`);
-			stats = bs.battlestats || {}
-		} catch (e) {
-			console.warn("ocbfbattlestats unavailable (snapshot continues):", e.message)
-		}
-		const statsEnc = await encStats({
-			strength: stats.strength || 0,
-			defense: stats.defense || 0,
-			speed: stats.speed || 0,
-			dexterity: stats.dexterity || 0,
-			total: stats.total || 0
-		});
 		const snap = {
 			ts: Date.now(),
-			statsEnc: statsEnc,
 			cprs: cprs
 		};
 		try {
@@ -1076,6 +1024,7 @@
 			pageError = null,
 			done = false;
 		while (!done && pages < HIST_PAGE_CAP) {
+			if (pages) await new Promise(r => setTimeout(r, 700));
 			let j;
 			try {
 				j = await gmGet(`${base}&offset=${offset}&key=${encodeURIComponent(key)}`)
@@ -1289,6 +1238,8 @@
 			const weight = ow ? ow[normKey(s.position.replace(/\s*#\d+$/, ""))] : null;
 			const maxW = ow ? Math.max.apply(null, Object.values(ow)) : null;
 			const req = OCScore.roleMin(s.difficulty, weight, maxW, cfgS);
+			const moneyYou = h ? h.perPlayerMoney : null;
+			const respectCrime = h && h.medRespect || (cg ? cg.medRespect : null);
 			const scoreReq = OCScore.scoreReq(s.difficulty, cfgS);
 			return {
 				...s,
@@ -1296,8 +1247,10 @@
 				blended: blended,
 				lowConfidence: sr == null,
 				community: eff.community,
-				moneyYou: h ? h.perPlayerMoney : null,
-				respectCrime: h && h.medRespect || (cg ? cg.medRespect : null),
+				moneyYou: moneyYou,
+				respectCrime: respectCrime,
+				evMoney: moneyYou != null ? Math.round(moneyYou * blended / 100) : null,
+				evRespect: respectCrime != null ? Math.round(respectCrime * blended / 10) / 10 : null,
 				communityMoney: cg ? cg.medMoney : null,
 				weight: weight,
 				impact: weight != null ? Math.round(s.cpr * weight / 10) / 10 : null,
@@ -1316,9 +1269,9 @@
 			case "impact":
 				return s.impact || 0;
 			case "evmoney":
-				return s.moneyYou || 0;
+				return s.evMoney || 0;
 			case "evrespect":
-				return s.respectCrime || 0;
+				return s.evRespect || 0;
 			case "raw":
 				return s.cpr;
 			case "higher":
@@ -1343,17 +1296,43 @@
 		const floorD = maxD - (maxD >= 7 ? 1 : 2);
 		const banded = joinable.filter(r => r.difficulty >= floorD);
 		const pool = banded.length ? banded : joinable;
-		if (direction === "higher") return pool[0];
 		const notRed = pool.filter(r => blendedColor(r.blended) !== "red");
 		return notRed[0] || pool[0]
 	}
+
+	function alternatives(ranked, rec, k) {
+		if (!rec) return [];
+		const seen = new Set([rec.crimeId + "|" + rec.position]);
+		const out = [];
+		for (const r of ranked) {
+			if (out.length >= k) break;
+			const id = r.crimeId + "|" + r.position;
+			if (!r.qualified || seen.has(id) || blendedColor(r.blended) === "red") continue;
+			seen.add(id);
+			out.push(r)
+		}
+		return out
+	}
+	const PREFS = (() => {
+		const p = GM_getValue(PREFS_STORE, null) || {};
+		return {
+			direction: DIRECTIONS[p.direction] ? p.direction : "higher",
+			floor: Math.max(0, Math.min(100, +p.floor || 0)),
+			hideNoItem: !!p.hideNoItem
+		}
+	})();
+	const savePrefs = () => GM_setValue(PREFS_STORE, {
+		direction: state.direction,
+		floor: state.floor,
+		hideNoItem: state.hideNoItem
+	});
 	let state = {
 		slots: [],
 		hist: null,
 		histNote: "",
-		direction: "higher",
-		floor: 0,
-		hideNoItem: false,
+		direction: PREFS.direction,
+		floor: PREFS.floor,
+		hideNoItem: PREFS.hideNoItem,
 		view: "recommend",
 		snaps: null,
 		trendOc: null,
@@ -1767,9 +1746,8 @@
 			style: "display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"
 		});
 		const ocSel = el("select", {
-			className: "ocbf-ctl",
-			id: "ocbf-dir",
-			style: "flex:1;min-width:120px"
+			className: "ocbf-ctl ocbf-sel",
+			style: "flex:1;min-width:0"
 		});
 		ocs.forEach(n => ocSel.append(el("option", {
 			value: n,
@@ -1782,9 +1760,8 @@
 			render()
 		});
 		const roleSel = el("select", {
-			className: "ocbf-ctl",
-			id: "ocbf-dir",
-			style: "flex:0 0 auto"
+			className: "ocbf-ctl ocbf-sel",
+			style: "flex:0 1 auto;min-width:0;max-width:100%"
 		});
 		roles.forEach(r => roleSel.append(el("option", {
 			value: r,
@@ -1861,7 +1838,7 @@
 			style: "font-size:12px;line-height:1.5"
 		});
 		if (ocStatic && ocStatic.helpHtml) {
-			wrap.innerHTML = ocStatic.helpHtml
+			wrap.append(safeHtml(ocStatic.helpHtml))
 		} else if (!staticDone) {
 			wrap.append(el("div", {
 				style: `color:${T.sub}`,
@@ -1935,7 +1912,25 @@
 			});
 			body.append(line)
 		}
-		const details = r => `Success score ${r.blended}%  (chance the crime actually succeeds with you in it)\n` + `- in-game CPR ${r.cpr}%  (your single-checkpoint pass rate)\n` + `- ${r.community?"community estimate - little history here yet":"faction finishes this "+(r.successRate!=null?Math.round(r.successRate*100)+"%":"n/a")+" of the time"}\n` + `- expected money ${fmtMoney(r.moneyYou)} (your cut)  -  expected respect ${r.respectCrime!=null?r.respectCrime:"-"} (faction)\n` + `- role weight ${r.weight!=null?r.weight+"%":"n/a"}  -  impact ${r.impact!=null?r.impact:"-"}`;
+		const details = r => `Success score ${r.blended}%  (chance the crime actually succeeds with you in it)\n` + `- in-game CPR ${r.cpr}%  (your single-checkpoint pass rate)\n` + `- ${r.community?"community estimate - little history here yet":"faction finishes this "+(r.successRate!=null?Math.round(r.successRate*100)+"%":"n/a")+" of the time"}\n` + `- your cut if it succeeds ${fmtMoney(r.moneyYou)}  -  expected ${fmtMoney(r.evMoney)} (cut x success)\n` + `- respect if it succeeds ${r.respectCrime!=null?r.respectCrime:"-"}  -  expected ${r.evRespect!=null?r.evRespect:"-"} (faction)\n` + `- role weight ${r.weight!=null?r.weight+"%":"n/a"}  -  impact ${r.impact!=null?r.impact:"-"}`;
+		if (shareOn() && !GM_getValue(NOTICE_STORE, false)) {
+			const ok = el("button", {
+				className: "ocbf-ctl",
+				textContent: "OK",
+				style: "flex:0 0 auto"
+			});
+			const note = el("div", {
+				style: `display:flex;gap:8px;align-items:center;font-size:11px;line-height:1.4;color:${T.sub};border:1px solid ${T.border};border-radius:4px;padding:6px 8px;margin:4px 0 8px`
+			}, el("span", {
+				style: "flex:1;min-width:0",
+				textContent: "Sharing is on: your CPR snapshots and picks go to your faction's OC Best-Fit database. Turn it off in Settings."
+			}), ok);
+			ok.addEventListener("click", () => {
+				GM_setValue(NOTICE_STORE, true);
+				note.remove()
+			});
+			body.append(note)
+		}
 		if (rec) {
 			const c = COLORS[blendedColor(rec.blended)];
 			const card = el("div", {
@@ -1961,11 +1956,43 @@
 			}));
 			card.addEventListener("click", e => openDetail(details(rec), e));
 			body.append(card);
-			const sub = state.direction === "higher" ? `Reach for it - the hardest OC you can take on (D${rec.difficulty}). Win it and your standing climbs faster.` : "Best joinable role for the current preset. Joining recommended roles raises your standing faster.";
+			const nJoin = ranked.filter(r => r.qualified).length;
+			const why = [`Best of ${nJoin} role${nJoin===1?"":"s"} you can join`];
+			if (state.direction === "higher") why.push(`hardest you can take (D${rec.difficulty})`);
+			else if (state.direction === "evmoney" && rec.evMoney != null) why.push(`expected ${fmtMoney(rec.evMoney)}`);
+			else if (state.direction === "evrespect" && rec.evRespect != null) why.push(`expected respect ${rec.evRespect}`);
+			else if (state.direction === "impact" && rec.impact != null) why.push(`impact ${rec.impact}`);
+			else why.push(`success ${rec.blended}%`);
 			body.append(el("div", {
-				style: `color:${T.sub};font-size:11px;margin-top:4px`,
-				textContent: sub
-			}))
+				style: `color:${T.sub};font-size:11px;margin-top:4px;line-height:1.4`,
+				textContent: why.join(" - ") + ". Joining recommended roles raises your standing faster."
+			}));
+			const alts = alternatives(ranked, rec, 2);
+			if (alts.length) {
+				const list = el("div", {
+					style: "margin-top:8px;display:grid;gap:4px"
+				});
+				list.append(el("div", {
+					style: `font-size:10px;color:${T.sub};text-transform:uppercase;letter-spacing:.5px`,
+					textContent: "Next best"
+				}));
+				for (const a of alts) {
+					const ac = COLORS[blendedColor(a.blended)];
+					const row = el("div", {
+						title: details(a),
+						style: `display:flex;align-items:baseline;gap:8px;padding:4px 6px;border-left:3px solid ${ac};background:var(--ocbf-card);border-radius:3px;cursor:pointer;font-size:12px`
+					}, el("b", {
+						style: `color:${ac};flex:0 0 auto;min-width:22px;font-variant-numeric:tabular-nums`,
+						textContent: a.blended
+					}), el("span", {
+						style: "flex:1;min-width:0;overflow-wrap:anywhere",
+						textContent: `${a.name} - D${a.difficulty} - ${a.position}`
+					}));
+					row.addEventListener("click", e => openDetail(details(a), e));
+					list.append(row)
+				}
+				body.append(list)
+			}
 		} else {
 			const msg = ranked.length ? "No role you can join right now - you need a higher success score or a higher standing (see Help)." : "No open slots match the current filters.";
 			body.append(el("div", {
@@ -2157,7 +2184,7 @@
 					} else {
 						stake?.remove()
 					}
-					if (!canJoin) {
+					if (!canJoin && blockJoinOn()) {
 						joinBtn.disabled = true;
 						joinBtn.classList.add("torn-btn--disabled");
 						joinBtn.dataset.ocbfBlocked = "1"
@@ -2211,7 +2238,7 @@
 		const out = {
 			exportedAt: (new Date).toISOString(),
 			scriptVersion: VERSION,
-			note: "All data this script holds about you. Your Torn API key and personal stats are intentionally excluded.",
+			note: "All data this script holds about you. Your Torn API key is not included. The script does not read your battle stats.",
 			identity: GM_getValue(ID_STORE, null) || (sid ? {
 				user_id: sid
 			} : null),
@@ -2230,7 +2257,6 @@
 			for (const l of logs) out.localCprSnapshots.push({
 				ts: l.ts,
 				when: new Date(l.ts).toISOString(),
-				stats: await decStats(l.statsEnc),
 				cprs: l.cprs
 			})
 		} catch (e) {
@@ -2417,6 +2443,29 @@
 			textContent: "Replaces Torn's raw single-checkpoint number in each slot header with our computed success score (raw CPR x faction success rate). Off = raw stays in the header and our computed value shows in the top-left tag."
 		})));
 		box.append(rlab);
+		const blab = el("label", {
+			style: "display:flex;gap:8px;align-items:flex-start;cursor:pointer;margin-top:14px"
+		});
+		const bchk = el("input", {
+			type: "checkbox"
+		});
+		bchk.checked = blockJoinOn();
+		bchk.addEventListener("change", () => {
+			GM_setValue(BLOCKJOIN_STORE, bchk.checked);
+			if (!bchk.checked) document.querySelectorAll('button[data-ocbf-blocked="1"]').forEach(b => {
+				b.disabled = false;
+				b.classList.remove("torn-btn--disabled");
+				delete b.dataset.ocbfBlocked
+			});
+			paintNative()
+		});
+		blab.append(bchk, el("span", {}, el("b", {
+			textContent: "Block Join when I do not meet the need"
+		}), el("div", {
+			style: `color:${T.sub};margin-top:2px`,
+			textContent: "On = Torn's Join button is turned off for roles under your Req or Score. Off = you only see the red Req/Score tags and can still join."
+		})));
+		box.append(blab);
 		const exportBtn = el("button", {
 			className: "ocbf-ctl",
 			textContent: "Export my data",
@@ -2459,16 +2508,19 @@
 			className: "ocbf-scroll",
 			style: `background:${T.bg};color:${T.text};width:92%;max-width:620px;box-sizing:border-box;border:1px solid ${T.border};border-radius:5px;padding:18px;font-size:13px;line-height:1.5`
 		});
-		box.innerHTML = (ocStatic && ocStatic.aboutHtml) || `<p style="color:${T.sub};margin:0 0 10px">About info could not load - check your connection. <a href="https://greasyfork.org/scripts/583330" target="_blank" rel="noopener" style="color:#58a6ff">Script page</a></p><div style="text-align:right;margin-top:14px"><button id="ocbf-about-close" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:6px 14px;cursor:pointer">Close</button></div>`;
+		box.textContent = "";
+		box.append(safeHtml((ocStatic && ocStatic.aboutHtml) || `<p style="color:${T.sub};margin:0 0 10px">About info could not load - check your connection. <a href="https://greasyfork.org/scripts/583330" target="_blank" rel="noopener" style="color:#58a6ff">Script page</a></p><div style="text-align:right;margin-top:14px"><button id="ocbf-about-close" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:6px 14px;cursor:pointer">Close</button></div>`));
 		wrap.append(box);
 		wrap.addEventListener("click", e => {
 			if (e.target === wrap) wrap.remove()
 		});
-		box.querySelector("#ocbf-about-close").addEventListener("click", () => wrap.remove());
+		const cb0 = box.querySelector("#ocbf-about-close");
+		if (cb0) cb0.addEventListener("click", () => wrap.remove());
 		document.body.append(wrap);
 		if (!(ocStatic && ocStatic.aboutHtml)) loadStatic().then(() => {
 			if (ocStatic && ocStatic.aboutHtml && wrap.isConnected) {
-				box.innerHTML = ocStatic.aboutHtml;
+				box.textContent = "";
+				box.append(safeHtml(ocStatic.aboutHtml));
 				const cb = box.querySelector("#ocbf-about-close");
 				if (cb) cb.addEventListener("click", () => wrap.remove())
 			}
@@ -2556,7 +2608,7 @@
 		if (document.getElementById("ocbf-style")) return;
 		const st = document.createElement("style");
 		st.id = "ocbf-style";
-		st.textContent = `#ocbf-panel{font:13px/1.45 Arial,Helvetica,sans-serif;user-select:none;scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1)}#ocbf-panel ::-webkit-scrollbar,#ocbf-panel::-webkit-scrollbar,.ocbf-scroll ::-webkit-scrollbar,.ocbf-scroll::-webkit-scrollbar{width:9px;height:9px}#ocbf-panel ::-webkit-scrollbar-track,#ocbf-panel::-webkit-scrollbar-track,.ocbf-scroll ::-webkit-scrollbar-track,.ocbf-scroll::-webkit-scrollbar-track{background:var(--ocbf-hi1);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb,#ocbf-panel::-webkit-scrollbar-thumb,.ocbf-scroll ::-webkit-scrollbar-thumb,.ocbf-scroll::-webkit-scrollbar-thumb{background:var(--ocbf-hi3);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb:hover,#ocbf-panel::-webkit-scrollbar-thumb:hover,.ocbf-scroll ::-webkit-scrollbar-thumb:hover,.ocbf-scroll::-webkit-scrollbar-thumb:hover{background:var(--ocbf-hi3)}.ocbf-scroll{scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1);touch-action:pan-y;-webkit-overflow-scrolling:touch}#ocbf-panel input[type=range]{-webkit-appearance:none;appearance:none;width:92px;height:16px;background:transparent;cursor:pointer;touch-action:none;margin:0;vertical-align:middle}#ocbf-panel input[type=range]:focus{outline:none}#ocbf-panel input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 2px rgba(0,0,0,.5)}#ocbf-panel input[type=range]::-moz-range-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-moz-range-thumb{width:14px;height:14px;border:1px solid rgba(0,0,0,.6);border-radius:50%;background:var(--ocbf-ctl-text)}#ocbf-panel table{width:100%;border-collapse:collapse;font-size:12px}#ocbf-panel th{position:sticky;top:34px;background:var(--ocbf-ctl-bg);text-align:left;padding:5px 6px;font-weight:700;color:${T.sub};white-space:nowrap;z-index:1}#ocbf-panel td{padding:4px 6px;border-top:1px solid ${T.divider}}#ocbf-panel table tr:nth-child(even){background:var(--ocbf-hi1)}#ocbf-panel table tbody:hover,#ocbf-panel table tr:hover{background:var(--ocbf-hi2)}.ocbf-ctl{background:var(--ocbf-ctl-bg);color:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.5);border-radius:4px;padding:0 8px;height:28px;cursor:pointer;font-size:12px}.ocbf-ctl:hover{background:var(--ocbf-hi2)}.ocbf-icon{width:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ocbf-seg{display:inline-flex;border:0.5px solid var(--ocbf-border);border-radius:8px;overflow:hidden;background:var(--ocbf-hi1)}.ocbf-segbtn{width:34px;height:30px;padding:0;border:none;border-right:0.5px solid var(--ocbf-border);background:transparent;color:var(--ocbf-ctl-text);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}.ocbf-segbtn:last-child{border-right:none}.ocbf-segbtn:hover{background:var(--ocbf-hi2);color:var(--ocbf-ctl-text)}.ocbf-segbtn:active{background:var(--ocbf-hi3)}#ocbf-dir{-webkit-appearance:none;appearance:none;background-color:var(--ocbf-ctl-bg);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23999999'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}#ocbf-dir option{background:#2e2f33;color:#eaeaea}#ocbf-dir option:checked{background:#1f6feb;color:#fff}#ocbf-panel .ocbf-lab{font-size:11px;color:var(--ocbf-ctl-text);display:flex;align-items:center;gap:4px}input.ocbf-num{min-height:28px;box-sizing:border-box} #ocbf-panel .ocbf-head{cursor:grab} #ocbf-panel.ocbf-dragging .ocbf-head{cursor:grabbing} .ocbf-x{width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--ocbf-titletext);opacity:.85;cursor:pointer;font-size:18px;line-height:1;border-radius:5px} .ocbf-x:hover{opacity:1;background:var(--ocbf-hi2)}@media (max-width:640px){.ocbf-ctl{height:38px;font-size:14px;padding:0 12px}.ocbf-icon{width:42px}.ocbf-segbtn{width:44px;height:38px}#ocbf-panel .ocbf-lab{font-size:13px}#ocbf-panel input[type=range]{height:38px}#ocbf-panel input[type=checkbox]{width:22px;height:22px}input.ocbf-num{min-height:40px;font-size:16px;width:100%!important}}`;
+		st.textContent = `#ocbf-panel{font:13px/1.45 Arial,Helvetica,sans-serif;user-select:none;scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1)}#ocbf-panel ::-webkit-scrollbar,#ocbf-panel::-webkit-scrollbar,.ocbf-scroll ::-webkit-scrollbar,.ocbf-scroll::-webkit-scrollbar{width:9px;height:9px}#ocbf-panel ::-webkit-scrollbar-track,#ocbf-panel::-webkit-scrollbar-track,.ocbf-scroll ::-webkit-scrollbar-track,.ocbf-scroll::-webkit-scrollbar-track{background:var(--ocbf-hi1);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb,#ocbf-panel::-webkit-scrollbar-thumb,.ocbf-scroll ::-webkit-scrollbar-thumb,.ocbf-scroll::-webkit-scrollbar-thumb{background:var(--ocbf-hi3);border-radius:5px}#ocbf-panel ::-webkit-scrollbar-thumb:hover,#ocbf-panel::-webkit-scrollbar-thumb:hover,.ocbf-scroll ::-webkit-scrollbar-thumb:hover,.ocbf-scroll::-webkit-scrollbar-thumb:hover{background:var(--ocbf-hi3)}.ocbf-scroll{scrollbar-width:thin;scrollbar-color:var(--ocbf-hi3) var(--ocbf-hi1);touch-action:pan-y;-webkit-overflow-scrolling:touch}#ocbf-panel input[type=range]{-webkit-appearance:none;appearance:none;width:92px;height:16px;background:transparent;cursor:pointer;touch-action:none;margin:0;vertical-align:middle}#ocbf-panel input[type=range]:focus{outline:none}#ocbf-panel input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.6);box-shadow:0 1px 2px rgba(0,0,0,.5)}#ocbf-panel input[type=range]::-moz-range-track{height:4px;border-radius:3px;background:var(--ocbf-hi3)}#ocbf-panel input[type=range]::-moz-range-thumb{width:14px;height:14px;border:1px solid rgba(0,0,0,.6);border-radius:50%;background:var(--ocbf-ctl-text)}#ocbf-panel table{width:100%;border-collapse:collapse;font-size:12px}#ocbf-panel th{position:sticky;top:34px;background:var(--ocbf-ctl-bg);text-align:left;padding:5px 6px;font-weight:700;color:${T.sub};white-space:nowrap;z-index:1}#ocbf-panel td{padding:4px 6px;border-top:1px solid ${T.divider}}#ocbf-panel table tr:nth-child(even){background:var(--ocbf-hi1)}#ocbf-panel table tbody:hover,#ocbf-panel table tr:hover{background:var(--ocbf-hi2)}.ocbf-ctl{background:var(--ocbf-ctl-bg);color:var(--ocbf-ctl-text);border:1px solid rgba(0,0,0,.5);border-radius:4px;padding:0 8px;height:28px;cursor:pointer;font-size:12px}.ocbf-ctl:hover{background:var(--ocbf-hi2)}.ocbf-icon{width:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ocbf-seg{display:inline-flex;border:0.5px solid var(--ocbf-border);border-radius:8px;overflow:hidden;background:var(--ocbf-hi1)}.ocbf-segbtn{width:34px;height:30px;padding:0;border:none;border-right:0.5px solid var(--ocbf-border);background:transparent;color:var(--ocbf-ctl-text);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}.ocbf-segbtn:last-child{border-right:none}.ocbf-segbtn:hover{background:var(--ocbf-hi2);color:var(--ocbf-ctl-text)}.ocbf-segbtn:active{background:var(--ocbf-hi3)}.ocbf-sel{-webkit-appearance:none;appearance:none;background-color:var(--ocbf-ctl-bg);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23999999'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px}.ocbf-sel option{background:#2e2f33;color:#eaeaea}.ocbf-sel option:checked{background:#1f6feb;color:#fff}#ocbf-panel .ocbf-lab{font-size:11px;color:var(--ocbf-ctl-text);display:flex;align-items:center;gap:4px}input.ocbf-num{min-height:28px;box-sizing:border-box} #ocbf-panel .ocbf-head{cursor:grab} #ocbf-panel.ocbf-dragging .ocbf-head{cursor:grabbing} .ocbf-x{width:24px;height:24px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--ocbf-titletext);opacity:.85;cursor:pointer;font-size:18px;line-height:1;border-radius:5px} .ocbf-x:hover{opacity:1;background:var(--ocbf-hi2)}@media (max-width:640px){.ocbf-ctl{height:38px;font-size:14px;padding:0 12px}.ocbf-icon{width:42px}.ocbf-segbtn{width:44px;height:38px}#ocbf-panel .ocbf-lab{font-size:13px}#ocbf-panel input[type=range]{height:38px}#ocbf-panel input[type=checkbox]{width:22px;height:22px}input.ocbf-num{min-height:40px;font-size:16px;width:100%!important}}`;
 		(document.head || document.documentElement).append(st)
 	}
 
@@ -2586,8 +2638,8 @@
 		})));
 		const dir = el("select", {
 			id: "ocbf-dir",
-			className: "ocbf-ctl",
-			style: "flex:1"
+			className: "ocbf-ctl ocbf-sel",
+			style: "flex:1;min-width:0"
 		});
 		for (const [k, v] of Object.entries(DIRECTIONS)) dir.append(el("option", {
 			value: k,
@@ -2596,6 +2648,7 @@
 		dir.value = state.direction;
 		dir.addEventListener("change", () => {
 			state.direction = dir.value;
+			savePrefs();
 			render();
 			paintNative();
 			paintCrimeSuccess();
@@ -2623,10 +2676,10 @@
 			type: "range",
 			min: "0",
 			max: "100",
-			value: "0"
+			value: String(state.floor)
 		});
 		const floorVal = el("span", {
-			textContent: "0",
+			textContent: String(state.floor),
 			style: "display:inline-block;min-width:26px;text-align:right"
 		});
 		floor.addEventListener("input", () => {
@@ -2634,6 +2687,7 @@
 			floorVal.textContent = floor.value;
 			render()
 		});
+		floor.addEventListener("change", savePrefs);
 		floorWrap.append("min score", floor, floorVal);
 		row2.append(floorWrap);
 		const itemWrap = el("label", {
@@ -2643,8 +2697,10 @@
 		const itemChk = el("input", {
 			type: "checkbox"
 		});
+		itemChk.checked = state.hideNoItem;
 		itemChk.addEventListener("change", () => {
 			state.hideNoItem = itemChk.checked;
+			savePrefs();
 			render()
 		});
 		itemWrap.append(itemChk, "only roles I can fill");
@@ -3060,10 +3116,11 @@
 			loadStatic()
 		} catch (e) {}
 		setInterval(() => {
+			if (document.hidden) return;
 			try {
 				syncEntryButton()
 			} catch (e) {}
-			if (IS_PDA) {
+			if (IS_PDA && routeActive()) {
 				try {
 					paintNative()
 				} catch (e) {}
@@ -3085,12 +3142,13 @@
 		try {
 			let raf = 0;
 			const obs = new MutationObserver(() => {
-				if (raf) return;
+				if (raf || document.hidden) return;
 				raf = requestAnimationFrame(() => {
 					raf = 0;
 					try {
 						syncEntryButton()
 					} catch (e) {}
+					if (!routeActive()) return;
 					try {
 						paintNative()
 					} catch (e) {}
@@ -3102,6 +3160,18 @@
 			obs.observe(document.documentElement, {
 				childList: true,
 				subtree: true
+			});
+			document.addEventListener("visibilitychange", () => {
+				if (document.hidden) return;
+				try {
+					syncEntryButton()
+				} catch (e) {}
+				if (routeActive()) {
+					try {
+						paintNative();
+						paintCrimeSuccess()
+					} catch (e) {}
+				}
 			})
 		} catch (e) {
 			console.warn("ocbfobserver:", e.message)
@@ -3134,6 +3204,10 @@
 	const WEIGHTS_API_URL = "https://tornprobability.com:3000/api/GetRoleWeights";
 	window.__ocbfWeights = window.__ocbfWeights || {};
 	let weightData = {};
+	const W_CACHE = "oc_bestfit_weights";
+	const W_TTL = 24 * 3600 * 1e3;
+	const onOc = () => /\/(factions|organizedcrimes)\.php/.test(location.pathname);
+	const idle = () => document.hidden || !onOc();
 
 	function injectNativeStyle() {
 		if (document.getElementById("ocbf-native-style")) return;
@@ -3165,7 +3239,7 @@
 
 	function installItemQuickLink() {
 		const wire = () => {
-			if (!hasKey()) return;
+			if (!hasKey() || idle()) return;
 			try {
 				document.querySelectorAll('div[class*="slotIcon"] div[class*="inactive"]').forEach(iconBox => {
 					if (iconBox.dataset.ocbfLinked) return;
@@ -3235,10 +3309,25 @@
 	function scanWeights() {
 		document.querySelectorAll('div[class*="wrapper"][data-oc-id]').forEach(addWeightBoxes)
 	}
+	let wBusy = false;
 	async function fetchWeights() {
-		if (!hasKey()) return;
+		if (!hasKey() || !onOc() || wBusy) return;
+		let data = null;
 		try {
-			const data = await gmGet(WEIGHTS_API_URL);
+			const c = GM_getValue(W_CACHE, null);
+			if (c && c.data && Date.now() - c.ts < W_TTL) data = c.data
+		} catch (e) {}
+		wBusy = true;
+		try {
+			if (!data) {
+				data = await window.__ocbfGet(WEIGHTS_API_URL);
+				try {
+					GM_setValue(W_CACHE, {
+						ts: Date.now(),
+						data: data
+					})
+				} catch (e) {}
+			}
 			weightData = {};
 			for (const [ocName, roles] of Object.entries(data)) {
 				const ocKey = normalizeKey(ocName);
@@ -3248,8 +3337,9 @@
 			window.__ocbfWeights = weightData;
 			scanWeights()
 		} catch (err) {
-			console.error("ocbf weights:", err)
+			console.warn("ocbf weights:", err && err.message || err)
 		}
+		wBusy = false
 	}
 
 	function nodeTouchesPanelTitle(node) {
@@ -3263,13 +3353,15 @@
 
 	function installPanelRequirements() {
 		const render = () => {
-			if (!hasKey()) return;
+			if (!hasKey() || idle()) return;
+			if (!Object.keys(weightData).length) fetchWeights();
 			scanWeights()
 		};
 		reqRender = render;
 		render();
 		let scheduleId = 0;
 		const observer = new MutationObserver(mutations => {
+			if (idle()) return;
 			const shouldRender = mutations.some(m => [...m.addedNodes, ...m.removedNodes].some(n => nodeTouchesPanelTitle(n)));
 			if (!shouldRender) return;
 			if (scheduleId) return;
