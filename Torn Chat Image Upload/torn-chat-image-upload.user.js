@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Chat Image Upload
 // @namespace    kamiren.torn-chat-image-upload
-// @version      1.0.3
+// @version      1.0.4
 // @description  Image button next to Send in Torn chat: uploads your picture to Catbox and puts the link in the chat box. You click Send.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -17,103 +17,79 @@
   'use strict';
 
   const CATBOX = 'https://catbox.moe/user/api.php';
-  const LINK_RE = /^https:\/\/files\.catbox\.moe\/([A-Za-z0-9]+\.[A-Za-z0-9]+)$/;
   const TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
   const KEY_HASH = 'cimg.userhash';
   const KEY_RECENT = 'cimg.recent';
-  const MAX_RECENT = 20;
-  const STATUS_MS = 5000;
-  const SCAN_GAP = 1000;
   const ICON =
     '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v8.6l4.3-4.3 3.2 3.2 2.3-2.3L19 16.4V7H5zm10.5 1.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>';
+  const isPda = typeof window.PDA_httpGet === 'function' || /TornPDA/i.test(navigator.userAgent || '');
+  const ok = (status) => status >= 200 && status < 300;
+  let panel = null;
 
-  const hasGM = typeof GM_getValue === 'function' && typeof GM_setValue === 'function';
   const store = {
     get(k, d) {
       let v;
       try {
-        if (hasGM) v = GM_getValue(k, undefined);
-        if (v === undefined || v === null || v === '') v = localStorage.getItem(k);
-      } catch (e) {}
-      if (v === undefined || v === null || v === '') return d;
-      try {
-        return JSON.parse(v);
+        v = GM_getValue(k, '') || localStorage.getItem(k);
+        return v ? JSON.parse(v) : d;
       } catch (e) {
         return typeof v === 'string' ? v : d;
       }
     },
     set(k, v) {
-      try {
-        if (hasGM) {
-          GM_setValue(k, JSON.stringify(v));
-          localStorage.removeItem(k);
-        } else localStorage.setItem(k, JSON.stringify(v));
-      } catch (e) {}
+      GM_setValue(k, JSON.stringify(v));
+      localStorage.removeItem(k);
     },
     del(k) {
-      try {
-        if (hasGM) {
-          if (typeof GM_deleteValue === 'function') GM_deleteValue(k);
-          else GM_setValue(k, '');
-        }
-        localStorage.removeItem(k);
-      } catch (e) {}
+      GM_deleteValue(k);
+      localStorage.removeItem(k);
     },
   };
 
-  const isPda = typeof window.PDA_httpGet === 'function' || /TornPDA/i.test(navigator.userAgent || '');
-
-  function form(fields) {
-    const f = new FormData();
-    Object.keys(fields).forEach((k) => {
-      if (fields[k] !== '' && fields[k] !== undefined) f.append(k, fields[k]);
-    });
-    return f;
+  function el(tag, cls, text, props) {
+    const e = Object.assign(document.createElement(tag), props);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    if (tag === 'button') e.type = 'button';
+    return e;
   }
 
-  async function multipart(fields) {
-    const b = 'cimg' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  async function body(fields) {
+    const keys = Object.keys(fields).filter((k) => fields[k]);
+    if (!isPda) {
+      const f = new FormData();
+      keys.forEach((k) => f.append(k, fields[k]));
+      return { data: f };
+    }
+    const b = 'cimg' + Math.random().toString(36).slice(2);
     let s = '';
-    for (const k of Object.keys(fields)) {
+    for (const k of keys) {
       const v = fields[k];
-      if (v === '' || v === undefined) continue;
-      s += '--' + b + '\r\n';
+      s += '--' + b + '\r\nContent-Disposition: form-data; name="' + k + '"';
       if (v instanceof Blob) {
         const bytes = new Uint8Array(await v.arrayBuffer());
         let bin = '';
         for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-        const name = String(v.name || 'image').replace(/[^\w.-]/g, '_');
-        s += 'Content-Disposition: form-data; name="' + k + '"; filename="' + name + '"\r\nContent-Type: ' + (v.type || 'application/octet-stream') + '\r\n\r\n' + bin + '\r\n';
-      } else {
-        s += 'Content-Disposition: form-data; name="' + k + '"\r\n\r\n' + v + '\r\n';
-      }
+        s += '; filename="' + String(v.name || 'image').replace(/[^\w.-]/g, '_') + '"\r\nContent-Type: ' + v.type + '\r\n\r\n' + bin + '\r\n';
+      } else s += '\r\n\r\n' + v + '\r\n';
     }
-    return { body: s + '--' + b + '--\r\n', type: 'multipart/form-data; charset=iso-8859-1; boundary=' + b };
+    return { data: s + '--' + b + '--\r\n', headers: { 'Content-Type': 'multipart/form-data; charset=iso-8859-1; boundary=' + b } };
   }
 
-  async function request(method, url, fields) {
-    if (typeof GM_xmlhttpRequest === 'function') {
-      let data = form(fields);
-      let headers;
-      if (isPda) {
-        const m = await multipart(fields);
-        data = m.body;
-        headers = { 'Content-Type': m.type };
-      }
-      return new Promise((resolve, reject) => {
-        GM_xmlhttpRequest({
-          method,
-          url,
-          headers,
-          data,
+  async function post(fields) {
+    const req = await body(fields);
+    return new Promise((resolve, reject) =>
+      GM_xmlhttpRequest(
+        Object.assign(req, {
+          method: 'POST',
+          url: CATBOX,
           timeout: 60000,
-          onload: (r) => resolve({ status: r.status, text: r.responseText || '' }),
-          onerror: () => reject(new Error('network')),
-          ontimeout: () => reject(new Error('timeout')),
-        });
-      });
-    }
-    return fetch(url, { method, body: form(fields) }).then(async (r) => ({ status: r.status, text: await r.text() }));
+          onload: (r) => resolve({ status: r.status, text: String(r.responseText || '').trim() }),
+          onerror: reject,
+          ontimeout: reject,
+        })
+      )
+    );
   }
 
   function errorText(status) {
@@ -123,80 +99,44 @@
     return 'Upload failed (' + status + ')';
   }
 
-  function parseUpload(status, text) {
-    const body = String(text || '').trim();
-    const m = body.match(LINK_RE);
-    if (status >= 200 && status < 300 && m) return { ok: true, id: m[1], link: body };
-    if (status >= 200 && status < 300) return { ok: false, error: 'Upload failed: ' + (body.slice(0, 80) || 'empty reply') };
-    return { ok: false, error: errorText(status) };
-  }
-
-  function insertAt(text, pos, link) {
-    const before = text.slice(0, pos);
-    const after = text.slice(pos);
-    const pre = pos > 0 && !/\s$/.test(before) ? ' ' : '';
-    const post = /^\s/.test(after) ? '' : ' ';
-    return { value: before + pre + link + post + after, caret: before.length + pre.length + link.length + post.length };
-  }
-
-  function addRecent(item) {
-    const list = [item].concat(store.get(KEY_RECENT, []).filter((x) => x.id !== item.id)).slice(0, MAX_RECENT);
-    store.set(KEY_RECENT, list);
+  async function sniff(file) {
+    if (TYPES.includes(file.type)) return file;
+    const h = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const at = (i, str) => [...str].every((c, j) => h[i + j] === c.charCodeAt(0));
+    const type =
+      (h[0] === 0x89 && at(1, 'PNG') && 'png') ||
+      (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff && 'jpeg') ||
+      (at(0, 'GIF8') && 'gif') ||
+      (at(0, 'RIFF') && at(8, 'WEBP') && 'webp');
+    if (!type) return null;
+    const base = String(file.name || '').replace(/\.[^.]*$/, '') || 'photo';
+    return new File([file], base + '.' + type.replace('jpeg', 'jpg'), { type: 'image/' + type });
   }
 
   function findRows(root) {
-    const out = [];
-    root.querySelectorAll('textarea').forEach((ta) => {
-      const row = ta.parentElement;
-      if (!row) return;
-      const send = [...row.children].find((c) => c.tagName === 'BUTTON' && !c.classList.contains('cimg-btn') && c.querySelector('svg'));
-      if (send) out.push({ row, textarea: ta, send });
-    });
-    return out;
+    return [...root.querySelectorAll('textarea')]
+      .map((ta) => {
+        const row = ta.parentElement;
+        const send = row && [...row.children].find((c) => c.tagName === 'BUTTON' && !c.classList.contains('cimg-btn') && c.querySelector('svg'));
+        return send && { row, textarea: ta, send };
+      })
+      .filter(Boolean);
   }
 
   function liveRow(r) {
-    let row = r.row;
-    if (!row.isConnected) {
-      const win = r.win && document.getElementById(r.win);
-      const found = win ? findRows(win)[0] : null;
-      if (!found) return { row, textarea: null, win: r.win };
-      row = found.row;
-    }
-    return { row, textarea: row.querySelector(':scope > textarea'), win: r.win };
-  }
-
-  function setValue(textarea, value, caret) {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, value);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    textarea.focus();
-    try {
-      textarea.setSelectionRange(caret, caret);
-    } catch (e) {}
-  }
-
-  function iconColour(send) {
-    try {
-      const stop = send.querySelector('stop');
-      const c = stop && getComputedStyle(stop).stopColor;
-      if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'rgb(0, 0, 0)') return c;
-    } catch (e) {}
-    return '';
+    const win = !r.row.isConnected && r.win && document.getElementById(r.win);
+    const row = win ? (findRows(win)[0] || r).row : r.row;
+    return { row, textarea: row.isConnected ? row.querySelector(':scope > textarea') : null };
   }
 
   function status(r, text, kind, manage) {
     if (document.hidden) return;
     let line = r.row.nextElementSibling;
-    if (!line || !line.classList.contains('cimg-status')) {
-      line = document.createElement('div');
-      r.row.after(line);
-    }
+    if (!line || !line.classList.contains('cimg-status')) r.row.after((line = el('div')));
     line.className = 'cimg-status cimg-' + kind;
     line.textContent = text;
     if (manage) {
-      const a = document.createElement('a');
-      a.href = '#';
-      a.textContent = 'Manage';
+      const a = el('a', '', 'Manage', { href: '#' });
       a.addEventListener('click', (e) => {
         e.preventDefault();
         openPanel();
@@ -204,53 +144,41 @@
       line.append(' · ', a);
     }
     clearTimeout(line._t);
-    line._t = setTimeout(() => line.remove(), STATUS_MS);
+    line._t = setTimeout(() => line.remove(), 5000);
   }
 
   function busy(r, on) {
     const b = liveRow(r).row.querySelector(':scope > .cimg-btn');
-    if (!b) return;
-    b.disabled = on;
-    b.classList.toggle('cimg-busy', on);
-  }
-
-  async function sniff(file) {
-    if (TYPES.indexOf(file.type) !== -1) return file;
-    let h;
-    try {
-      h = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-    } catch (e) {
-      return null;
+    if (b) {
+      b.disabled = on;
+      b.classList.toggle('cimg-busy', on);
     }
-    const at = (i, str) => [...str].every((c, j) => h[i + j] === c.charCodeAt(0));
-    let type = '';
-    if (h[0] === 0x89 && at(1, 'PNG')) type = 'image/png';
-    else if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) type = 'image/jpeg';
-    else if (at(0, 'GIF8')) type = 'image/gif';
-    else if (at(0, 'RIFF') && at(8, 'WEBP')) type = 'image/webp';
-    if (!type) return null;
-    const ext = type.split('/')[1].replace('jpeg', 'jpg');
-    const base = String(file.name || 'photo').replace(/\.[^.]*$/, '') || 'photo';
-    return new File([file], base + '.' + ext, { type });
   }
 
   async function upload(r, file, caret) {
-    if (file) status(liveRow(r), 'Uploading…', 'ok');
-    file = file && (await sniff(file));
+    status(liveRow(r), 'Uploading…', 'ok');
+    file = await sniff(file).catch(() => null);
     if (!file) return status(liveRow(r), 'Use PNG, JPEG, GIF or WebP.', 'err');
     const hash = store.get(KEY_HASH, '');
     busy(r, true);
     try {
-      const res = await request('POST', CATBOX, { reqtype: 'fileupload', userhash: hash, fileToUpload: file });
-      const up = parseUpload(res.status, res.text);
-      if (!up.ok) return status(liveRow(r), up.error, 'err');
-      addRecent({ id: up.id, link: up.link, owned: !!hash, at: Date.now() });
+      const res = await post({ reqtype: 'fileupload', userhash: hash, fileToUpload: file });
+      const m = res.text.match(/^https:\/\/files\.catbox\.moe\/([A-Za-z0-9]+\.[A-Za-z0-9]+)$/);
+      if (!ok(res.status)) return status(liveRow(r), errorText(res.status), 'err');
+      if (!m) return status(liveRow(r), 'Upload failed: ' + (res.text.slice(0, 80) || 'empty reply'), 'err');
+      const list = store.get(KEY_RECENT, []).filter((x) => x.id !== m[1]);
+      store.set(KEY_RECENT, [{ id: m[1], link: res.text, owned: !!hash, at: Date.now() }].concat(list).slice(0, 20));
       const live = liveRow(r);
       const ta = live.textarea;
       if (!ta) return;
       const pos = typeof caret === 'number' && caret <= ta.value.length ? caret : ta.value.length;
-      const next = insertAt(ta.value, pos, up.link);
-      setValue(ta, next.value, next.caret);
+      const before = ta.value.slice(0, pos);
+      const after = ta.value.slice(pos);
+      const add = (pos && !/\s$/.test(before) ? ' ' : '') + res.text + (/^\s/.test(after) ? '' : ' ');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, before + add + after);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      ta.setSelectionRange(pos + add.length, pos + add.length);
       status(live, 'Link added. Click Send to post it.', 'ok', true);
       if (panel && panel.isConnected) drawPanel();
     } catch (e) {
@@ -260,29 +188,12 @@
     }
   }
 
-  function pick(r) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = TYPES.join(',');
-    input.style.display = 'none';
-    input.addEventListener('change', () => {
-      const f = input.files && input.files[0];
-      input.remove();
-      if (f) upload(r, f, r.caret);
-    });
-    document.body.appendChild(input);
-    input.click();
-  }
-
   function addButton(r) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'cimg-btn';
-    b.title = 'Upload image. Right-click: last uploads';
+    const b = el('button', 'cimg-btn', undefined, { title: 'Upload image. Right-click: last uploads', innerHTML: ICON });
     b.setAttribute('aria-label', 'Upload image');
-    b.innerHTML = ICON;
-    const c = iconColour(r.send);
-    if (c) b.style.color = c;
+    const stop = r.send.querySelector('stop');
+    const c = stop && getComputedStyle(stop).stopColor;
+    if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'rgb(0, 0, 0)') b.style.color = c;
     r.win = (r.row.closest('[id]') || {}).id || '';
     b.addEventListener('mousedown', () => {
       const ta = liveRow(r).textarea;
@@ -291,35 +202,31 @@
     b.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      pick(r);
+      const input = el('input', '', undefined, { type: 'file', accept: TYPES.join(','), hidden: true });
+      input.addEventListener('change', () => (input.remove(), input.files[0] && upload(r, input.files[0], r.caret)));
+      document.body.appendChild(input).click();
     });
     b.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openPanel();
     });
     r.row.insertBefore(b, r.send);
-    r.row.dataset.cimg = '1';
   }
 
   const hooked = new WeakSet();
-  function hookPaste(r) {
-    const ta = r.textarea;
-    if (hooked.has(ta)) return;
-    hooked.add(ta);
-    ta.addEventListener('paste', (e) => {
-      const items = [...((e.clipboardData && e.clipboardData.items) || [])];
-      if (items.some((x) => x.kind === 'string' && x.type === 'text/plain')) return;
-      const item = items.find((x) => x.kind === 'file' && /^image\//.test(x.type));
-      if (!item) return;
-      e.preventDefault();
-      upload(r, item.getAsFile(), ta.selectionStart);
-    });
-  }
-
   function scan() {
     findRows(document).forEach((r) => {
-      if (!(r.row.dataset.cimg === '1' && r.row.querySelector(':scope > .cimg-btn'))) addButton(r);
-      hookPaste(r);
+      if (!r.row.querySelector(':scope > .cimg-btn')) addButton(r);
+      if (hooked.has(r.textarea)) return;
+      hooked.add(r.textarea);
+      r.textarea.addEventListener('paste', (e) => {
+        const items = [...((e.clipboardData && e.clipboardData.items) || [])];
+        if (items.some((x) => x.kind === 'string' && x.type === 'text/plain')) return;
+        const item = items.find((x) => x.kind === 'file' && /^image\//.test(x.type));
+        if (!item) return;
+        e.preventDefault();
+        upload(r, item.getAsFile(), r.textarea.selectionStart);
+      });
     });
   }
 
@@ -332,27 +239,10 @@
       last = Date.now();
       scan();
     };
-    const later = () => {
-      if (timer) return;
-      timer = setTimeout(run, Math.max(0, SCAN_GAP - (Date.now() - last)));
-    };
+    const later = () => timer || (timer = setTimeout(run, Math.max(0, 1000 - (Date.now() - last))));
     new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
     document.addEventListener('visibilitychange', () => !document.hidden && later());
     run();
-  }
-
-  let panel = null;
-
-  function el(tag, cls, text) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-
-  function when(ms) {
-    const d = new Date(ms);
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   function recentList() {
@@ -366,27 +256,24 @@
     wrap.appendChild(el('div', 'cimg-muted', 'Anyone with the link can see the image. Anonymous uploads cannot be deleted; add a Catbox user hash below to get Delete.'));
     const hash = store.get(KEY_HASH, '');
     list.forEach((it) => {
+      const d = new Date(it.at);
       const row = el('div', 'cimg-recent');
-      const a = el('a', '', it.link.replace(/^https:\/\//, ''));
-      a.href = it.link;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      row.appendChild(a);
-      row.appendChild(el('span', 'cimg-muted', when(it.at)));
+      row.append(
+        el('a', '', it.link.replace(/^https:\/\//, ''), { href: it.link, target: '_blank', rel: 'noopener noreferrer' }),
+        el('span', 'cimg-muted', d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      );
       const msg = el('span', 'cimg-err', '');
       if (it.owned && hash) {
         const del = el('button', 'cimg-act', 'Delete');
-        del.type = 'button';
         del.addEventListener('click', async () => {
           del.disabled = true;
           try {
-            const res = await request('POST', CATBOX, { reqtype: 'deletefiles', userhash: hash, files: it.id });
-            if (res.status >= 200 && res.status < 300 && /deleted/i.test(res.text || '')) {
+            const res = await post({ reqtype: 'deletefiles', userhash: hash, files: it.id });
+            if (ok(res.status) && /deleted/i.test(res.text)) {
               store.set(KEY_RECENT, store.get(KEY_RECENT, []).filter((x) => x.id !== it.id));
-              row.remove();
-              return;
+              return row.remove();
             }
-            msg.textContent = res.status >= 200 && res.status < 300 ? 'Not deleted. Try again, or delete it on catbox.moe.' : errorText(res.status);
+            msg.textContent = ok(res.status) ? 'Not deleted. Try again, or delete it on catbox.moe.' : errorText(res.status);
           } catch (e) {
             msg.textContent = errorText(0);
           }
@@ -401,61 +288,43 @@
   }
 
   function hashField() {
+    const h = store.get(KEY_HASH, '');
     const wrap = el('div', 'cimg-sec');
-    wrap.appendChild(el('h3', '', 'Catbox user hash (optional)'));
-    const stat = el('div', 'cimg-keystat');
-    const note = el('div', 'cimg-muted');
-    const paint = () => {
-      const h = store.get(KEY_HASH, '');
-      stat.className = 'cimg-keystat ' + (h ? 'cimg-ok' : 'cimg-no');
-      stat.textContent = h ? '✓ Key saved · ends in ' + String(h).slice(-4) : '✗ No key saved';
-      note.textContent = h
-        ? 'Saved in your userscript manager. Sent only to catbox.moe. New uploads go to your Catbox account and get Delete.'
-        : 'Not needed to upload. Without it, uploads are anonymous and cannot be deleted. With a free Catbox account, paste your user hash here.';
-    };
-    paint();
-    const input = el('input', 'cimg-field');
-    input.type = 'password';
-    input.placeholder = 'Catbox user hash';
-    input.autocomplete = 'off';
-    const bar = el('div', 'cimg-bar');
+    const input = el('input', 'cimg-field', undefined, { type: 'password', placeholder: 'Catbox user hash', autocomplete: 'off' });
     const save = el('button', 'cimg-act', 'Save');
-    save.type = 'button';
-    save.addEventListener('click', () => {
-      const v = input.value.trim();
-      if (!v) return;
-      store.set(KEY_HASH, v);
-      input.value = '';
-      paint();
-    });
     const forget = el('button', 'cimg-act', 'Forget');
-    forget.type = 'button';
-    forget.addEventListener('click', () => {
-      store.del(KEY_HASH);
-      paint();
-    });
+    save.addEventListener('click', () => input.value.trim() && (store.set(KEY_HASH, input.value.trim()), drawPanel()));
+    forget.addEventListener('click', () => (store.del(KEY_HASH), drawPanel()));
+    const bar = el('div', 'cimg-bar');
     bar.append(save, forget);
-    wrap.append(stat, note, input, bar);
+    wrap.append(
+      el('h3', '', 'Catbox user hash (optional)'),
+      el('div', 'cimg-keystat ' + (h ? 'cimg-ok' : 'cimg-no'), h ? '✓ Key saved · ends in ' + String(h).slice(-4) : '✗ No key saved'),
+      el(
+        'div',
+        'cimg-muted',
+        h
+          ? 'Saved in your userscript manager. Sent only to catbox.moe. New uploads go to your Catbox account and get Delete.'
+          : 'Not needed to upload. Without it, uploads are anonymous and cannot be deleted. With a free Catbox account, paste your user hash here.'
+      ),
+      input,
+      bar
+    );
     return wrap;
   }
 
   function drawPanel() {
-    const body = panel.querySelector('.cimg-body');
-    body.innerHTML = '';
-    body.append(recentList(), hashField());
+    panel.querySelector('.cimg-body').replaceChildren(recentList(), hashField());
   }
 
   function openPanel() {
     if (!panel || !panel.isConnected) {
-      panel = el('div', 'cimg-panel');
-      panel.id = 'cimg-panel';
-      const head = el('div', 'cimg-head');
-      head.appendChild(el('span', 'cimg-title', 'Chat images'));
+      panel = el('div', 'cimg-panel', undefined, { id: 'cimg-panel' });
       const close = el('button', 'cimg-x', '×');
-      close.type = 'button';
       close.setAttribute('aria-label', 'Close');
       close.addEventListener('click', () => panel.remove());
-      head.appendChild(close);
+      const head = el('div', 'cimg-head');
+      head.append(el('span', 'cimg-title', 'Chat images'), close);
       panel.append(head, el('div', 'cimg-body'));
       document.body.appendChild(panel);
     }
@@ -490,9 +359,7 @@
 `;
 
   function start() {
-    const style = document.createElement('style');
-    style.textContent = CSS;
-    document.head.appendChild(style);
+    document.head.appendChild(el('style', '', CSS));
     watch();
   }
 
