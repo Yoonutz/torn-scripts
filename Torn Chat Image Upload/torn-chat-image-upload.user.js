@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Chat Image Upload
 // @namespace    kamiren.torn-chat-image-upload
-// @version      1.0.2
+// @version      1.0.3
 // @description  Image button next to Send in Torn chat: uploads your picture to Catbox and puts the link in the chat box. You click Send.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -214,14 +214,36 @@
     b.classList.toggle('cimg-busy', on);
   }
 
+  async function sniff(file) {
+    if (TYPES.indexOf(file.type) !== -1) return file;
+    let h;
+    try {
+      h = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    } catch (e) {
+      return null;
+    }
+    const at = (i, str) => [...str].every((c, j) => h[i + j] === c.charCodeAt(0));
+    let type = '';
+    if (h[0] === 0x89 && at(1, 'PNG')) type = 'image/png';
+    else if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) type = 'image/jpeg';
+    else if (at(0, 'GIF8')) type = 'image/gif';
+    else if (at(0, 'RIFF') && at(8, 'WEBP')) type = 'image/webp';
+    if (!type) return null;
+    const ext = type.split('/')[1].replace('jpeg', 'jpg');
+    const base = String(file.name || 'photo').replace(/\.[^.]*$/, '') || 'photo';
+    return new File([file], base + '.' + ext, { type });
+  }
+
   async function upload(r, file, caret) {
-    if (!file || TYPES.indexOf(file.type) === -1) return status(r, 'Use PNG, JPEG, GIF or WebP.', 'err');
+    if (file) status(liveRow(r), 'Uploading…', 'ok');
+    file = file && (await sniff(file));
+    if (!file) return status(liveRow(r), 'Use PNG, JPEG, GIF or WebP.', 'err');
     const hash = store.get(KEY_HASH, '');
     busy(r, true);
     try {
       const res = await request('POST', CATBOX, { reqtype: 'fileupload', userhash: hash, fileToUpload: file });
       const up = parseUpload(res.status, res.text);
-      if (!up.ok) return status(r, up.error, 'err');
+      if (!up.ok) return status(liveRow(r), up.error, 'err');
       addRecent({ id: up.id, link: up.link, owned: !!hash, at: Date.now() });
       const live = liveRow(r);
       const ta = live.textarea;
@@ -232,7 +254,7 @@
       status(live, 'Link added. Click Send to post it.', 'ok', true);
       if (panel && panel.isConnected) drawPanel();
     } catch (e) {
-      status(r, errorText(0), 'err');
+      status(liveRow(r), errorText(0), 'err');
     } finally {
       busy(r, false);
     }

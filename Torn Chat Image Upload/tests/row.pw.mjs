@@ -133,7 +133,7 @@ test('errorLine', () =>
     await page.evaluate(() => (window.__host = { status: 429, text: '<html>' }));
     await pick(page, '[id="111"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG });
     const line = page.locator('[id="111"] .cimg-status');
-    await line.waitFor();
+    await page.waitForFunction(() => /busy/.test(document.querySelector('[id="111"] .cimg-status')?.textContent || ''));
     assert.equal(await line.textContent(), 'Catbox is busy. Try again in a few minutes.');
     assert.equal(await page.locator('[id="111"] .cimg-btn').isDisabled(), false);
     assert.equal(await page.inputValue('[id="111"] textarea'), '');
@@ -141,9 +141,9 @@ test('errorLine', () =>
 
 test('wrongType', () =>
   withPage({ gm: ID }, async (page) => {
-    await pick(page, '[id="111"]', { name: 'a.bmp', mimeType: 'image/bmp', buffer: PNG });
+    await pick(page, '[id="111"]', { name: 'a.bmp', mimeType: 'image/bmp', buffer: Buffer.from('BM not a picture') });
     const line = page.locator('[id="111"] .cimg-status');
-    await line.waitFor();
+    await page.waitForFunction(() => /Use PNG/.test(document.querySelector('[id="111"] .cimg-status')?.textContent || ''));
     assert.equal(await line.textContent(), 'Use PNG, JPEG, GIF or WebP.');
     assert.equal((await page.evaluate(() => window.__requests)).length, 0);
   }));
@@ -334,4 +334,25 @@ test('pdaSendsMultipartText', () =>
     assert.ok(file.includes('filename="my_shot__1_.png"\r\nContent-Type: image/png\r\n\r\n'));
     const bytes = file.slice(file.indexOf('\r\n\r\n') + 4, -2);
     assert.equal(Buffer.from(bytes, 'latin1').equals(PNG), true);
+  }));
+
+test('cameraPhotoWithoutType', () =>
+  withPage({}, async (page) => {
+    const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9]);
+    await pick(page, '[id="111"]', { name: '1763300000000', mimeType: '', buffer: JPG });
+    await page.waitForFunction(() => document.querySelector('[id="111"] textarea').value.includes('catbox'));
+    const f = (await page.evaluate(() => window.__requests))[0].data.fileToUpload;
+    assert.equal(f.type, 'image/jpeg');
+    assert.equal(f.name, '1763300000000.jpg');
+    assert.equal(f.size, JPG.length);
+  }));
+
+test('uploadingShownAtOnce', () =>
+  withPage({}, async (page) => {
+    await page.evaluate(() => {
+      const real = window.GM_xmlhttpRequest;
+      window.GM_xmlhttpRequest = (o) => setTimeout(() => real(o), 1500);
+    });
+    await pick(page, '[id="111"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG });
+    await page.waitForFunction(() => /Uploading/.test(document.querySelector('[id="111"] .cimg-status')?.textContent || ''), null, { timeout: 1000 });
   }));
