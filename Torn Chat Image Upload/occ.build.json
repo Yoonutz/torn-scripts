@@ -1,0 +1,6 @@
+{
+  "out": "torn-chat-image-upload.user.js",
+  "header": "header.js",
+  "shell": "standalone",
+  "plugins": ["plugin.js"]
+}

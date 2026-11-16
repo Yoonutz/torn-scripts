@@ -1,7 +1,7 @@
 // Standalone shell: one plug-in as its own userscript, outside the Command Center.
 // start(kit) runs as soon as the page is ready. A plug-in with mount() also gets a small window
 // (same look as the Command Center, no tab bar) opened by a floating button, or by its own page
-// button when it defines launcher(kit, toggle). solo: false skips that window (the plug-in draws its own). When the Command Center on this page already
+// button when it defines launcher(kit, toggle). access: 'none' = no Torn key field in Setup. solo: false skips that window (the plug-in draws its own). When the Command Center on this page already
 // bundles the same plug-in, this copy steps aside so nothing runs or calls the API twice.
 import { el, esc } from '../core/dom.js';
 import { store } from '../core/storage.js';
@@ -78,8 +78,8 @@ export function boot(plugins) {
     fillStats(statsRow, null);
     const wrap = el('div');
     const c1 = el('div', 'occ-card');
-    keyField(c1, { key: KEY_TORN, fallback: tornKey, title: 'Torn API key', placeholder: 'Torn API key (' + (p.access || 'minimal') + ' access)', saved: 'Key saved in Tampermonkey storage, used only for Torn API calls from your browser.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No key yet. Needs ' + (p.access || 'minimal') + ' access.' });
-    wrap.appendChild(c1);
+    if (p.access !== 'none') keyField(c1, { key: KEY_TORN, fallback: tornKey, title: 'Torn API key', placeholder: 'Torn API key (' + (p.access || 'minimal') + ' access)', saved: 'Key saved in Tampermonkey storage, used only for Torn API calls from your browser.', empty: tornKey() ? 'Using the key Torn PDA filled in.' : 'No key yet. Needs ' + (p.access || 'minimal') + ' access.' });
+    if (c1.firstChild) wrap.appendChild(c1);
     if (p.ai) {
       const c2 = el('div', 'occ-card');
       keyField(c2, { key: KEY_OR, title: 'OpenRouter key (AI)', placeholder: 'sk-or-v1-...', saved: 'Key saved in Tampermonkey storage. Only free models are called; they may log what is sent.', empty: 'Optional, for AI answers. Only free OpenRouter models are ever called with it.' });
@@ -101,7 +101,7 @@ export function boot(plugins) {
     store.set(KEY_OPEN, on);
     if (on && !main.dataset.ran) {
       main.dataset.ran = '1';
-      if (!tornKey()) showSetup();
+      if (p.access !== 'none' && !tornKey()) showSetup();
       else openPlugin(false);
     }
   }
