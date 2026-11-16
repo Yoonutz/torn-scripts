@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Chat Image Upload
 // @namespace    kamiren.torn-chat-image-upload
-// @version      1.0.1
+// @version      1.0.2
 // @description  Image button next to Send in Torn chat: uploads your picture to Catbox and puts the link in the chat box. You click Send.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -61,22 +61,7 @@
     },
   };
 
-  function request(method, url, body) {
-    if (typeof GM_xmlhttpRequest === 'function') {
-      return new Promise((resolve, reject) => {
-        GM_xmlhttpRequest({
-          method,
-          url,
-          data: body,
-          timeout: 60000,
-          onload: (r) => resolve({ status: r.status, text: r.responseText || '' }),
-          onerror: () => reject(new Error('network')),
-          ontimeout: () => reject(new Error('timeout')),
-        });
-      });
-    }
-    return fetch(url, { method, body }).then(async (r) => ({ status: r.status, text: await r.text() }));
-  }
+  const isPda = typeof window.PDA_httpGet === 'function' || /TornPDA/i.test(navigator.userAgent || '');
 
   function form(fields) {
     const f = new FormData();
@@ -84,6 +69,51 @@
       if (fields[k] !== '' && fields[k] !== undefined) f.append(k, fields[k]);
     });
     return f;
+  }
+
+  async function multipart(fields) {
+    const b = 'cimg' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+    let s = '';
+    for (const k of Object.keys(fields)) {
+      const v = fields[k];
+      if (v === '' || v === undefined) continue;
+      s += '--' + b + '\r\n';
+      if (v instanceof Blob) {
+        const bytes = new Uint8Array(await v.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+        const name = String(v.name || 'image').replace(/[^\w.-]/g, '_');
+        s += 'Content-Disposition: form-data; name="' + k + '"; filename="' + name + '"\r\nContent-Type: ' + (v.type || 'application/octet-stream') + '\r\n\r\n' + bin + '\r\n';
+      } else {
+        s += 'Content-Disposition: form-data; name="' + k + '"\r\n\r\n' + v + '\r\n';
+      }
+    }
+    return { body: s + '--' + b + '--\r\n', type: 'multipart/form-data; charset=iso-8859-1; boundary=' + b };
+  }
+
+  async function request(method, url, fields) {
+    if (typeof GM_xmlhttpRequest === 'function') {
+      let data = form(fields);
+      let headers;
+      if (isPda) {
+        const m = await multipart(fields);
+        data = m.body;
+        headers = { 'Content-Type': m.type };
+      }
+      return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method,
+          url,
+          headers,
+          data,
+          timeout: 60000,
+          onload: (r) => resolve({ status: r.status, text: r.responseText || '' }),
+          onerror: () => reject(new Error('network')),
+          ontimeout: () => reject(new Error('timeout')),
+        });
+      });
+    }
+    return fetch(url, { method, body: form(fields) }).then(async (r) => ({ status: r.status, text: await r.text() }));
   }
 
   function errorText(status) {
@@ -189,7 +219,7 @@
     const hash = store.get(KEY_HASH, '');
     busy(r, true);
     try {
-      const res = await request('POST', CATBOX, form({ reqtype: 'fileupload', userhash: hash, fileToUpload: file }));
+      const res = await request('POST', CATBOX, { reqtype: 'fileupload', userhash: hash, fileToUpload: file });
       const up = parseUpload(res.status, res.text);
       if (!up.ok) return status(r, up.error, 'err');
       addRecent({ id: up.id, link: up.link, owned: !!hash, at: Date.now() });
@@ -328,7 +358,7 @@
         del.addEventListener('click', async () => {
           del.disabled = true;
           try {
-            const res = await request('POST', CATBOX, form({ reqtype: 'deletefiles', userhash: hash, files: it.id }));
+            const res = await request('POST', CATBOX, { reqtype: 'deletefiles', userhash: hash, files: it.id });
             if (res.status >= 200 && res.status < 300 && /deleted/i.test(res.text || '')) {
               store.set(KEY_RECENT, store.get(KEY_RECENT, []).filter((x) => x.id !== it.id));
               row.remove();

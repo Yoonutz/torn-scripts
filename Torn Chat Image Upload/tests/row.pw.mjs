@@ -317,3 +317,21 @@ test('manageRefreshesList', () =>
     await page.click('[id="111"] .cimg-status a');
     await page.waitForFunction(() => document.querySelectorAll('#cimg-panel .cimg-recent').length === 3);
   }));
+
+test('pdaSendsMultipartText', () =>
+  withPage({ pda: true, gm: { 'cimg.userhash': 'h1' } }, async (page) => {
+    await pick(page, '[id="111"]', { name: 'my shot (1).png', mimeType: 'image/png', buffer: PNG });
+    await page.waitForFunction(() => document.querySelector('[id="111"] textarea').value.includes('catbox'));
+    const req = (await page.evaluate(() => window.__requests))[0];
+    assert.equal(typeof req.data, 'string');
+    const m = /^multipart\/form-data; charset=iso-8859-1; boundary=(\S+)$/.exec(req.headers['Content-Type']);
+    assert.ok(m, req.headers['Content-Type']);
+    const parts = req.data.split('--' + m[1]);
+    assert.equal(parts[parts.length - 1], '--\r\n');
+    assert.ok(parts.some((p) => p.includes('name="reqtype"\r\n\r\nfileupload\r\n')));
+    assert.ok(parts.some((p) => p.includes('name="userhash"\r\n\r\nh1\r\n')));
+    const file = parts.find((p) => p.includes('name="fileToUpload"'));
+    assert.ok(file.includes('filename="my_shot__1_.png"\r\nContent-Type: image/png\r\n\r\n'));
+    const bytes = file.slice(file.indexOf('\r\n\r\n') + 4, -2);
+    assert.equal(Buffer.from(bytes, 'latin1').equals(PNG), true);
+  }));

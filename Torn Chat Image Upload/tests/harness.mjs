@@ -36,11 +36,11 @@ window.GM_xmlhttpRequest = (o) => {
 };
 `;
 
-export async function openMock(srv, { width = 1280, height = 800, gm = {}, script = true, dsf = 1 } = {}) {
+export async function openMock(srv, { width = 1280, height = 800, gm = {}, script = true, dsf = 1, pda = false } = {}) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: dsf });
   page.setDefaultTimeout(8000);
-  await page.addInitScript(STUBS + 'Object.assign(window.__gm,' + JSON.stringify(gm) + ');');
+  await page.addInitScript(STUBS + 'Object.assign(window.__gm,' + JSON.stringify(gm) + ');' + (pda ? 'window.PDA_httpGet = function () {};' : ''));
   await page.goto(srv.base + '/Torn%20Chat%20Image%20Upload/tests/mock/chat.html');
   if (script) {
     await page.addScriptTag({ content: readFileSync(resolve(repo, 'Torn Chat Image Upload/torn-chat-image-upload.user.js'), 'utf8') });
