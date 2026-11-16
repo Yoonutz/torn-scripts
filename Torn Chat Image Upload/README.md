@@ -4,10 +4,10 @@
 Pick or paste a picture: it goes to [Catbox](https://catbox.moe) and the link lands in the chat box. **You click Send.**
 
 <p align="center">
-  <img src="screenshot.png" alt="Chat window with the image button and a link added" width="300">
+  <img src="preview.png" alt="Torn chat window with the image button and a link added" width="270">
   <img src="screenshot-mobile.png" alt="The same on a phone" width="300">
 </p>
-<p align="center"><sub>Rendered from a copy of Torn's chat window: the link is in the box, waiting for Send.</sub></p>
+<p align="center"><sub>Left: real Torn chat. Right: phone width. The link is in the box, waiting for Send.</sub></p>
 
 ## Features
 - **Image button left of Send** in every open chat (faction, company, private, global).
@@ -23,7 +23,7 @@ Pick or paste a picture: it goes to [Catbox](https://catbox.moe) and the link la
 3. Click the image button in any chat and pick a picture.
 
 Optional, to be able to delete uploads: make a free account on [catbox.moe](https://catbox.moe), copy your user hash
-from your account page, then right-click the image button, open Setup (gear) and paste it.
+from your account page, then right-click the image button, paste it in the user hash box and click Save.
 
 <details><summary><b>Privacy</b></summary>
 
@@ -54,8 +54,8 @@ This script makes **no requests to Torn at all**: no Torn API, no Torn key. It o
 
 ## Source
 
-The code lives in [`plugin.js`](plugin.js) (header in [`header.js`](header.js)). `torn-chat-image-upload.user.js` is built from them with the shared [occ-kit](../occ-kit/README.md): `node occ-kit/build.mjs`. Do not edit the built file by hand.
+`torn-chat-image-upload.user.js` is the whole script, one file with no dependencies.
 
-Tests: `node --test "Torn Chat Image Upload/tests/helpers.test.mjs"` (unit) and `node --test "Torn Chat Image Upload/tests/row.pw.mjs"` (Playwright, on a mock built from Torn's chat HTML). Screenshots: `node "Torn Chat Image Upload/tests/shots.mjs"`.
+Tests: `node --test "Torn Chat Image Upload/tests/row.pw.mjs"` (Playwright, on a mock built from Torn's chat HTML). Phone screenshot: `node "Torn Chat Image Upload/tests/shots.mjs"`.
 
 Made by [KamiRen [2805199]](https://www.torn.com/profiles.php?XID=2805199).

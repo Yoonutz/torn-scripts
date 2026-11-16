@@ -17,4 +17,4 @@ jobs:
         with:
           node-version: 22
       - run: node occ-kit/build.mjs --check
-      - run: node --test occ-kit/tests/kit.test.mjs "Operational Command Center/worker/test/runner.test.mjs" "Torn Chat Image Upload/tests/helpers.test.mjs"
+      - run: node --test occ-kit/tests/kit.test.mjs "Operational Command Center/worker/test/runner.test.mjs"

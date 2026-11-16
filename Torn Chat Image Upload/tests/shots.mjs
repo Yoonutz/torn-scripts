@@ -4,7 +4,7 @@ import { serve, openMock, repo } from './harness.mjs';
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 const srv = await serve();
-for (const [width, out] of [[1280, 'screenshot.png'], [390, 'screenshot-mobile.png']]) {
+for (const [width, out] of [[390, 'screenshot-mobile.png']]) {
   const { browser, page } = await openMock(srv, { width, height: 800, dsf: 2, gm: {} });
   // Torn shows one chat window at a time on a phone: drop the other one, or it pushes 111 off screen.
   if (width < 600) await page.evaluate(() => document.getElementById('3792311').closest('.item___Db3l9').remove());

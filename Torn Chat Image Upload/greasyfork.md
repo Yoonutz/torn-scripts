@@ -1,6 +1,6 @@
 <p><b>Share a picture in Torn chat in two clicks.</b> An image button sits left of the Send button in every chat window. Pick or paste a picture: it goes to <a href="https://catbox.moe">Catbox</a> and the link lands in the chat box. <b>You click Send.</b></p>
 <center>
-<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Chat%20Image%20Upload/screenshot.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Chat%20Image%20Upload/screenshot.png" alt="Chat window with the image button and a link added" width="300"></a>
+<a href="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Chat%20Image%20Upload/preview.png"><img src="https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Torn%20Chat%20Image%20Upload/preview.png" alt="Chat window with the image button and a link added" width="270"></a>
 </center>
 <h2>What it does</h2>
 <ul>
@@ -13,7 +13,7 @@
 </ul>
 <h2>Good to know</h2>
 <ul>
-<li><b>Anyone with the link can see the image.</b> Anonymous uploads cannot be deleted (they expire after 2 years without views). Add your Catbox user hash in Setup to be able to delete.</li>
+<li><b>Anyone with the link can see the image.</b> Anonymous uploads cannot be deleted (they expire after 2 years without views). Right-click the image button and add your Catbox user hash to be able to delete.</li>
 <li>No requests to Torn at all, no Torn key. The only other site is catbox.moe, called only when you pick or paste an image.</li>
 </ul>
 <details>

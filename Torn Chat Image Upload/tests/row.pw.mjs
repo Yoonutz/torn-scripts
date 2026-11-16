@@ -30,12 +30,8 @@ test('oneButtonLeftOfSend', () =>
 test('twoWindows', () =>
   withPage({}, async (page) => {
     assert.equal(await page.locator('.cimg-btn').count(), 2);
-    await page.evaluate(async (base) => {
-      const m = await import(base + '/Torn%20Chat%20Image%20Upload/plugin.js');
-      m.setValue(document.querySelector('[id="111"] textarea'), 'x', 1);
-    }, srv.base);
-    assert.equal(await page.inputValue('[id="111"] textarea'), 'x');
-    assert.equal(await page.inputValue('[id="3792311"] textarea'), '');
+    assert.equal(await page.locator('[id="111"] .cimg-btn').count(), 1);
+    assert.equal(await page.locator('[id="3792311"] .cimg-btn').count(), 1);
   }));
 
 test('reRenderNoDup', () =>
@@ -57,16 +53,6 @@ for (const width of [1280, 390])
       assert.ok(btn.width >= 20 && btn.width <= 28, 'button width ' + btn.width);
     }));
 
-test('sendEnabled', () =>
-  withPage({}, async (page) => {
-    await page.evaluate(async (base) => {
-      const m = await import(base + '/Torn%20Chat%20Image%20Upload/plugin.js');
-      m.setValue(document.querySelector('[id="111"] textarea'), 'https://files.catbox.moe/ab12cd.png ', 27);
-    }, srv.base);
-    assert.equal(await page.locator('[id="111"] button.iconWrapper___DRSkm').isDisabled(), false);
-    assert.equal(await page.evaluate(() => window.__sendClicks), 0);
-    assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('[id="111"] textarea')), true);
-  }));
 
 // ---- Task 3: pick, paste, upload, insert link ----
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
@@ -96,6 +82,7 @@ test('pickUploads', () =>
     assert.equal(recent[0].owned, false);
     assert.equal(await page.evaluate(() => window.__sendClicks), 0);
     assert.equal(await page.locator('[id="111"] button.iconWrapper___DRSkm').isDisabled(), false);
+    assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('[id="111"] textarea')), true);
   }));
 
 test('pasteImage', () =>
@@ -161,33 +148,46 @@ test('wrongType', () =>
     assert.equal((await page.evaluate(() => window.__requests)).length, 0);
   }));
 
-// ---- Task 4: Setup, recent uploads, delete ----
+// ---- Panel: user hash, recent uploads, delete ----
 const RECENT = JSON.stringify([
   { id: 'ab12cd.png', link: 'https://files.catbox.moe/ab12cd.png', owned: true, at: 1763300000000 },
   { id: 'ef34gh.png', link: 'https://files.catbox.moe/ef34gh.png', owned: true, at: 1763200000000 },
 ]);
 const OWNER = { 'cimg.userhash': 'h1', 'cimg.recent': RECENT };
 
-test('setupNoTornKey', () =>
+test('hashFieldNoTornKey', () =>
   withPage({ gm: ID }, async (page) => {
-    // Open the window through the status "Manage" path: upload, then click Manage.
     await pick(page, '[id="111"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG });
     await page.click('[id="111"] .cimg-status a');
-    await page.waitForSelector('#occk-cimg .occ-win.occ-on');
-    await page.click('#occk-cimg button[aria-label="Setup"]');
-    const heads = await page.$$eval('#occk-cimg .occ-card h3', (h) => h.map((x) => x.textContent));
+    await page.waitForSelector('#cimg-panel');
+    const heads = await page.$$eval('#cimg-panel h3', (h) => h.map((x) => x.textContent));
     assert.ok(heads.includes('Catbox user hash (optional)'), heads.join('|'));
-    assert.ok(!heads.includes('Torn API key'), heads.join('|'));
+    assert.ok(!heads.some((h) => /torn|api key/i.test(h)), heads.join('|'));
+  }));
+
+test('hashSaveForget', () =>
+  withPage({ gm: ID }, async (page) => {
+    await page.click('[id="111"] .cimg-btn', { button: 'right' });
+    await page.waitForSelector('#cimg-panel');
+    await page.fill('#cimg-panel input[type="password"]', 'abcd1234');
+    await page.click('#cimg-panel button:has-text("Save")');
+    await page.waitForFunction(() => /Key saved/.test(document.getElementById('cimg-panel').textContent));
+    await pick(page, '[id="111"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG });
+    await page.waitForFunction(() => document.querySelector('[id="111"] textarea').value.includes('catbox'));
+    assert.equal((await page.evaluate(() => window.__requests))[0].data.userhash, 'abcd1234');
+    await page.click('#cimg-panel button:has-text("Forget")');
+    await page.waitForFunction(() => /No key saved/.test(document.getElementById('cimg-panel').textContent));
+    assert.equal('cimg.userhash' in (await page.evaluate(() => window.__gm)), false);
   }));
 
 test('deleteRecent', () =>
   withPage({ gm: OWNER }, async (page) => {
     await page.click('[id="111"] .cimg-btn', { button: 'right' });
-    await page.waitForSelector('#occk-cimg .cimg-recent');
-    assert.equal(await page.locator('#occk-cimg .cimg-recent').count(), 2);
+    await page.waitForSelector('#cimg-panel .cimg-recent');
+    assert.equal(await page.locator('#cimg-panel .cimg-recent').count(), 2);
     await page.evaluate(() => (window.__host = { status: 200, text: 'Files successfully deleted.' }));
-    await page.locator('#occk-cimg .cimg-recent').first().locator('button').click();
-    await page.waitForFunction(() => document.querySelectorAll('#occk-cimg .cimg-recent').length === 1);
+    await page.locator('#cimg-panel .cimg-recent').first().locator('button').click();
+    await page.waitForFunction(() => document.querySelectorAll('#cimg-panel .cimg-recent').length === 1);
     const req = (await page.evaluate(() => window.__requests)).pop();
     assert.equal(req.url, 'https://catbox.moe/user/api.php');
     assert.equal(req.data.reqtype, 'deletefiles');
@@ -196,10 +196,29 @@ test('deleteRecent', () =>
     assert.equal(JSON.parse(await page.evaluate(() => window.__gm['cimg.recent'])).length, 1);
   }));
 
-test('noRoundButton', () =>
+test('noPanelUntilAsked', () =>
   withPage({}, async (page) => {
-    assert.equal(await page.locator('#occk-cimg .occ-launch').count(), 0);
+    await page.waitForTimeout(300);
+    assert.equal(await page.locator('#cimg-panel').count(), 0);
   }));
+
+test('oldLocalHashStillWorks', () =>
+  withPage({}, async (page) => {
+    await page.evaluate(() => localStorage.setItem('cimg.userhash', JSON.stringify('old1')));
+    await pick(page, '[id="111"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG });
+    await page.waitForFunction(() => document.querySelector('[id="111"] textarea').value.includes('catbox'));
+    assert.equal((await page.evaluate(() => window.__requests))[0].data.userhash, 'old1');
+  }));
+
+test('scriptHasNoCommentsOrKitCode', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const { repo } = await import('./harness.mjs');
+  const src = readFileSync(resolve(repo, 'Torn Chat Image Upload/torn-chat-image-upload.user.js'), 'utf8');
+  const body = src.slice(src.indexOf('// ==/UserScript==') + 18);
+  assert.equal(/^\s*\/\/|\/\*/m.test(body), false, 'comment found');
+  assert.equal(/occ|openrouter|runner|api\.torn\.com|torn api/i.test(body), false, 'unrelated code found');
+});
 
 // ---- Final review fixes ----
 test('caretMidText', () =>
@@ -253,13 +272,13 @@ test('officePasteKeepsText', () =>
 test('deleteNeedsSuccess', () =>
   withPage({ gm: OWNER }, async (page) => {
     await page.click('[id="111"] .cimg-btn', { button: 'right' });
-    await page.waitForSelector('#occk-cimg .cimg-recent');
+    await page.waitForSelector('#cimg-panel .cimg-recent');
     await page.evaluate(() => (window.__host = { status: 200, text: '' }));
-    await page.locator('#occk-cimg .cimg-recent').first().locator('button').click();
+    await page.locator('#cimg-panel .cimg-recent').first().locator('button').click();
     await page.waitForTimeout(300);
-    assert.equal(await page.locator('#occk-cimg .cimg-recent').count(), 2);
+    assert.equal(await page.locator('#cimg-panel .cimg-recent').count(), 2);
     assert.equal(JSON.parse(await page.evaluate(() => window.__gm['cimg.recent'])).length, 2);
-    assert.match(await page.locator('#occk-cimg .cimg-recent').first().textContent(), /not deleted/i);
+    assert.match(await page.locator('#cimg-panel .cimg-recent').first().textContent(), /not deleted/i);
   }));
 
 test('rightClickOpensPanel', () =>
@@ -267,34 +286,34 @@ test('rightClickOpensPanel', () =>
     let chooser = false;
     page.on('filechooser', () => (chooser = true));
     await page.click('[id="111"] .cimg-btn', { button: 'right' });
-    await page.waitForSelector('#occk-cimg .occ-win.occ-on', { timeout: 3000 });
+    await page.waitForSelector('#cimg-panel', { timeout: 3000 });
     assert.equal(chooser, false);
   }));
 
 test('anonymousNoDelete', () =>
   withPage({ gm: { 'cimg.recent': JSON.stringify([{ id: 'ab12cd.png', link: 'https://files.catbox.moe/ab12cd.png', owned: false, at: 1 }]) } }, async (page) => {
     await page.click('[id="111"] .cimg-btn', { button: 'right' });
-    await page.waitForSelector('#occk-cimg .cimg-recent');
-    assert.equal(await page.locator('#occk-cimg .cimg-recent button').count(), 0);
+    await page.waitForSelector('#cimg-panel .cimg-recent');
+    assert.equal(await page.locator('#cimg-panel .cimg-recent button').count(), 0);
   }));
 
 test('manageRefreshesList', () =>
   withPage({}, async (page) => {
     await pick(page, '[id="111"]', { name: 'a.png', mimeType: 'image/png', buffer: PNG });
     await page.click('[id="111"] .cimg-status a');
-    await page.waitForSelector('#occk-cimg .cimg-recent');
-    assert.equal(await page.locator('#occk-cimg .cimg-recent').count(), 1);
+    await page.waitForSelector('#cimg-panel .cimg-recent');
+    assert.equal(await page.locator('#cimg-panel .cimg-recent').count(), 1);
     // Second upload with the panel still open, then Manage again: list shows both.
     await page.evaluate(() => (window.__host = { status: 200, text: 'https://files.catbox.moe/zz99yy.png' }));
     await pick(page, '[id="3792311"]', { name: 'b.png', mimeType: 'image/png', buffer: PNG });
     await page.waitForFunction(() => document.querySelector('[id="3792311"] textarea').value.includes('zz99yy'));
     await page.click('[id="3792311"] .cimg-status a');
-    await page.waitForFunction(() => document.querySelectorAll('#occk-cimg .cimg-recent').length === 2);
+    await page.waitForFunction(() => document.querySelectorAll('#cimg-panel .cimg-recent').length === 2);
     // Close the panel, upload a third, Manage: list shows three.
-    await page.click('#occk-cimg button[aria-label="Close"]');
+    await page.click('#cimg-panel button[aria-label="Close"]');
     await page.evaluate(() => (window.__host = { status: 200, text: 'https://files.catbox.moe/xx88ww.png' }));
     await pick(page, '[id="111"]', { name: 'c.png', mimeType: 'image/png', buffer: PNG });
     await page.waitForFunction(() => document.querySelector('[id="111"] textarea').value.includes('xx88ww'));
     await page.click('[id="111"] .cimg-status a');
-    await page.waitForFunction(() => document.querySelectorAll('#occk-cimg .occ-win.occ-on .cimg-recent').length === 3);
+    await page.waitForFunction(() => document.querySelectorAll('#cimg-panel .cimg-recent').length === 3);
   }));
