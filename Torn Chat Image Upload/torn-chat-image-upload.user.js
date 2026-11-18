@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Chat Image Upload
 // @namespace    kamiren.torn-chat-image-upload
-// @version      1.0.4
+// @version      1.0.5
 // @description  Image button next to Send in Torn chat: uploads your picture to Catbox and puts the link in the chat box. You click Send.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -9,8 +9,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @grant        GM_deleteValue
-// @connect      catbox.moe
+// // @connect      catbox.moe
 // ==/UserScript==
 
 (function () {
@@ -18,7 +17,6 @@
 
   const CATBOX = 'https://catbox.moe/user/api.php';
   const TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-  const KEY_HASH = 'cimg.userhash';
   const KEY_RECENT = 'cimg.recent';
   const ICON =
     '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v8.6l4.3-4.3 3.2 3.2 2.3-2.3L19 16.4V7H5zm10.5 1.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>';
@@ -38,10 +36,6 @@
     },
     set(k, v) {
       GM_setValue(k, JSON.stringify(v));
-      localStorage.removeItem(k);
-    },
-    del(k) {
-      GM_deleteValue(k);
       localStorage.removeItem(k);
     },
   };
@@ -129,20 +123,12 @@
     return { row, textarea: row.isConnected ? row.querySelector(':scope > textarea') : null };
   }
 
-  function status(r, text, kind, manage) {
+  function status(r, text, kind) {
     if (document.hidden) return;
     let line = r.row.nextElementSibling;
     if (!line || !line.classList.contains('cimg-status')) r.row.after((line = el('div')));
     line.className = 'cimg-status cimg-' + kind;
     line.textContent = text;
-    if (manage) {
-      const a = el('a', '', 'Manage', { href: '#' });
-      a.addEventListener('click', (e) => {
-        e.preventDefault();
-        openPanel();
-      });
-      line.append(' · ', a);
-    }
     clearTimeout(line._t);
     line._t = setTimeout(() => line.remove(), 5000);
   }
@@ -159,15 +145,14 @@
     status(liveRow(r), 'Uploading…', 'ok');
     file = await sniff(file).catch(() => null);
     if (!file) return status(liveRow(r), 'Use PNG, JPEG, GIF or WebP.', 'err');
-    const hash = store.get(KEY_HASH, '');
     busy(r, true);
     try {
-      const res = await post({ reqtype: 'fileupload', userhash: hash, fileToUpload: file });
+      const res = await post({ reqtype: 'fileupload', fileToUpload: file });
       const m = res.text.match(/^https:\/\/files\.catbox\.moe\/([A-Za-z0-9]+\.[A-Za-z0-9]+)$/);
       if (!ok(res.status)) return status(liveRow(r), errorText(res.status), 'err');
       if (!m) return status(liveRow(r), 'Upload failed: ' + (res.text.slice(0, 80) || 'empty reply'), 'err');
       const list = store.get(KEY_RECENT, []).filter((x) => x.id !== m[1]);
-      store.set(KEY_RECENT, [{ id: m[1], link: res.text, owned: !!hash, at: Date.now() }].concat(list).slice(0, 20));
+      store.set(KEY_RECENT, [{ id: m[1], link: res.text, at: Date.now() }].concat(list).slice(0, 500));
       const live = liveRow(r);
       const ta = live.textarea;
       if (!ta) return;
@@ -179,7 +164,7 @@
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       ta.focus();
       ta.setSelectionRange(pos + add.length, pos + add.length);
-      status(live, 'Link added. Click Send to post it.', 'ok', true);
+      status(live, 'Link added. Click Send to post it.', 'ok');
       if (panel && panel.isConnected) drawPanel();
     } catch (e) {
       status(liveRow(r), errorText(0), 'err');
@@ -189,7 +174,7 @@
   }
 
   function addButton(r) {
-    const b = el('button', 'cimg-btn', undefined, { title: 'Upload image. Right-click: last uploads', innerHTML: ICON });
+    const b = el('button', 'cimg-btn', undefined, { title: 'Upload image. Right-click: your past links', innerHTML: ICON });
     b.setAttribute('aria-label', 'Upload image');
     const stop = r.send.querySelector('stop');
     const c = stop && getComputedStyle(stop).stopColor;
@@ -245,76 +230,21 @@
     run();
   }
 
-  function recentList() {
-    const wrap = el('div', 'cimg-sec');
-    wrap.appendChild(el('h3', '', 'Last uploads'));
-    const list = store.get(KEY_RECENT, []);
-    if (!list.length) {
-      wrap.appendChild(el('div', 'cimg-muted', 'No uploads yet. Use the image button next to Send in any chat.'));
-      return wrap;
-    }
-    wrap.appendChild(el('div', 'cimg-muted', 'Anyone with the link can see the image. Anonymous uploads cannot be deleted; add a Catbox user hash below to get Delete.'));
-    const hash = store.get(KEY_HASH, '');
-    list.forEach((it) => {
-      const d = new Date(it.at);
-      const row = el('div', 'cimg-recent');
-      row.append(
-        el('a', '', it.link.replace(/^https:\/\//, ''), { href: it.link, target: '_blank', rel: 'noopener noreferrer' }),
-        el('span', 'cimg-muted', d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
-      );
-      const msg = el('span', 'cimg-err', '');
-      if (it.owned && hash) {
-        const del = el('button', 'cimg-act', 'Delete');
-        del.addEventListener('click', async () => {
-          del.disabled = true;
-          try {
-            const res = await post({ reqtype: 'deletefiles', userhash: hash, files: it.id });
-            if (ok(res.status) && /deleted/i.test(res.text)) {
-              store.set(KEY_RECENT, store.get(KEY_RECENT, []).filter((x) => x.id !== it.id));
-              return row.remove();
-            }
-            msg.textContent = ok(res.status) ? 'Not deleted. Try again, or delete it on catbox.moe.' : errorText(res.status);
-          } catch (e) {
-            msg.textContent = errorText(0);
-          }
-          del.disabled = false;
-        });
-        row.appendChild(del);
-      }
-      row.appendChild(msg);
-      wrap.appendChild(row);
-    });
-    return wrap;
-  }
-
-  function hashField() {
-    const h = store.get(KEY_HASH, '');
-    const wrap = el('div', 'cimg-sec');
-    const input = el('input', 'cimg-field', undefined, { type: 'password', placeholder: 'Catbox user hash', autocomplete: 'off' });
-    const save = el('button', 'cimg-act', 'Save');
-    const forget = el('button', 'cimg-act', 'Forget');
-    save.addEventListener('click', () => input.value.trim() && (store.set(KEY_HASH, input.value.trim()), drawPanel()));
-    forget.addEventListener('click', () => (store.del(KEY_HASH), drawPanel()));
-    const bar = el('div', 'cimg-bar');
-    bar.append(save, forget);
-    wrap.append(
-      el('h3', '', 'Catbox user hash (optional)'),
-      el('div', 'cimg-keystat ' + (h ? 'cimg-ok' : 'cimg-no'), h ? '✓ Key saved · ends in ' + String(h).slice(-4) : '✗ No key saved'),
-      el(
-        'div',
-        'cimg-muted',
-        h
-          ? 'Saved in your userscript manager. Sent only to catbox.moe. New uploads go to your Catbox account and get Delete.'
-          : 'Not needed to upload. Without it, uploads are anonymous and cannot be deleted. With a free Catbox account, paste your user hash here.'
-      ),
-      input,
-      bar
-    );
-    return wrap;
-  }
-
   function drawPanel() {
-    panel.querySelector('.cimg-body').replaceChildren(recentList(), hashField());
+    const list = store.get(KEY_RECENT, []);
+    const body = panel.querySelector('.cimg-body');
+    if (!list.length) return body.replaceChildren(el('div', 'cimg-muted', 'No uploads yet.'));
+    body.replaceChildren(
+      ...list.map((it) => {
+        const d = new Date(it.at);
+        const row = el('div', 'cimg-recent');
+        row.append(
+          el('a', '', it.link.replace(/^https:\/\//, ''), { href: it.link, target: '_blank', rel: 'noopener noreferrer' }),
+          el('span', 'cimg-muted', d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+        );
+        return row;
+      })
+    );
   }
 
   function openPanel() {
@@ -324,7 +254,7 @@
       close.setAttribute('aria-label', 'Close');
       close.addEventListener('click', () => panel.remove());
       const head = el('div', 'cimg-head');
-      head.append(el('span', 'cimg-title', 'Chat images'), close);
+      head.append(el('span', 'cimg-title', 'Your image links'), close);
       panel.append(head, el('div', 'cimg-body'));
       document.body.appendChild(panel);
     }
@@ -339,23 +269,16 @@
 .cimg-busy svg{animation:cimg-spin 1s linear infinite;opacity:.5}
 @keyframes cimg-spin{to{transform:rotate(360deg)}}
 .cimg-status{font:11px/1.4 Arial,sans-serif;padding:2px 8px;overflow-wrap:anywhere}
-.cimg-ok{color:#8bc34a}.cimg-err{color:#e57373}.cimg-no{color:#e57373}
-.cimg-status a{color:inherit;text-decoration:underline}
+.cimg-ok{color:#8bc34a}.cimg-err{color:#e57373}
 .cimg-panel{position:fixed;right:8px;top:56px;z-index:999999;width:340px;max-width:calc(100vw - 16px);max-height:calc(50vh - 56px);display:flex;flex-direction:column;box-sizing:border-box;background:var(--default-bg-panel-color,#333);color:var(--default-color,#ddd);border:1px solid var(--panel-border-bottom-color,#444);border-radius:5px;box-shadow:0 4px 16px rgba(0,0,0,.5);font:12px/1.4 Arial,Helvetica,sans-serif}
 .cimg-head{display:flex;align-items:center;padding:6px 8px;border-bottom:1px solid var(--panel-border-bottom-color,#444)}
 .cimg-title{flex:1;font-weight:bold;font-size:13px}
 .cimg-x{border:0;background:none;color:inherit;font-size:18px;line-height:1;cursor:pointer;padding:0 4px}
 .cimg-body{overflow-y:auto;overflow-x:hidden;padding:6px 8px}
-.cimg-sec{padding:4px 0 8px}
-.cimg-sec h3{margin:2px 0 4px;font-size:12px;font-weight:bold}
 .cimg-muted{color:var(--default-gray-9-color,#999);font-size:11px;overflow-wrap:anywhere}
-.cimg-recent{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:4px 0;border-top:1px solid var(--panel-border-bottom-color,#444)}
+.cimg-recent{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:4px 0}
+.cimg-recent+.cimg-recent{border-top:1px solid var(--panel-border-bottom-color,#444)}
 .cimg-recent a{color:var(--default-blue-color,#74c0fc);overflow-wrap:anywhere;min-width:0}
-.cimg-field{width:100%;box-sizing:border-box;margin:4px 0;padding:4px 6px;background:var(--input-background-color,#111);color:inherit;border:1px solid var(--panel-border-bottom-color,#444);border-radius:3px}
-.cimg-bar{display:flex;flex-wrap:wrap;gap:6px}
-.cimg-act{padding:3px 10px;border:1px solid var(--panel-border-bottom-color,#555);border-radius:3px;background:var(--default-gray-e4-color,#444);color:inherit;cursor:pointer;font:inherit}
-.cimg-act:disabled{opacity:.5;cursor:default}
-.cimg-keystat{font-weight:bold;margin-bottom:2px}
 `;
 
   function start() {

@@ -14,7 +14,7 @@ Pick or paste a picture: it goes to [Catbox](https://catbox.moe) and the link la
 - **No key, no sign-up.** Uploads work right after install.
 - **Paste works too.** Ctrl+V a screenshot into a chat box and it uploads. Text you copy (even from Excel or Word) pastes as text.
 - **Never sends for you.** The link goes in at the cursor; your text stays; you press Send.
-- **Last 20 uploads**: right-click the image button. With a Catbox user hash (optional) each one gets **Delete**.
+- **Your past links**: right-click (long-press on a phone) the image button for a plain list of every link you uploaded.
 - PNG, JPEG, GIF and WebP.
 
 ## Install
@@ -22,14 +22,10 @@ Pick or paste a picture: it goes to [Catbox](https://catbox.moe) and the link la
 2. Install `torn-chat-image-upload.user.js` from this folder. Your userscript manager asks once to allow `catbox.moe`.
 3. Click the image button in any chat and pick a picture.
 
-Optional, to be able to delete uploads: make a free account on [catbox.moe](https://catbox.moe), copy your user hash
-from your account page, then right-click the image button, paste it in the user hash box and click Save.
-
 <details><summary><b>Privacy</b></summary>
 
 - **Anyone with the link can see the image.** Check a screenshot before you share it: API keys, items and messages show up easily.
-- Anonymous uploads **cannot be deleted** and stay until 2 years without views. Uploads with your user hash are permanent until you delete them
-  ([Catbox FAQ](https://catbox.moe/faq.php)).
+- Uploads are anonymous, **cannot be deleted** and stay until 2 years without views ([Catbox FAQ](https://catbox.moe/faq.php)).
 - Nothing is sent anywhere until you pick or paste an image.
 
 </details>
@@ -40,11 +36,11 @@ Torn's rule: scripts may use the API or the page you are viewing, and must not m
 that you did not trigger by hand ([Chedburn, forum thread 16000717](https://www.torn.com/forums.php#/p=threads&t=16000717)).
 This script makes **no requests to Torn at all**: no Torn API, no Torn key. It only adds a button and text to the chat box;
 **you** press Send. The only other site is `catbox.moe` (`@connect catbox.moe`), called only when you pick or paste an image
-(or press Delete). No alerts, no background work in hidden tabs.
+No alerts, no background work in hidden tabs.
 
 | Torn API ToS | |
 | --- | --- |
-| Data storage | Last 20 links (and your optional Catbox user hash), only in your userscript manager |
+| Data storage | Your upload links (up to 500), only in your userscript manager |
 | Data sharing | The image you choose goes to Catbox; nothing else is shared |
 | Purpose of use | Sharing images in Torn chat |
 | Key storage & sharing | No Torn key used |
