@@ -243,6 +243,21 @@ Plug-in `plugins/gaps.js`, company employee list (director view, desktop and pho
   company types, matched by position id), cached 7 days in this browser. One call a week, none
   while the tab is hidden.
 
+## Event Reminder (header clock)
+
+Plug-in `plugins/events.js`, every page. The same script as the public Greasy Fork "Torn Event
+reminder" (`Torn Event Reminder/`), moved into OCC.
+
+- Torn's header clock turns red, orange and green as calendar events and your faction's ranked war
+  come close and go live. The clock dropdown lists the events, with a checkbox each, your own
+  custom events and the color windows.
+- Torn key: the one in OCC Setup. Events and settings stay in the same `ter.*` localStorage as the
+  standalone, so nothing is lost on the move.
+- Calls: `torn/calendar` + `user/calendar` every 6 h, `user/faction` + `faction/wars` every 30 min,
+  none while the tab is hidden. A key Torn rejects stops all calls until the OCC key changes.
+- The Greasy Fork copy (v1.0.20+) stops itself when OCC runs this plug-in, so the clock never shows
+  two lists. Switch the plug-in off in Scripts and the Greasy Fork copy runs again.
+
 ## Keys the player pastes once
 
 Both live in the userscript settings pane, stored in Tampermonkey's own storage
@@ -260,7 +275,7 @@ Keys saved by older versions in `localStorage` move over on their own. Torn PDA 
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | Data storage  | Answers cached in your browser only. The runner keeps key hash -> player ID for a day (access check) and the Trains ledger (payments you confirmed, balances) per player; its request logs are off. |
 | Data sharing  | The runner sends skill reports (money, networth, company numbers) to free OpenRouter models, which may log them. |
-| Purpose       | Personal dashboards: the skill buttons, the company trains pill, paid trains and stat gaps per employee.          |
+| Purpose       | Personal dashboards: the skill buttons, the company trains pill, paid trains, stat gaps per employee and event times on the clock. |
 | Key storage   | Tampermonkey storage in your browser; sent per run to the runner over HTTPS, never stored there.          |
 | Key access    | Full (the Ledger itself needs only Limited; Full is kept for upcoming skills). Trains pill and tab: Limited. |
 | Who can use   | Private: the runner only serves the owner's player ID; any other key is refused server side.             |
@@ -294,6 +309,8 @@ with no version bump.
   ID) and adds a cell to it. All its numbers come from the Torn API.
 - Stat gaps read only the employee list on the company page you opened (stats and picked
   position) and replace the stat numbers there. Requirements come from the Torn API.
+- Event Reminder reads event times from the Torn API and, on the calendar page you opened, the
+  times Torn prints there. It only colors the clock and adds rows to its dropdown.
 - The donator star and award icons right after the owner's own sidebar name are hidden to make
   room for the icon; other players keep theirs.
 

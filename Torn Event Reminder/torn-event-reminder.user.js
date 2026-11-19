@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.19
+// @version      1.0.20
 // @description  Colors Torn's header clock red, orange and green as calendar events and your faction's ranked war approach and go live
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -270,7 +270,7 @@
   let fetching = null;
   function refreshFromApi(force) {
     if (fetching) return fetching;
-    if (!apiKey() || S.keyBad || document.hidden) return Promise.resolve(false);
+    if (!apiKey() || S.keyBad || document.hidden || quiet()) return Promise.resolve(false);
     refreshWar(force);
     if (!force && now() - S.lastFetch < API_REFRESH_S) return Promise.resolve(false);
     fetching = (async () => {
@@ -305,7 +305,7 @@
   // { war_id, start, end, target, winner, factions: [{ id, name, score }] }.
   let warFetching = null;
   function refreshWar(force) {
-    if (warFetching || !apiKey() || S.keyBad || document.hidden) return warFetching;
+    if (warFetching || !apiKey() || S.keyBad || document.hidden || quiet()) return warFetching;
     if (!force && now() - S.lastWar < WAR_REFRESH_S) return null;
     warFetching = (async () => {
       try {
@@ -368,6 +368,7 @@
   }
 
   function scrapeCalendar() {
+    if (quiet()) return;
     let changed = false;
     document.querySelectorAll('body *').forEach((el) => {
       if (el.closest('.ter-ui')) return;
@@ -518,9 +519,22 @@
     } else if (dot) dot.remove();
   }
 
+  // ------------------------------------------------------------- Command Center
+  // When the author's private Command Center runs its own copy (the "events" plug-in),
+  // this script removes what it drew and stops, so the clock never shows two lists.
+  let off = false;
+  function quiet() {
+    if (off) return true;
+    if ((' ' + (document.documentElement.getAttribute('data-occ-plugins') || '') + ' ').indexOf(' events ') === -1) return false;
+    off = true;
+    clearHost();
+    document.querySelectorAll('.ter-ui, .ter-status, #ter-float, #ter-style').forEach((n) => n.remove());
+    return true;
+  }
+
   // ------------------------------------------------------------- main loop
   function update() {
-    if (document.hidden) return;
+    if (document.hidden || quiet()) return;
     const t = now();
     let best = null;
     const lines = [];
@@ -836,6 +850,7 @@
   // Torn's time stays the first row; due events go in the row under it.
   let status = [];
   function mountUI() {
+    if (quiet()) return;
     const html = status.map((x) => `<div><span class="ter-sw ter-${x.st}-bg"></span>${esc(x.text)}</div>`).join('');
     document.querySelectorAll(TOOLTIP).forEach((tip) => {
       let row = tip.querySelector(':scope > .ter-status');
@@ -852,7 +867,7 @@
   }
 
   function renderUI() {
-    if (document.hidden) return;
+    if (document.hidden || quiet()) return;
     document.querySelectorAll('.ter-ui').forEach((box) => {
       // Never redraw under the user's fingers while a field is focused.
       if (box.contains(document.activeElement) && document.activeElement.matches('input:not([type=checkbox])')) return;
@@ -1147,7 +1162,8 @@
     update();
     setInterval(update, TICK_MS);
     setInterval(renderUI, 60 * 1000);
-    loadKey().then(() => { refreshFromApi(false); refreshWar(false); });
+    // First API call after 5 s: the Command Center (if installed) marks the page by then.
+    loadKey().then(() => setTimeout(() => { refreshFromApi(false); refreshWar(false); }, 5000));
     setInterval(() => { refreshFromApi(false); refreshWar(false); }, 5 * 60 * 1000);
     // Timers skip hidden tabs; catch up when the tab is shown again.
     document.addEventListener('visibilitychange', () => {
