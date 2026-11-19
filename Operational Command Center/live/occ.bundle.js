@@ -1251,7 +1251,6 @@ function start(k) {
 return {
   id: 'trains',
   label: 'Trains',
-  name: 'Trains pill',
   about: 'Company trains count next to the OCC icon.',
   access: 'limited',
   start,
@@ -2196,7 +2195,6 @@ function start(k) {
 return {
   id: 'paid',
   label: 'Trains',
-  name: 'Paid trains',
   about: 'Trains tab: paid trains left per employee.',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-5h4v5"/></svg>',
   access: 'limited',
@@ -2437,7 +2435,7 @@ return {
 
 // ---- plug-in: Operational Command Center/plugins/gymdist.js
 const PLUGIN_3 = (function () {
-// Gym stat distribution: each battle stat in the gym shows its share of your total, e.g. "(47.30%)".
+// Gym Stat Distribution (was the Greasy Fork script "Torn Gym Stat Distribution"): each battle stat in the gym shows its share of your total, e.g. "(47.30%)".
 // Desktop: a small badge in the corner of the stat box. Phone (600 px and less): a second line,
 // right-aligned under the stat value, so it never covers the number and never widens the box.
 // Data: only the four stat values Torn already prints on gym.php. No API call, nothing on a hidden tab.
@@ -2508,7 +2506,7 @@ function start() {
 
 return {
   id: 'gymdist',
-  label: 'Gym stat share',
+  label: 'Gym Stat Distribution',
   about: 'Gym: each stat as a percent of your total.',
   access: 'public',
   start,
@@ -4231,8 +4229,18 @@ function boot(plugins) {
     const wrap = el('div');
     const owned = panels.map((p) => p.skill).filter(Boolean);
     const groups = [
-      ['In this build', plugins.map((p) => ({ id: p.id, name: p.name || p.label, about: p.about || ABOUT[p.id] || '', page: typeof p.start === 'function', badge: typeof p.badge === 'function' }))],
-      ['Runner tabs', remote.filter((s) => owned.indexOf(s.id) === -1).map((s) => ({ id: s.id, name: s.label, about: 'AI answer tab' }))],
+      // Plug-ins with the same label (e.g. the two Trains parts) share one row and one switch.
+      ['In this build', plugins.reduce((rows, p) => {
+        const about = p.about || ABOUT[p.id] || '';
+        const row = rows.find((r) => r.name === p.label);
+        if (row) {
+          row.ids.push(p.id);
+          if (about) row.about = row.about ? row.about + ' ' + about : about;
+          row.badge = row.badge || typeof p.badge === 'function';
+        } else rows.push({ ids: [p.id], name: p.label, about, badge: typeof p.badge === 'function' });
+        return rows;
+      }, [])],
+      ['Runner tabs', remote.filter((s) => owned.indexOf(s.id) === -1).map((s) => ({ ids: [s.id], name: s.label, about: 'AI answer tab' }))],
     ];
     groups.forEach(([head, list]) => {
       if (!list.length) return;
@@ -4246,12 +4254,13 @@ function boot(plugins) {
         sw.type = 'button';
         sw.setAttribute('role', 'switch');
         sw.setAttribute('aria-label', it.name);
-        const paint = () => sw.setAttribute('aria-checked', String(isOn(it.id)));
+        const on = () => it.ids.some(isOn);
+        const paint = () => sw.setAttribute('aria-checked', String(on()));
         paint();
         sw.addEventListener('click', () => {
-          const off = offList().filter((x) => x !== it.id);
-          const turnOff = isOn(it.id);
-          if (turnOff) off.push(it.id);
+          const turnOff = on();
+          const off = offList().filter((x) => it.ids.indexOf(x) === -1);
+          if (turnOff) off.push(...it.ids);
           store.set(KEY_OFF, off);
           paint();
           markPlugins();
@@ -4260,9 +4269,8 @@ function boot(plugins) {
             document.querySelectorAll('.occ-badges').forEach((x) => x.remove());
             mountInline();
           }
-          const p = plugins.find((x) => x.id === it.id);
-          if (!turnOff && p) startPlugin(p);
-          note.textContent = turnOff && started[it.id] ? 'Off. Reload the page to remove it from this page.' : '';
+          if (!turnOff) plugins.filter((x) => it.ids.indexOf(x.id) !== -1).forEach(startPlugin);
+          note.textContent = turnOff && it.ids.some((x) => started[x]) ? 'Off. Reload the page to remove it from this page.' : '';
           if (!note.parentNode && note.textContent) txt.appendChild(note);
         });
         row.appendChild(txt);

@@ -1,4 +1,4 @@
-// Gym stat distribution: each battle stat in the gym shows its share of your total, e.g. "(47.30%)".
+// Gym Stat Distribution (was the Greasy Fork script "Torn Gym Stat Distribution"): each battle stat in the gym shows its share of your total, e.g. "(47.30%)".
 // Desktop: a small badge in the corner of the stat box. Phone (600 px and less): a second line,
 // right-aligned under the stat value, so it never covers the number and never widens the box.
 // Data: only the four stat values Torn already prints on gym.php. No API call, nothing on a hidden tab.
@@ -69,7 +69,7 @@ function start() {
 
 export default {
   id: 'gymdist',
-  label: 'Gym stat share',
+  label: 'Gym Stat Distribution',
   about: 'Gym: each stat as a percent of your total.',
   access: 'public',
   start,

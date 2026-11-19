@@ -37,7 +37,6 @@ occ-kit/
 export default {
   id: 'maol', label: "M'aol",     // id: short, lowercase, unique
   icon: '<svg ...>',               // optional, plain inline svg
-  name: 'Paid trains',             // optional: name in the Scripts list when label is shared
   about: 'One line, what it does', // optional: shown under the name in the Scripts list
   access: 'minimal',               // Torn key level it needs
   ai: true,                        // optional: Setup shows the OpenRouter key field
@@ -61,7 +60,8 @@ export default {
   `ui.card/errCard/button/accordion/keyField/md/sections`, `tip`, `toast`, `el`, `esc`, `isPda()`.
 - Scripts view (Command Center only, switch icon left of the gear): one on/off switch per bundled
   plug-in and per runner tab, saved per device in `occ.off`. Off = `start` never runs, no tab, no badge,
-  no Setup fields, and the id leaves `data-occ-plugins` so a standalone copy takes over.
+  no Setup fields, and the id leaves `data-occ-plugins` so a standalone copy takes over. Plug-ins with
+  the same `label` share one switch.
 - Standard Setup, drawn by both shells for every script (plug-ins don't add these): the Torn key
   field with a green/red "key saved · ends in abcd" line, and **Panel** height (share of the screen,
   per device, `occ.panel.h`, Auto = built-in size). New shared settings go here, not in plug-ins.

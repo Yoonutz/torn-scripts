@@ -354,8 +354,18 @@ export function boot(plugins) {
     const wrap = el('div');
     const owned = panels.map((p) => p.skill).filter(Boolean);
     const groups = [
-      ['In this build', plugins.map((p) => ({ id: p.id, name: p.name || p.label, about: p.about || ABOUT[p.id] || '', page: typeof p.start === 'function', badge: typeof p.badge === 'function' }))],
-      ['Runner tabs', remote.filter((s) => owned.indexOf(s.id) === -1).map((s) => ({ id: s.id, name: s.label, about: 'AI answer tab' }))],
+      // Plug-ins with the same label (e.g. the two Trains parts) share one row and one switch.
+      ['In this build', plugins.reduce((rows, p) => {
+        const about = p.about || ABOUT[p.id] || '';
+        const row = rows.find((r) => r.name === p.label);
+        if (row) {
+          row.ids.push(p.id);
+          if (about) row.about = row.about ? row.about + ' ' + about : about;
+          row.badge = row.badge || typeof p.badge === 'function';
+        } else rows.push({ ids: [p.id], name: p.label, about, badge: typeof p.badge === 'function' });
+        return rows;
+      }, [])],
+      ['Runner tabs', remote.filter((s) => owned.indexOf(s.id) === -1).map((s) => ({ ids: [s.id], name: s.label, about: 'AI answer tab' }))],
     ];
     groups.forEach(([head, list]) => {
       if (!list.length) return;
@@ -369,12 +379,13 @@ export function boot(plugins) {
         sw.type = 'button';
         sw.setAttribute('role', 'switch');
         sw.setAttribute('aria-label', it.name);
-        const paint = () => sw.setAttribute('aria-checked', String(isOn(it.id)));
+        const on = () => it.ids.some(isOn);
+        const paint = () => sw.setAttribute('aria-checked', String(on()));
         paint();
         sw.addEventListener('click', () => {
-          const off = offList().filter((x) => x !== it.id);
-          const turnOff = isOn(it.id);
-          if (turnOff) off.push(it.id);
+          const turnOff = on();
+          const off = offList().filter((x) => it.ids.indexOf(x) === -1);
+          if (turnOff) off.push(...it.ids);
           store.set(KEY_OFF, off);
           paint();
           markPlugins();
@@ -383,9 +394,8 @@ export function boot(plugins) {
             document.querySelectorAll('.occ-badges').forEach((x) => x.remove());
             mountInline();
           }
-          const p = plugins.find((x) => x.id === it.id);
-          if (!turnOff && p) startPlugin(p);
-          note.textContent = turnOff && started[it.id] ? 'Off. Reload the page to remove it from this page.' : '';
+          if (!turnOff) plugins.filter((x) => it.ids.indexOf(x.id) !== -1).forEach(startPlugin);
+          note.textContent = turnOff && it.ids.some((x) => started[x]) ? 'Off. Reload the page to remove it from this page.' : '';
           if (!note.parentNode && note.textContent) txt.appendChild(note);
         });
         row.appendChild(txt);
