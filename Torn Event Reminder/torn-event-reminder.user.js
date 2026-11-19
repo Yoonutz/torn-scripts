@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Event reminder
 // @namespace    kamiren.torn-event-reminder
-// @version      1.0.18
-// @description  Colors Torn's header clock red, orange and green as calendar events approach and go live
+// @version      1.0.19
+// @description  Colors Torn's header clock red, orange and green as calendar events and your faction's ranked war approach and go live
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -16,12 +16,17 @@
   const HOUR = 3600;
   const TICK_MS = 5000;
   const API_REFRESH_S = 6 * HOUR;
+  const WAR_REFRESH_S = 30 * 60;
+  const WAR_ID = 'w:ranked';
+  // Torn API errors that mean the key itself is wrong, paused or blocked:
+  // stop calling until the key changes.
+  const KEY_DEAD = [2, 10, 13, 18];
 
   const K_SETTINGS = 'ter.settings';
   const K_EVENTS = 'ter.events';
   const K_APIKEY = 'ter.apikey';      // v1.0.0 kept it in plain text, migrated on load
   const K_APIKEY_ENC = 'ter.apikey.enc';
-  const KEY_PAGE = 'https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=Event%20Reminder&user=calendar&torn=calendar';
+  const KEY_PAGE = 'https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=Event%20Reminder&user=calendar&torn=calendar&faction=wars';
 
   const DEFAULTS = {
     redHours: 24,        // red from this many hours before the start
@@ -33,6 +38,9 @@
     startSource: '',     // 'api' | 'calendar' | 'manual'
     lastFetch: 0,
     lastError: '',
+    lastWar: 0,          // last faction/wars check
+    warError: '',        // why the war check failed, '' when fine
+    keyBad: false,       // the key failed with a KEY_DEAD error; no calls until it changes
   };
 
   // Torn PDA rewrites this literal at install time. Untouched, it stays the
@@ -98,6 +106,11 @@
 
   // What the calendar page showed wins over the API estimate.
   function times(ev) {
+    if (ev.kind === 'war') {
+      // A ranked war has no fixed end: it stays live until the API gives one.
+      const end = ev.warEnd || Math.max(now() + HOUR, ev.warStart + HOUR);
+      return { start: ev.warStart || 0, end };
+    }
     if (ev.kind === 'custom') return { start: ev.userStart || 0, end: ev.userEnd || (ev.userStart || 0) + DAY };
     if (ev.pageStart) return { start: ev.pageStart, end: ev.pageEnd || ev.pageStart + DAY };
     if (ev.rawStart) return apiTimes(ev);
@@ -171,6 +184,9 @@
 
   async function saveKey(plain) {
     keyCache = plain || '';
+    S.keyBad = false;
+    S.lastWar = 0;
+    saveSettings();
     localStorage.removeItem(K_APIKEY);
     if (!plain) { localStorage.removeItem(K_APIKEY_ENC); return; }
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -228,7 +244,13 @@
     }
     let data;
     try { data = JSON.parse(text); } catch (e) { throw new Error('Bad API response'); }
-    if (data.error) throw new Error(`Torn API error ${data.error.code}: ${data.error.error}`);
+    if (data.error) {
+      const err = new Error(`Torn API error ${data.error.code}: ${data.error.error}`);
+      err.code = data.error.code;
+      // PDA's key cannot be changed here, so never lock it out.
+      if (KEY_DEAD.includes(err.code) && !withKey && !IS_PDA) { S.keyBad = true; saveSettings(); }
+      throw err;
+    }
     return data;
   }
 
@@ -248,7 +270,8 @@
   let fetching = null;
   function refreshFromApi(force) {
     if (fetching) return fetching;
-    if (!apiKey()) return Promise.resolve(false);
+    if (!apiKey() || S.keyBad || document.hidden) return Promise.resolve(false);
+    refreshWar(force);
     if (!force && now() - S.lastFetch < API_REFRESH_S) return Promise.resolve(false);
     fetching = (async () => {
       try {
@@ -275,6 +298,50 @@
       }
     })();
     return fetching;
+  }
+
+  // ------------------------------------------------------------- ranked war
+  // faction/wars gives the next or current ranked war as
+  // { war_id, start, end, target, winner, factions: [{ id, name, score }] }.
+  let warFetching = null;
+  function refreshWar(force) {
+    if (warFetching || !apiKey() || S.keyBad || document.hidden) return warFetching;
+    if (!force && now() - S.lastWar < WAR_REFRESH_S) return null;
+    warFetching = (async () => {
+      try {
+        // Our own faction id, to name the other side. Optional: without it both names show.
+        if (!S.factionId) {
+          try { const f = await tornApi('user/faction'); S.factionId = f?.faction?.id || 0; } catch (e) { /* not needed */ }
+        }
+        const data = await tornApi('faction/wars');
+        mergeWar(data?.wars?.ranked);
+        S.warError = '';
+      } catch (err) {
+        S.warError = err.code === 16 ? 'Your key cannot read faction wars.' : String(err.message || err);
+      } finally {
+        S.lastWar = now();
+        saveSettings();
+        saveEvents();
+        warFetching = null;
+        update();
+        renderUI();
+      }
+    })();
+    return warFetching;
+  }
+
+  function mergeWar(rw) {
+    const war = Array.isArray(rw) ? rw[0] : rw;
+    if (!war || !war.start || (war.end && war.end < now())) { delete EV[WAR_ID]; return; }
+    const facs = Array.isArray(war.factions) ? war.factions : Object.values(war.factions || {});
+    // Our faction is the one the user's own faction id matches; without it, name both.
+    const mine = S.factionId && facs.find((f) => +f.id === +S.factionId);
+    const other = mine ? facs.find((f) => f !== mine) : null;
+    const title = other ? `Ranked war vs ${other.name}` : `Ranked war: ${facs.map((f) => f.name).join(' vs ')}`;
+    const old = EV[WAR_ID];
+    const ev = old && old.warId === war.war_id ? old : { id: WAR_ID, kind: 'war', enabled: true };
+    Object.assign(ev, { title, warId: war.war_id, warStart: war.start, warEnd: war.end || 0, desc: `Target ${war.target || '?'}` });
+    EV[WAR_ID] = ev;
   }
 
   // ------------------------------------------------------------- calendar page
@@ -453,6 +520,7 @@
 
   // ------------------------------------------------------------- main loop
   function update() {
+    if (document.hidden) return;
     const t = now();
     let best = null;
     const lines = [];
@@ -465,7 +533,7 @@
       .forEach((x) => {
         if (!best || RANK[x.st] > RANK[best]) best = x.st;
         const text = t >= x.start
-          ? `${x.ev.title} live, ${fmtLeft(x.end - t)} left`
+          ? (x.ev.kind === 'war' && !x.ev.warEnd ? `${x.ev.title} live` : `${x.ev.title} live, ${fmtLeft(x.end - t)} left`)
           : `${x.ev.title} in ${fmtLeft(x.start - t)}`;
         lines.push(text);
         status.push({ st: x.st, text });
@@ -525,7 +593,7 @@
     const t = now();
     const st = ev.enabled ? stateOf(ev, t) : null;
     const past = end <= t;
-    const when = t >= start && t < end ? `live, ${fmtLeft(end - t)} left`
+    const when = t >= start && t < end ? (ev.kind === 'war' && !ev.warEnd ? 'live' : `live, ${fmtLeft(end - t)} left`)
       : t < start ? `starts in ${fmtLeft(start - t)}` : 'ended';
     const from = carried ? `<span class="ter-tag">from ${MONTHS[new Date(start * 1000).getUTCMonth()]}</span>` : '';
     const days = shortDate(start) === shortDate(end - 1) ? shortDate(start) : `${shortDate(start)}-${shortDate(end)}`;
@@ -582,7 +650,8 @@
   function gearHtml() {
     const isPda = PDA_KEY && PDA_KEY !== PDA_KEY_PLACEHOLDER;
     const src = { api: 'auto, API', calendar: 'auto, calendar page', manual: 'yours' }[S.startSource] || 'unknown';
-    const status = S.lastError ? `<span class="ter-err">${esc(S.lastError)}</span>`
+    const status = S.keyBad ? '<span class="ter-err">Key rejected by Torn, set a new one.</span>'
+      : S.lastError ? `<span class="ter-err">${esc(S.lastError)}</span>`
       : S.lastFetch ? `updated ${fmtDay(S.lastFetch)}` : 'not fetched';
     // The gear opens only the API key part (always open while no key is set);
     // the reminder settings below are always shown.
@@ -592,6 +661,7 @@
         ${keyOpen ? `
         ${isPda ? '' : keyHtml()}
         ${ui.key ? '' : `<div class="ter-muted">${status} · <a href="#" data-act="refresh">refresh</a>${isPda ? ' · PDA key' : ''}</div>`}
+        ${ui.key || !S.warError ? '' : `<div class="ter-err">${esc(S.warError)}${isPda ? '' : ` <a href="${KEY_PAGE}" target="_blank" rel="noopener">New key</a>`}</div>`}
         <hr class="ter-hr">` : ''}
         <label>Your start <input type="text" class="ter-num ter-time" data-k="startTime" data-kind="time" inputmode="numeric" maxlength="5" placeholder="HH:MM" value="${esc(S.startTime || '')}"><span class="ter-muted">${esc(src)}${S.startSource === 'manual' ? ' · <a href="#" data-act="autostart">auto</a>' : ''}</span></label>
         <label><span class="ter-sw ter-red-bg"></span>Red <input type="text" class="ter-num" data-k="redHours" data-kind="hours" inputmode="decimal" value="${S.redHours}"> h before</label>
@@ -782,6 +852,7 @@
   }
 
   function renderUI() {
+    if (document.hidden) return;
     document.querySelectorAll('.ter-ui').forEach((box) => {
       // Never redraw under the user's fingers while a field is focused.
       if (box.contains(document.activeElement) && document.activeElement.matches('input:not([type=checkbox])')) return;
@@ -1062,6 +1133,7 @@
     window.addEventListener('storage', (e) => {
       if (e.key === K_SETTINGS) S = Object.assign({}, DEFAULTS, load(K_SETTINGS, {}));
       if (e.key === K_EVENTS) EV = load(K_EVENTS, {});
+      if (e.key === K_APIKEY_ENC) loadKey().then(() => { update(); renderUI(); });
       if (e.key === K_SETTINGS || e.key === K_EVENTS) { update(); renderUI(); }
     });
     // The dropdown is drawn by Torn when the clock opens, so add the row as soon as it appears.
@@ -1075,8 +1147,16 @@
     update();
     setInterval(update, TICK_MS);
     setInterval(renderUI, 60 * 1000);
-    loadKey().then(() => refreshFromApi(false));
-    setInterval(() => refreshFromApi(false), 30 * 60 * 1000);
+    loadKey().then(() => { refreshFromApi(false); refreshWar(false); });
+    setInterval(() => { refreshFromApi(false); refreshWar(false); }, 5 * 60 * 1000);
+    // Timers skip hidden tabs; catch up when the tab is shown again.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      update();
+      renderUI();
+      refreshFromApi(false);
+      refreshWar(false);
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

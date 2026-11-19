@@ -39,11 +39,21 @@ month and still run stay in the list, marked *from Oct* etc.
 
 </details>
 
+<details><summary><b>Ranked war</b></summary>
+
+Your faction's next ranked war shows as a row, **Ranked war vs &lt;opponent&gt;**, with the same
+red, orange and green times as events. It reads `faction/wars` every 30 minutes while the tab
+is open and shown. While the war runs and Torn gives no end time, the row stays **live**; it
+goes away when the war ends. Untick it like any event.
+
+</details>
+
 <details><summary><b>API key</b></summary>
 
 ⚙ → **Set API key**. If another script already saved a Torn key in this browser, it is offered
 for reuse. Otherwise the link opens Torn's key page pre-filled with a custom key that can only
-read the calendar (`user/calendar` needs more than a Public key). The pasted key is checked
+read the calendar and your faction's wars (`user/calendar` needs more than a Public key).
+A key made before v1.0.19 cannot read wars: the ⚙ panel then shows **New key**. The pasted key is checked
 against the API, then saved AES-encrypted: the encryption key is a non-extractable browser
 key in IndexedDB, so the API key is never plain text in localStorage.
 
@@ -61,8 +71,17 @@ list with ✎ edit and ✕ delete.
 <details><summary><b>Compliance</b></summary>
 
 Reads Torn's own pages (calendar times, the header clock) and changes only how the clock and
-its dropdown look. Calls `api.torn.com` with your own key, every 6 hours and when you press
-refresh. No automation, nothing is clicked for you, nothing leaves your browser except those
-API calls.
+its dropdown look. Calls `api.torn.com` with your own key: the calendar every 6 hours, faction
+wars every 30 minutes, and both when you press refresh. No calls while the tab is hidden. A key
+Torn rejects stops all calls until you set a new one. No automation, nothing is clicked for
+you, nothing leaves your browser except those API calls.
+
+| Torn API key use | |
+| --- | --- |
+| Data storage | Only in this browser (localStorage + IndexedDB) |
+| Data sharing | None, nothing leaves your browser |
+| Purpose of use | Personal: event and ranked war reminders |
+| Key storage & sharing | AES-encrypted in this browser, never sent anywhere except api.torn.com |
+| Key access level | Custom: `user/calendar`, `torn/calendar`, `faction/wars` (or Torn PDA's key) |
 
 </details>
