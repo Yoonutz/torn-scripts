@@ -20,10 +20,16 @@ const OWNER_ID = '2805199';
 const STALE_MS = 12 * 3600 * 1000;
 const CANCELLED = 'Cancelled.';
 const SETUP = 'settings';
+const SCRIPTS = 'scripts';
+// Ids of plug-ins and runner tabs the player switched off (Scripts view). UI state, per device.
+const KEY_OFF = 'occ.off';
+// Scripts-list lines for plug-ins whose own file has no `about` (kept here so a standalone needs no release).
+const ABOUT = { maol: "M'aol event: boss tracker, tab and badge." };
 
 const OCC_ICON = {
   dash: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12v.01"/><path d="M19.071 4.929c-1.562-1.562-6 .337-9.9 4.243c-3.905 3.905-5.804 8.337-4.242 9.9c1.562 1.561 6-.338 9.9-4.244c3.905-3.905 5.804-8.337 4.242-9.9"/><path d="M4.929 4.929c-1.562 1.562.337 6 4.243 9.9c3.905 3.905 8.337 5.804 9.9 4.242c1.561-1.562-.338-6-4.244-9.9c-3.905-3.905-8.337-5.804-9.9-4.242"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+  toggles: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="6" rx="3"/><circle cx="16" cy="8" r="1.5"/><rect x="2" y="13" width="20" height="6" rx="3"/><circle cx="8" cy="16" r="1.5"/></svg>',
   refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
 };
 
@@ -44,6 +50,17 @@ const OCC_CSS = `
   @media (min-width:768px){
     .occ-badges.occ-float{bottom:80px;right:24px}
   }
+  #occ-root .occ-sw-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--occ-line)}
+  #occ-root .occ-sw-row:first-of-type{border-top:0}
+  #occ-root .occ-sw-txt{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+  #occ-root .occ-sw-txt b{display:block}
+  #occ-root .occ-sw-txt small{display:block;color:var(--occ-muted);font-size:11px;line-height:14px}
+  #occ-root .occ-sw-note{color:var(--occ-warn)!important}
+  #occ-root button.occ-sw{all:unset;box-sizing:border-box;flex:none;position:relative;width:36px;height:20px;border-radius:10px;background:var(--occ-sunk);border:1px solid var(--occ-line2);cursor:pointer}
+  #occ-root button.occ-sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--occ-muted);transition:left .15s}
+  #occ-root button.occ-sw[aria-checked="true"]{background:var(--occ-good-bg);border-color:var(--occ-good)}
+  #occ-root button.occ-sw[aria-checked="true"]::after{left:18px;background:var(--occ-good)}
+  #occ-root button.occ-sw:focus-visible{box-shadow:0 0 0 2px var(--occ-accent)}
 
 `;
 
@@ -62,17 +79,32 @@ const MOBILE_INFO = '[class*="user-information-mobile"],[class*="userInformation
 
 export function boot(plugins) {
   const kit = makeKit('occ', () => document.getElementById('occ-root'));
+  const offList = () => store.get(KEY_OFF, []) || [];
+  const isOn = (id) => offList().indexOf(id) === -1;
   const panels = plugins.filter((p) => typeof p.mount === 'function');
   const badges = plugins.filter((p) => typeof p.badge === 'function');
+  const started = {};
   let remote = (store.get(KEY_SKILLS, []) || []).map(fromRunner);
   let tabs = [];
-  let win, main, title, sub, launch, tabBar, statsRow, tool, rerun, gear;
+  let win, main, title, sub, launch, tabBar, statsRow, tool, rerun, gear, scriptsBtn;
   const btns = {};
   const inflight = {};
   let current = null;
 
   // A standalone build of a bundled plug-in steps aside when it sees its id here.
-  document.documentElement.setAttribute('data-occ-plugins', plugins.map((p) => p.id).join(' '));
+  // A switched-off plug-in is left out, so its standalone copy (if installed) runs instead.
+  function markPlugins() {
+    document.documentElement.setAttribute('data-occ-plugins', plugins.filter((p) => isOn(p.id)).map((p) => p.id).join(' '));
+  }
+  markPlugins();
+
+  function startPlugin(p) {
+    if (started[p.id] || typeof p.start !== 'function' || !isOn(p.id)) return;
+    started[p.id] = true;
+    try {
+      p.start(kit);
+    } catch (e) {}
+  }
 
   function fromRunner(r) {
     return { id: r.id, label: r.label, icon: safeIcon(r.icon) || letterIcon(r.label), access: r.access || 'full', skill: r.id };
@@ -85,7 +117,7 @@ export function boot(plugins) {
   // Bundled plug-ins first; a runner skill that a plug-in already owns (plugin.skill) is not listed twice.
   function allTabs() {
     const owned = panels.map((p) => p.skill).filter(Boolean);
-    return panels.map(plugTab).concat(remote.filter((s) => owned.indexOf(s.id) === -1));
+    return panels.map(plugTab).concat(remote.filter((s) => owned.indexOf(s.id) === -1)).filter((t) => isOn(t.id));
   }
 
   async function loadSkills() {
@@ -106,7 +138,8 @@ export function boot(plugins) {
     current = id;
     Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
     gear.classList.toggle('occ-act', id === SETUP);
-    tool.hidden = !id || id === SETUP;
+    scriptsBtn.classList.toggle('occ-act', id === SCRIPTS);
+    tool.hidden = !id || id === SETUP || id === SCRIPTS;
   }
 
   function setHead(label, meta) {
@@ -281,7 +314,7 @@ export function boot(plugins) {
     panelField(cp, win);
     wrap.appendChild(cp);
     plugins.forEach((p) => {
-      if (typeof p.settings !== 'function') return;
+      if (typeof p.settings !== 'function' || !isOn(p.id)) return;
       const c = el('div', 'occ-card');
       try {
         p.settings(c, kit);
@@ -309,6 +342,61 @@ export function boot(plugins) {
     show(wrap);
   }
 
+  // Scripts view: one switch per bundled plug-in and per runner tab. Off = no page feature, no tab,
+  // no badge, no API calls. On starts it at once; off fully stops a page feature on the next page load.
+  function showScripts() {
+    store.set(KEY_TAB, SCRIPTS);
+    main.dataset.ran = '1';
+    setActive(SCRIPTS);
+    setHead('Scripts', 'v' + esc(kit.version));
+    fillStats(statsRow, null);
+    const wrap = el('div');
+    const owned = panels.map((p) => p.skill).filter(Boolean);
+    const groups = [
+      ['In this build', plugins.map((p) => ({ id: p.id, name: p.name || p.label, about: p.about || ABOUT[p.id] || '', page: typeof p.start === 'function', badge: typeof p.badge === 'function' }))],
+      ['Runner tabs', remote.filter((s) => owned.indexOf(s.id) === -1).map((s) => ({ id: s.id, name: s.label, about: 'AI answer tab' }))],
+    ];
+    groups.forEach(([head, list]) => {
+      if (!list.length) return;
+      const c = el('div', 'occ-card');
+      c.appendChild(el('h3', '', esc(head)));
+      list.forEach((it) => {
+        const row = el('div', 'occ-sw-row');
+        const txt = el('div', 'occ-sw-txt', '<b>' + esc(it.name) + '</b>' + (it.about ? '<small>' + esc(it.about) + '</small>' : ''));
+        const note = el('small', 'occ-sw-note');
+        const sw = el('button', 'occ-sw');
+        sw.type = 'button';
+        sw.setAttribute('role', 'switch');
+        sw.setAttribute('aria-label', it.name);
+        const paint = () => sw.setAttribute('aria-checked', String(isOn(it.id)));
+        paint();
+        sw.addEventListener('click', () => {
+          const off = offList().filter((x) => x !== it.id);
+          const turnOff = isOn(it.id);
+          if (turnOff) off.push(it.id);
+          store.set(KEY_OFF, off);
+          paint();
+          markPlugins();
+          renderTabs();
+          if (it.badge) {
+            document.querySelectorAll('.occ-badges').forEach((x) => x.remove());
+            mountInline();
+          }
+          const p = plugins.find((x) => x.id === it.id);
+          if (!turnOff && p) startPlugin(p);
+          note.textContent = turnOff && started[it.id] ? 'Off. Reload the page to remove it from this page.' : '';
+          if (!note.parentNode && note.textContent) txt.appendChild(note);
+        });
+        row.appendChild(txt);
+        row.appendChild(sw);
+        c.appendChild(row);
+      });
+      wrap.appendChild(c);
+    });
+    wrap.appendChild(el('div', 'occ-card occ-muted', 'Off means: no tab, no badge, nothing added to Torn pages and no API calls from it. Saved on this device.'));
+    show(wrap);
+  }
+
   function renderTabs() {
     if (!tabBar) return;
     tabs = allTabs();
@@ -331,6 +419,7 @@ export function boot(plugins) {
     if (on && !main.dataset.ran) {
       const cur = store.get(KEY_TAB, null);
       if (cur === SETUP) showSettings();
+      else if (cur === SCRIPTS) showScripts();
       else if (cur && tabs.some((t) => t.id === cur)) openTab(cur);
     }
   }
@@ -375,6 +464,7 @@ export function boot(plugins) {
   function badgeSlot(floating) {
     const s = el('span', 'occ-badges' + (floating ? ' occ-float' : ''));
     badges.forEach((p) => {
+      if (!isOn(p.id)) return;
       try {
         s.appendChild(p.badge(kit));
       } catch (e) {}
@@ -614,6 +704,8 @@ export function boot(plugins) {
     ver.title = 'Operational Command Center version';
     head.appendChild(ver);
     head.appendChild(el('span', 'occ-gap'));
+    scriptsBtn = headButton('', OCC_ICON.toggles, 'Scripts: switch each one on or off', () => showScripts());
+    head.appendChild(scriptsBtn);
     gear = headButton('', OCC_ICON.gear, 'Setup', () => showSettings());
     head.appendChild(gear);
     head.appendChild(headButton('', '&times;', 'Close', () => setOpen(false)));
@@ -646,13 +738,7 @@ export function boot(plugins) {
     renderTabs();
     main.appendChild(el('div', 'occ-empty', '<div>Pick a tab below.</div><div class="occ-muted">' + (tabs.length ? tabs.length + ' available' : 'loading skills...') + '</div>'));
     document.body.appendChild(root);
-    plugins.forEach((p) => {
-      if (typeof p.start === 'function') {
-        try {
-          p.start(kit);
-        } catch (e) {}
-      }
-    });
+    plugins.forEach(startPlugin);
     if (store.get(KEY_OPEN, false)) setOpen(true);
     watchName();
     loadSkills().then((ok) => {

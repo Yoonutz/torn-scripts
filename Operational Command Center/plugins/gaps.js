@@ -168,6 +168,7 @@ function start(k) {
 export default {
   id: 'gaps',
   label: 'Stat gaps',
+  about: 'Company employee list: stat gap to each position.',
   access: 'public',
   start,
   css: `

@@ -910,6 +910,8 @@ function start(k) {
 export default {
   id: 'paid',
   label: 'Trains',
+  name: 'Paid trains',
+  about: 'Trains tab: paid trains left per employee.',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-5h4v5"/></svg>',
   access: 'limited',
   start,

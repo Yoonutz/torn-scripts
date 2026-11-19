@@ -258,6 +258,8 @@ function start(k) {
 export default {
   id: 'trains',
   label: 'Trains',
+  name: 'Trains pill',
+  about: 'Company trains count next to the OCC icon.',
   access: 'limited',
   start,
   // Shell asks for a fresh pill whenever it (re)builds a badge slot (page load, Torn redrawing the

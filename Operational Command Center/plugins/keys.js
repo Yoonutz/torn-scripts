@@ -225,6 +225,7 @@ async function mount(view, k, opt) {
 export default {
   id: 'keys',
   label: 'Keys',
+  about: 'Keys tab: Torn key and AI use, 14 days.',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>',
   access: 'public',
   start(k) {

@@ -1251,6 +1251,8 @@ function start(k) {
 return {
   id: 'trains',
   label: 'Trains',
+  name: 'Trains pill',
+  about: 'Company trains count next to the OCC icon.',
   access: 'limited',
   start,
   // Shell asks for a fresh pill whenever it (re)builds a badge slot (page load, Torn redrawing the
@@ -2194,6 +2196,8 @@ function start(k) {
 return {
   id: 'paid',
   label: 'Trains',
+  name: 'Paid trains',
+  about: 'Trains tab: paid trains left per employee.',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-5h4v5"/></svg>',
   access: 'limited',
   start,
@@ -2414,6 +2418,7 @@ function start(k) {
 return {
   id: 'gaps',
   label: 'Stat gaps',
+  about: 'Company employee list: stat gap to each position.',
   access: 'public',
   start,
   css: `
@@ -2430,8 +2435,98 @@ return {
 };
 })();
 
-// ---- plug-in: Torn Maol Tracker/plugin.js
+// ---- plug-in: Operational Command Center/plugins/gymdist.js
 const PLUGIN_3 = (function () {
+// Gym stat distribution: each battle stat in the gym shows its share of your total, e.g. "(47.30%)".
+// Desktop: a small badge in the corner of the stat box. Phone (600 px and less): a second line,
+// right-aligned under the stat value, so it never covers the number and never widens the box.
+// Data: only the four stat values Torn already prints on gym.php. No API call, nothing on a hidden tab.
+// The badge never goes inside Torn's value span: other tools read that text as a plain number.
+
+const STATS = ['strength', 'defense', 'speed', 'dexterity'];
+const PHONE = '(max-width: 600px)';
+
+function onPage() {
+  return /gym\.php/.test(location.pathname);
+}
+
+function statLi(name) {
+  return document.querySelector('ul[class*="properties___"] li[class*="' + name + '___"]');
+}
+
+function readValue(li) {
+  const v = li && li.querySelector('[class*="propertyValue___"]');
+  if (!v) return null;
+  const m = (v.textContent || '').match(/[\d,]+/);
+  return m ? Number(m[0].replace(/,/g, '')) || 0 : null;
+}
+
+let lastTotal = null;
+
+function paint() {
+  if (document.hidden || !onPage()) return;
+  const lis = STATS.map(statLi);
+  if (lis.some((li) => !li)) return;
+  const vals = lis.map(readValue);
+  if (vals.some((v) => v === null)) return;
+  const total = vals.reduce((a, b) => a + b, 0);
+  if (!total) return;
+  // Torn re-renders one stat at a time; skip a half-loaded state.
+  if (lastTotal !== null && total < lastTotal * 0.5) return;
+  lastTotal = total;
+  const phone = window.matchMedia(PHONE).matches;
+  lis.forEach((li, i) => {
+    const title = li.querySelector('[class*="propertyTitle___"]');
+    const parent = phone && title ? title : li;
+    let b = li.querySelector('.occ-gd');
+    if (!b) {
+      b = document.createElement('span');
+      b.className = 'occ-gd';
+    }
+    if (b.parentElement !== parent) parent.appendChild(b);
+    const text = '(' + ((vals[i] / total) * 100).toFixed(2) + '%)';
+    if (b.textContent !== text) b.textContent = text;
+  });
+}
+
+function start() {
+  if (!onPage()) return;
+  let queued = false;
+  const later = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      paint();
+    });
+  };
+  new MutationObserver(later).observe(document.body, { childList: true, subtree: true, characterData: true });
+  document.addEventListener('visibilitychange', later);
+  window.matchMedia(PHONE).addEventListener('change', later);
+  later();
+}
+
+return {
+  id: 'gymdist',
+  label: 'Gym stat share',
+  about: 'Gym: each stat as a percent of your total.',
+  access: 'public',
+  start,
+  css: `
+    ul[class*="properties___"]>li{position:relative}
+    .occ-gd{position:absolute;top:43px;right:6px;font-size:.85em;font-weight:bold;font-variant-numeric:tabular-nums;
+      background:rgba(32,32,32,.85);color:#fff;padding:2px 6px;border-radius:4px;pointer-events:none}
+    @media ${PHONE}{
+      ul[class*="properties___"]>li>[class*="propertyTitle___"]{flex-wrap:wrap}
+      [class*="propertyTitle___"]>.occ-gd{position:static;display:block;flex:0 0 100%;order:99;box-sizing:border-box;
+        width:100%;text-align:right;font-size:.85em;line-height:1.2;padding:0 0 2px;background:none;color:inherit}
+    }
+  `,
+};
+})();
+
+// ---- plug-in: Torn Maol Tracker/plugin.js
+const PLUGIN_4 = (function () {
 // M'aol tracker as an occ-kit plug-in. Builds into the standalone Greasy Fork script
 // (torn-maol-tracker.user.js, see occ.build.json) and is bundled into the Command Center, where it
 // also gets a tab, a badge, Setup fields and AI tips (Command Center only: the standalone has no AI).
@@ -3529,7 +3624,7 @@ return {
 })();
 
 // ---- plug-in: Operational Command Center/plugins/keys.js
-const PLUGIN_4 = (function () {
+const PLUGIN_5 = (function () {
 // Keys tab: how hard the Torn key and the free AI quota are used, as a 14-day trend.
 // Torn: GET key/log (public, newest 100 calls of this key, with who called), merged into a day by
 // day history in Tampermonkey storage. Sampled when the tab opens and every 30 min while a Torn
@@ -3756,6 +3851,7 @@ async function mount(view, k, opt) {
 return {
   id: 'keys',
   label: 'Keys',
+  about: 'Keys tab: Torn key and AI use, 14 days.',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>',
   access: 'public',
   start(k) {
@@ -3801,10 +3897,16 @@ const OWNER_ID = '2805199';
 const STALE_MS = 12 * 3600 * 1000;
 const CANCELLED = 'Cancelled.';
 const SETUP = 'settings';
+const SCRIPTS = 'scripts';
+// Ids of plug-ins and runner tabs the player switched off (Scripts view). UI state, per device.
+const KEY_OFF = 'occ.off';
+// Scripts-list lines for plug-ins whose own file has no `about` (kept here so a standalone needs no release).
+const ABOUT = { maol: "M'aol event: boss tracker, tab and badge." };
 
 const OCC_ICON = {
   dash: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 12v.01"/><path d="M19.071 4.929c-1.562-1.562-6 .337-9.9 4.243c-3.905 3.905-5.804 8.337-4.242 9.9c1.562 1.561 6-.338 9.9-4.244c3.905-3.905 5.804-8.337 4.242-9.9"/><path d="M4.929 4.929c-1.562 1.562.337 6 4.243 9.9c3.905 3.905 8.337 5.804 9.9 4.242c1.561-1.562-.338-6-4.244-9.9c-3.905-3.905-8.337-5.804-9.9-4.242"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
+  toggles: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="6" rx="3"/><circle cx="16" cy="8" r="1.5"/><rect x="2" y="13" width="20" height="6" rx="3"/><circle cx="8" cy="16" r="1.5"/></svg>',
   refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
 };
 
@@ -3825,6 +3927,17 @@ const OCC_CSS = `
   @media (min-width:768px){
     .occ-badges.occ-float{bottom:80px;right:24px}
   }
+  #occ-root .occ-sw-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--occ-line)}
+  #occ-root .occ-sw-row:first-of-type{border-top:0}
+  #occ-root .occ-sw-txt{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+  #occ-root .occ-sw-txt b{display:block}
+  #occ-root .occ-sw-txt small{display:block;color:var(--occ-muted);font-size:11px;line-height:14px}
+  #occ-root .occ-sw-note{color:var(--occ-warn)!important}
+  #occ-root button.occ-sw{all:unset;box-sizing:border-box;flex:none;position:relative;width:36px;height:20px;border-radius:10px;background:var(--occ-sunk);border:1px solid var(--occ-line2);cursor:pointer}
+  #occ-root button.occ-sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--occ-muted);transition:left .15s}
+  #occ-root button.occ-sw[aria-checked="true"]{background:var(--occ-good-bg);border-color:var(--occ-good)}
+  #occ-root button.occ-sw[aria-checked="true"]::after{left:18px;background:var(--occ-good)}
+  #occ-root button.occ-sw:focus-visible{box-shadow:0 0 0 2px var(--occ-accent)}
 
 `;
 
@@ -3843,17 +3956,32 @@ const MOBILE_INFO = '[class*="user-information-mobile"],[class*="userInformation
 
 function boot(plugins) {
   const kit = makeKit('occ', () => document.getElementById('occ-root'));
+  const offList = () => store.get(KEY_OFF, []) || [];
+  const isOn = (id) => offList().indexOf(id) === -1;
   const panels = plugins.filter((p) => typeof p.mount === 'function');
   const badges = plugins.filter((p) => typeof p.badge === 'function');
+  const started = {};
   let remote = (store.get(KEY_SKILLS, []) || []).map(fromRunner);
   let tabs = [];
-  let win, main, title, sub, launch, tabBar, statsRow, tool, rerun, gear;
+  let win, main, title, sub, launch, tabBar, statsRow, tool, rerun, gear, scriptsBtn;
   const btns = {};
   const inflight = {};
   let current = null;
 
   // A standalone build of a bundled plug-in steps aside when it sees its id here.
-  document.documentElement.setAttribute('data-occ-plugins', plugins.map((p) => p.id).join(' '));
+  // A switched-off plug-in is left out, so its standalone copy (if installed) runs instead.
+  function markPlugins() {
+    document.documentElement.setAttribute('data-occ-plugins', plugins.filter((p) => isOn(p.id)).map((p) => p.id).join(' '));
+  }
+  markPlugins();
+
+  function startPlugin(p) {
+    if (started[p.id] || typeof p.start !== 'function' || !isOn(p.id)) return;
+    started[p.id] = true;
+    try {
+      p.start(kit);
+    } catch (e) {}
+  }
 
   function fromRunner(r) {
     return { id: r.id, label: r.label, icon: safeIcon(r.icon) || letterIcon(r.label), access: r.access || 'full', skill: r.id };
@@ -3866,7 +3994,7 @@ function boot(plugins) {
   // Bundled plug-ins first; a runner skill that a plug-in already owns (plugin.skill) is not listed twice.
   function allTabs() {
     const owned = panels.map((p) => p.skill).filter(Boolean);
-    return panels.map(plugTab).concat(remote.filter((s) => owned.indexOf(s.id) === -1));
+    return panels.map(plugTab).concat(remote.filter((s) => owned.indexOf(s.id) === -1)).filter((t) => isOn(t.id));
   }
 
   async function loadSkills() {
@@ -3887,7 +4015,8 @@ function boot(plugins) {
     current = id;
     Object.keys(btns).forEach((k) => btns[k].classList.toggle('occ-act', k === id));
     gear.classList.toggle('occ-act', id === SETUP);
-    tool.hidden = !id || id === SETUP;
+    scriptsBtn.classList.toggle('occ-act', id === SCRIPTS);
+    tool.hidden = !id || id === SETUP || id === SCRIPTS;
   }
 
   function setHead(label, meta) {
@@ -4062,7 +4191,7 @@ function boot(plugins) {
     panelField(cp, win);
     wrap.appendChild(cp);
     plugins.forEach((p) => {
-      if (typeof p.settings !== 'function') return;
+      if (typeof p.settings !== 'function' || !isOn(p.id)) return;
       const c = el('div', 'occ-card');
       try {
         p.settings(c, kit);
@@ -4090,6 +4219,61 @@ function boot(plugins) {
     show(wrap);
   }
 
+  // Scripts view: one switch per bundled plug-in and per runner tab. Off = no page feature, no tab,
+  // no badge, no API calls. On starts it at once; off fully stops a page feature on the next page load.
+  function showScripts() {
+    store.set(KEY_TAB, SCRIPTS);
+    main.dataset.ran = '1';
+    setActive(SCRIPTS);
+    setHead('Scripts', 'v' + esc(kit.version));
+    fillStats(statsRow, null);
+    const wrap = el('div');
+    const owned = panels.map((p) => p.skill).filter(Boolean);
+    const groups = [
+      ['In this build', plugins.map((p) => ({ id: p.id, name: p.name || p.label, about: p.about || ABOUT[p.id] || '', page: typeof p.start === 'function', badge: typeof p.badge === 'function' }))],
+      ['Runner tabs', remote.filter((s) => owned.indexOf(s.id) === -1).map((s) => ({ id: s.id, name: s.label, about: 'AI answer tab' }))],
+    ];
+    groups.forEach(([head, list]) => {
+      if (!list.length) return;
+      const c = el('div', 'occ-card');
+      c.appendChild(el('h3', '', esc(head)));
+      list.forEach((it) => {
+        const row = el('div', 'occ-sw-row');
+        const txt = el('div', 'occ-sw-txt', '<b>' + esc(it.name) + '</b>' + (it.about ? '<small>' + esc(it.about) + '</small>' : ''));
+        const note = el('small', 'occ-sw-note');
+        const sw = el('button', 'occ-sw');
+        sw.type = 'button';
+        sw.setAttribute('role', 'switch');
+        sw.setAttribute('aria-label', it.name);
+        const paint = () => sw.setAttribute('aria-checked', String(isOn(it.id)));
+        paint();
+        sw.addEventListener('click', () => {
+          const off = offList().filter((x) => x !== it.id);
+          const turnOff = isOn(it.id);
+          if (turnOff) off.push(it.id);
+          store.set(KEY_OFF, off);
+          paint();
+          markPlugins();
+          renderTabs();
+          if (it.badge) {
+            document.querySelectorAll('.occ-badges').forEach((x) => x.remove());
+            mountInline();
+          }
+          const p = plugins.find((x) => x.id === it.id);
+          if (!turnOff && p) startPlugin(p);
+          note.textContent = turnOff && started[it.id] ? 'Off. Reload the page to remove it from this page.' : '';
+          if (!note.parentNode && note.textContent) txt.appendChild(note);
+        });
+        row.appendChild(txt);
+        row.appendChild(sw);
+        c.appendChild(row);
+      });
+      wrap.appendChild(c);
+    });
+    wrap.appendChild(el('div', 'occ-card occ-muted', 'Off means: no tab, no badge, nothing added to Torn pages and no API calls from it. Saved on this device.'));
+    show(wrap);
+  }
+
   function renderTabs() {
     if (!tabBar) return;
     tabs = allTabs();
@@ -4112,6 +4296,7 @@ function boot(plugins) {
     if (on && !main.dataset.ran) {
       const cur = store.get(KEY_TAB, null);
       if (cur === SETUP) showSettings();
+      else if (cur === SCRIPTS) showScripts();
       else if (cur && tabs.some((t) => t.id === cur)) openTab(cur);
     }
   }
@@ -4156,6 +4341,7 @@ function boot(plugins) {
   function badgeSlot(floating) {
     const s = el('span', 'occ-badges' + (floating ? ' occ-float' : ''));
     badges.forEach((p) => {
+      if (!isOn(p.id)) return;
       try {
         s.appendChild(p.badge(kit));
       } catch (e) {}
@@ -4395,6 +4581,8 @@ function boot(plugins) {
     ver.title = 'Operational Command Center version';
     head.appendChild(ver);
     head.appendChild(el('span', 'occ-gap'));
+    scriptsBtn = headButton('', OCC_ICON.toggles, 'Scripts: switch each one on or off', () => showScripts());
+    head.appendChild(scriptsBtn);
     gear = headButton('', OCC_ICON.gear, 'Setup', () => showSettings());
     head.appendChild(gear);
     head.appendChild(headButton('', '&times;', 'Close', () => setOpen(false)));
@@ -4427,13 +4615,7 @@ function boot(plugins) {
     renderTabs();
     main.appendChild(el('div', 'occ-empty', '<div>Pick a tab below.</div><div class="occ-muted">' + (tabs.length ? tabs.length + ' available' : 'loading skills...') + '</div>'));
     document.body.appendChild(root);
-    plugins.forEach((p) => {
-      if (typeof p.start === 'function') {
-        try {
-          p.start(kit);
-        } catch (e) {}
-      }
-    });
+    plugins.forEach(startPlugin);
     if (store.get(KEY_OPEN, false)) setOpen(true);
     watchName();
     loadSkills().then((ok) => {
@@ -4446,5 +4628,5 @@ function boot(plugins) {
   else document.addEventListener('DOMContentLoaded', build);
 }
 
-boot([PLUGIN_0, PLUGIN_1, PLUGIN_2, PLUGIN_3, PLUGIN_4]);
+boot([PLUGIN_0, PLUGIN_1, PLUGIN_2, PLUGIN_3, PLUGIN_4, PLUGIN_5]);
 })();
