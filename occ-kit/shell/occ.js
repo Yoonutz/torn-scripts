@@ -287,6 +287,7 @@ export function boot(plugins) {
   function openTab(id, force) {
     const t = tabs.find((x) => x.id === id);
     if (!t) return;
+    back = [];
     store.set(KEY_TAB, id);
     main.dataset.ran = '1';
     setActive(id);
@@ -395,6 +396,28 @@ export function boot(plugins) {
     });
     wrap.appendChild(el('div', 'occ-card occ-muted', 'Off means: no tab, no badge, nothing added to Torn pages and no API calls from it. Saved on this device.'));
     show(wrap);
+  }
+
+  // Scripts and Setup buttons are toggles: a second press goes back to the panel shown before.
+  // Panels shown before Scripts/Setup, newest last. Opening a normal tab clears it.
+  let back = [];
+  function toggleView(id) {
+    if (current === id) {
+      const prev = back.pop();
+      if (prev === SETUP) return showSettings();
+      if (prev === SCRIPTS) return showScripts();
+      back = [];
+      if (prev && tabs.some((t) => t.id === prev)) return openTab(prev);
+      main.dataset.ran = '';
+      setActive(null);
+      setHead('', '');
+      store.set(KEY_TAB, null);
+      show(el('div', 'occ-empty', '<div>Pick a tab below.</div>'));
+      return;
+    }
+    if (current) back.push(current);
+    if (id === SETUP) showSettings();
+    else showScripts();
   }
 
   function renderTabs() {
@@ -704,9 +727,9 @@ export function boot(plugins) {
     ver.title = 'Operational Command Center version';
     head.appendChild(ver);
     head.appendChild(el('span', 'occ-gap'));
-    scriptsBtn = headButton('', OCC_ICON.toggles, 'Scripts: switch each one on or off', () => showScripts());
+    scriptsBtn = headButton('', OCC_ICON.toggles, 'Scripts: switch each one on or off', () => toggleView(SCRIPTS));
     head.appendChild(scriptsBtn);
-    gear = headButton('', OCC_ICON.gear, 'Setup', () => showSettings());
+    gear = headButton('', OCC_ICON.gear, 'Setup', () => toggleView(SETUP));
     head.appendChild(gear);
     head.appendChild(headButton('', '&times;', 'Close', () => setOpen(false)));
     win.appendChild(head);
