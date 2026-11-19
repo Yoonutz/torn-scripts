@@ -16,10 +16,13 @@ export const TORN_ERRORS = {
   18: 'Key paused by its owner',
 };
 
-export function tornKey() {
-  const k = keys.get(KEY_TORN);
-  if (k) return k;
+// The key Torn PDA wrote into the script text, or '' outside PDA.
+export function pdaKey() {
   return PDA_KEY.indexOf('PDA-APIKEY') === -1 ? PDA_KEY : '';
+}
+
+export function tornKey() {
+  return keys.get(KEY_TORN) || pdaKey();
 }
 
 export class TornApiError extends Error {

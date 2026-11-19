@@ -19,32 +19,6 @@
 
 const VERSION = '1.0.34';
 
-// ---- occ-kit/core/dom.js
-// DOM helpers shared by shells and plug-ins.
-
-function el(tag, cls, html) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (html !== undefined) n.innerHTML = html;
-  return n;
-}
-
-function esc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-// Icons from outside the script land on torn.com as markup: accept only a plain inline <svg>.
-function safeIcon(svg) {
-  const s = String(svg || '').trim();
-  if (!/^<svg[\s>]/i.test(s) || !/<\/svg>$/i.test(s)) return '';
-  if (/<(script|foreignObject|iframe|image|use|a)[\s>]|\son\w+\s*=|javascript:|href\s*=/i.test(s)) return '';
-  return s;
-}
-
-function letterIcon(label) {
-  return '<span style="font:bold 15px Arial,Helvetica,sans-serif">' + esc(String(label || '?').charAt(0)) + '</span>';
-}
-
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
 // store: JSON in torn.com localStorage, for per-browser UI state only (open panel, last tab).
@@ -207,6 +181,33 @@ function http(opt) {
     .finally(() => clearTimeout(timer));
 }
 
+// ---- occ-kit/core/dom.js
+// DOM helpers shared by shells and plug-ins.
+
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
+
+// Safe in text and in attributes with either quote; null and undefined give ''.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Icons from outside the script land on torn.com as markup: accept only a plain inline <svg>.
+function safeIcon(svg) {
+  const s = String(svg || '').trim();
+  if (!/^<svg[\s>]/i.test(s) || !/<\/svg>$/i.test(s)) return '';
+  if (/<(script|foreignObject|iframe|image|use|a)[\s>]|\son\w+\s*=|javascript:|href\s*=/i.test(s)) return '';
+  return s;
+}
+
+function letterIcon(label) {
+  return '<span style="font:bold 15px Arial,Helvetica,sans-serif">' + esc(String(label || '?').charAt(0)) + '</span>';
+}
+
 // ---- occ-kit/core/torn.js
 // Torn API v2 with the player's own key. Only api.torn.com, never page scraping.
 
@@ -225,10 +226,13 @@ const TORN_ERRORS = {
   18: 'Key paused by its owner',
 };
 
-function tornKey() {
-  const k = keys.get(KEY_TORN);
-  if (k) return k;
+// The key Torn PDA wrote into the script text, or '' outside PDA.
+function pdaKey() {
   return PDA_KEY.indexOf('PDA-APIKEY') === -1 ? PDA_KEY : '';
+}
+
+function tornKey() {
+  return keys.get(KEY_TORN) || pdaKey();
 }
 
 class TornApiError extends Error {
@@ -1012,6 +1016,10 @@ const PLUGIN_0 = (function () {
 // also gets a tab, a badge, Setup fields and AI tips (Command Center only: the standalone has no AI).
 // The kit supplies key storage (Tampermonkey storage instead of torn.com localStorage).
 
+
+
+
+
 const POLL_S = 15;               // you + live NPCs: at most 7 calls, 28 of Torn's 100 calls/min per key
 const IDLE_POLL_S = 600;          // dead NPCs, or M'aol alone while everything sleeps: every 10 min
 const PERKS_S = 6 * 3600;
@@ -1024,9 +1032,8 @@ const FEED = 'https://live.chain-race.workers.dev/npc.json';   // public M'aol f
 const FEED_LIVE_S = 120;         // feed check while deaths are missing during the event
 
 const K = { key: 'tmt.apikey', state: 'tmt.state', ui: 'tmt.ui' };
-const PDA_KEY_PLACEHOLDER = '###' + 'PDA-APIKEY' + '###';
-const PDA_KEY = '###PDA-APIKEY###';
-const IS_PDA = PDA_KEY && PDA_KEY !== PDA_KEY_PLACEHOLDER;
+const PDA_KEY = pdaKey();
+const IS_PDA = !!PDA_KEY;
 
 const MAOL = { id: 23, name: "M'aol" };
 const GUARDS = [
@@ -1054,25 +1061,20 @@ const METHOD = { standard: 1, airstrip: 0.7, wlt: 0.5, business: 0.3 };
 const METHOD_NAME = { standard: 'Standard', airstrip: 'Airstrip', wlt: 'WLT jet', business: 'Business ticket' };
 
 // ------------------------------------------------------------- storage
-function load(key, fallback) {
-  try { const v = JSON.parse(localStorage.getItem(key)); return v == null ? fallback : v; } catch (e) { return fallback; }
-}
-function store(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage full or blocked */ }
-}
+// Plain localStorage through the kit (same tmt.* keys as before).
+const load = (key, fallback) => store.get(key, null) || fallback;
 
 // samples: { id: [[t, hp], ...] }, deaths: { id: { t, country } }, hops: [[t, country], ...] (M'aol's moves),
 // polled: { id: t }, perks: {...}, snap: last snapshot, nextSummon: feed's estimate, summonAt: when we saw the summon
 let ST = Object.assign({ samples: {}, deaths: {}, hops: [], polled: {}, perks: null, perksAt: 0, feedAt: 0, nextSummon: 0, summonAt: 0 }, load(K.state, {}));
 let UI = Object.assign({ open: true, biz: false, ai: true, keys: false }, load(K.ui, {}));
-const saveState = () => store(K.state, ST);
-const saveUi = () => store(K.ui, UI);
+const saveState = () => store.set(K.state, ST);
+const saveUi = () => store.set(K.ui, UI);
 let kit = null;
-// Inside the Command Center its Torn key is used when no own key was saved, so it is entered once.
-const apiKey = () => (IS_PDA ? PDA_KEY : (kit.keys.get(K.key) || (kit.host === 'occ' ? kit.tornKey() : '')));
+// Inside the Command Center only its Setup key is used. The standalone keeps its own key (or PDA's).
+const apiKey = () => (kit.host === 'occ' ? kit.tornKey() : IS_PDA ? PDA_KEY : kit.keys.get(K.key));
 
 const now = () => Math.floor(Date.now() / 1000);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtMin = (m) => {
   if (!isFinite(m)) return '–';
   m = Math.max(0, Math.round(m));
@@ -1105,18 +1107,9 @@ async function tornApi(path) {
 
 // Public feed, not Torn: it has no CORS headers, so it goes through the userscript manager (or PDA).
 async function feedGet() {
-  const url = `${FEED}?ts=${now()}`;
-  let text;
-  if (typeof GM_xmlhttpRequest === 'function') {
-    text = await new Promise((ok, fail) => GM_xmlhttpRequest({ method: 'GET', url, timeout: 15000,
-      onload: (r) => (r.status === 200 ? ok(r.responseText) : fail(new Error(r.status))), onerror: fail, ontimeout: fail }));
-  } else if (typeof window.PDA_httpGet === 'function') {
-    const r = await window.PDA_httpGet(url, {});
-    text = (r && (r.responseText || r.text || r.body)) || (typeof r === 'string' ? r : '');
-  } else {
-    text = await (await fetch(url)).text();
-  }
-  return JSON.parse(text);
+  const r = await http({ url: `${FEED}?ts=${now()}`, timeout: 15000 });
+  if (r.status !== 200) throw new Error(String(r.status));
+  return JSON.parse(r.text);
 }
 
 function countryOf(desc) {
@@ -1730,7 +1723,7 @@ function bar(n) {
   </a>`;
 }
 
-// Key form (standalone, or the Command Center before its own key is set).
+// Key form (standalone only: the Command Center uses its Setup key).
 function keyForm() {
   return `<div class="tmt-key">Minimal access API key${apiKey() ? ' (saved, paste to replace)' : ' needed (NPCs, your status, perks, travel)'}.<br>
     <input id="tmt-key" type="password" maxlength="16" placeholder="16-character key" autocomplete="off">
@@ -1742,6 +1735,7 @@ function keyForm() {
 function bodyHtml(pane) {
   const method = bestMethod();
   const p = perkMethods(ST.perks);
+  if (kit.host === 'occ' && !apiKey()) return '<div class="tmt-tip info">No Torn key. Add it in OCC Setup.</div>';
   if (!apiKey() || UI.keys) return keyForm();
   if (!D) return `<div class="tmt-tip info">${sleeping() ? "M'aol sleeps until Halloween week (26 Oct). No API calls until then." : err ? esc(err) : 'Loading…'}</div>`;
   const tip = (x) => x.href
@@ -2074,6 +2068,9 @@ return {
   solo: false,   // standalone: its own header button and dropdown, no kit window
   start(k) {
     kit = k;
+    // One key in the Command Center: a key saved by an older M'aol copy moves into OCC Setup once.
+    const own = kit.keys.get(K.key);
+    if (kit.host === 'occ' && own && !kit.keys.get(kit.KEY_TORN)) kit.keys.set(kit.KEY_TORN, own);
     init();
   },
   // Command Center tab: the same view as the dropdown, kept live by the same poll.

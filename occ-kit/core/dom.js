@@ -7,8 +7,9 @@ export function el(tag, cls, html) {
   return n;
 }
 
+// Safe in text and in attributes with either quote; null and undefined give ''.
 export function esc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Icons from outside the script land on torn.com as markup: accept only a plain inline <svg>.

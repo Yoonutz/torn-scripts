@@ -6,6 +6,9 @@
 // Events and settings stay in the same ter.* localStorage as the standalone, so nothing is lost.
 // Class prefix occ-er (the standalone uses ter-), so a co-installed old copy never touches this one.
 
+import { store } from '../../occ-kit/core/storage.js';
+import { esc } from '../../occ-kit/core/dom.js';
+
 const DAY = 86400;
 const HOUR = 3600;
 const TICK_MS = 5000;
@@ -33,21 +36,11 @@ const DEFAULTS = {
   occKeyBad: '',       // last 4 of an OCC key Torn rejected (KEY_DEAD); no calls until it changes. Own field: the standalone's keyBad is a boolean
 };
 
-// ------------------------------------------------------------- storage
-function load(key, fallback) {
-  try {
-    const v = JSON.parse(localStorage.getItem(key));
-    return v == null ? fallback : v;
-  } catch (e) { return fallback; }
-}
-function store(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage full or blocked */ }
-}
-
-let S = Object.assign({}, DEFAULTS, load(K_SETTINGS, {}));
-let EV = load(K_EVENTS, {});
-const saveSettings = () => store(K_SETTINGS, S);
-const saveEvents = () => store(K_EVENTS, EV);
+// Same ter.* localStorage keys as the standalone, through the kit's store.
+let S = Object.assign({}, DEFAULTS, store.get(K_SETTINGS, {}));
+let EV = store.get(K_EVENTS, null) || {};
+const saveSettings = () => store.set(K_SETTINGS, S);
+const saveEvents = () => store.set(K_EVENTS, EV);
 
 // ------------------------------------------------------------- time helpers
 // TCT is UTC, so every time in this script is plain UTC epoch seconds.
@@ -433,8 +426,6 @@ function update() {
 // a checkbox each. Event times are Torn's, only the reminder windows are editable.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const ui = { tab: 'month', gear: false };
-
-const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function fmtDay(sec) {
   const d = new Date(sec * 1000);
@@ -876,15 +867,15 @@ const CSS = `
     .occ-er-ui input[type=checkbox]:disabled { border-color: var(--checkbox-disabled-border-color, #555); cursor: default; }
     .occ-er-ui .occ-er-name { font-weight: bold; color: var(--default-color, #ddd); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .occ-er-ui .occ-er-when { margin-left: auto; padding-left: 6px; color: var(--default-content-title-color, #999); white-space: nowrap; }
-    .occ-er-ui input[type=text], .occ-er-ui input[type=password] {
+    .occ-er-ui input[type=text] {
       color: var(--input-color, #fff); background: var(--input-background-color, linear-gradient(0deg, #111 0%, #000 100%));
       border: 1px solid var(--input-border-color, #444); border-radius: 5px; padding: 2px 5px;
       font-size: 11px; box-sizing: border-box; min-width: 0; height: 22px; outline: none;
     }
-    .occ-er-ui input[type=text]:hover, .occ-er-ui input[type=password]:hover:hover {
+    .occ-er-ui input[type=text]:hover {
       border-color: var(--input-hover-border-color, #666); box-shadow: var(--input-hover-box-shadow, 0 0 2px #ffffff40);
     }
-    .occ-er-ui input[type=text]:focus, .occ-er-ui input[type=password]:focus:focus {
+    .occ-er-ui input[type=text]:focus {
       border-color: var(--input-focus-border-color, #1864ab80); box-shadow: var(--input-focus-box-shadow, 0 0 2px #1c7ed6a6);
     }
     .occ-er-ui .occ-er-gear input[type=text].occ-er-num { flex: none; width: 44px; text-align: center; }
@@ -908,7 +899,7 @@ const CSS = `
     }
     .occ-er-ui .occ-er-gear { display: flex; flex-direction: column; gap: 5px; padding: 6px; margin-bottom: 4px; background: var(--default-bg-panel-color, #333); }
     .occ-er-ui .occ-er-gear label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-    .occ-er-ui .occ-er-gear input[type=password], .occ-er-ui .occ-er-gear input[type=text] { flex: 1; }
+    .occ-er-ui .occ-er-gear input[type=text] { flex: 1; }
     .occ-er-ui .occ-er-tag { font-size: 10px; color: var(--default-full-text-color, #ccc); background: var(--default-bg-gray-color, rgba(221,221,221,.15)); border-radius: 3px; padding: 0 4px; white-space: nowrap; }
     .occ-er-ui .occ-er-sw { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--default-gray-e4-color, #444); }
     .occ-er-ui .occ-er-red-bg { background: ${COLOR.red}; }
@@ -916,8 +907,6 @@ const CSS = `
     .occ-er-ui .occ-er-green-bg { background: ${COLOR.green}; }
     .occ-er-ui .occ-er-muted { color: var(--default-content-title-color, #999); }
     .occ-er-ui .occ-er-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .occ-er-ui .occ-er-key { display: flex; flex-direction: column; gap: 5px; }
-    .occ-er-ui .occ-er-key input[type=password] { flex: 1; }
     .occ-er-ui code { color: var(--default-color, #ddd); }
     .occ-er-ui .occ-er-hr { border: 0; height: 0; width: 100%; margin: 2px 0; border-top: 1px solid var(--divider-dark-color, #222); border-bottom: 1px solid var(--divider-light-color, #474747); }
     .occ-er-ui .occ-er-foot { margin-top: 5px; }
@@ -963,8 +952,8 @@ function start(k) {
   kit = k;
   // Keep tabs in sync when settings change elsewhere.
   window.addEventListener('storage', (e) => {
-    if (e.key === K_SETTINGS) S = Object.assign({}, DEFAULTS, load(K_SETTINGS, {}));
-    if (e.key === K_EVENTS) EV = load(K_EVENTS, {});
+    if (e.key === K_SETTINGS) S = Object.assign({}, DEFAULTS, store.get(K_SETTINGS, {}));
+    if (e.key === K_EVENTS) EV = store.get(K_EVENTS, null) || {};
     if (e.key === K_SETTINGS || e.key === K_EVENTS) { update(); renderUI(); }
   });
   // The dropdown is drawn by Torn when the clock opens, so add the row as soon as it appears.
