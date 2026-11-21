@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Operational Command Center
 // @namespace    Torn.Operational-Command-Center
-// @version      0.9.1
+// @version      0.9.2
 // @description  One floating dashboard inside Torn. Buttons come from the repo's skills: each runs its skill on a private Cloudflare runner with your Torn key, free OpenRouter models write the answer, and it lands in the content pane. Mobile first, works in Torn PDA.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -24,14 +24,14 @@
 (function () {
   'use strict';
 
-const OCC_BAKED = '81d437';
+const OCC_BAKED = '545aa5';
 const OCC_LIVE_URL = 'https://raw.githubusercontent.com/Yoonutz/torn-scripts/main/Operational%20Command%20Center/live/';
 
 function occBaked(GM_xmlhttpRequest, GM_getValue, GM_setValue, GM_deleteValue, OCC_BUILD) {
 (function () {
   'use strict';
 
-const VERSION = '0.9.1' + (typeof OCC_BUILD === 'string' ? ' \u00b7 ' + OCC_BUILD : '');
+const VERSION = '0.9.2' + (typeof OCC_BUILD === 'string' ? ' \u00b7 ' + OCC_BUILD : '');
 
 // ---- occ-kit/core/storage.js
 // Browser storage for every kit script.
