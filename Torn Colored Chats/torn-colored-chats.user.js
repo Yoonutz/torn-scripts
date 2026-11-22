@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Colored Chats
 // @namespace    kamiren.torn-colored-chats
-// @version      1.0.1
+// @version      1.0.2
 // @description  Gives each Torn group chat (faction, company, global, trade and more) its own color. Private chats stay as they are. A palette icon in the chat header changes the color.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -73,7 +73,9 @@
         'body.dark-mode ' + w + '{--chat-color-background:' + mix(c, '#333333', 0.1) + '}' +
         'body:not(.dark-mode) ' + w + '{--chat-color-background:' + mix(c, '#f2f2f2', 0.06) + '}' +
         'body.dark-mode ' + w + ' [class*="content___"]{background:linear-gradient(' + mix(c, '#333333', 0.38) + ',' + mix(c, '#333333', 0.06) + ')!important}' +
-        'body:not(.dark-mode) ' + w + ' [class*="content___"]{background:linear-gradient(' + mix(c, '#f2f2f2', 0.22) + ',' + mix(c, '#f2f2f2', 0.03) + ')!important}';
+        'body:not(.dark-mode) ' + w + ' [class*="content___"]{background:linear-gradient(' + mix(c, '#f2f2f2', 0.22) + ',' + mix(c, '#f2f2f2', 0.03) + ')!important}' +
+        'body.dark-mode ' + w + ' a[class*="sender___"]{color:' + mix(c, '#ffffff', 0.55) + '!important}' +
+        'body:not(.dark-mode) ' + w + ' a[class*="sender___"]{color:' + mix(c, '#000000', 0.75) + '!important}';
     }
     if (!sheet) {
       sheet = document.createElement('style');

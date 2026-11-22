@@ -6,6 +6,7 @@
 <ul>
 <li><b>One color for each group chat.</b> Defaults: faction red, company blue, global teal, trade amber, other group chats purple.</li>
 <li><b>Palette icon in the header</b>, grey like Torn's own icons. Click it and select one of 8 colors, ↺ for the default or ⊘ for no color.</li>
+<li><b>Sender names</b> in group chats get a light shade of the chat color.</li>
 <li><b>Private chats are not changed.</b></li>
 <li><b>Torn's green "new message" header still shows.</b> No green in the palette, so new messages stay easy to see.</li>
 <li>Dark and light Torn theme.</li>

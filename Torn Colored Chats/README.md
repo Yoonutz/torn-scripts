@@ -16,6 +16,7 @@ a colored header and a light tint of the same color behind the messages. **Priva
   **↺** for the default color or **⊘** for no color. Your choice stays after a reload.
 - **Private chats are not changed.** They get no color and no icon.
 - **Torn's green "new message" header still shows.** The color comes back when you read the message.
+- **Sender names** in group chats get a light shade of the chat color.
 - No green in the palette, so a new message is always easy to see.
 - Works in the dark and the light Torn theme.
 

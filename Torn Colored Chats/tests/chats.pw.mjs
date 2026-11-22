@@ -128,3 +128,17 @@ test('escapeAndOutsideClose', () =>
     await page.mouse.click(5, 5);
     assert.equal(await page.locator('#tcc-pop').count(), 0);
   }));
+
+test('senderNamesColored', () =>
+  withPage({}, async (page) => {
+    await page.addStyleTag({ content: 'a[class*="sender___"]{color:#fff}' });
+    const f = await page.$eval('[id="faction"] a[class*="sender___"]', (a) => getComputedStyle(a).color);
+    assert.notEqual(f, 'rgb(255, 255, 255)');
+    const [r, g, b] = f.match(/\d+/g).map(Number);
+    assert.ok(r > g && r > b && r > 180, f);
+    const p = await page.$$eval('[id="2195339"] a[class*="sender___"]', (as) => as.map((a) => getComputedStyle(a).color));
+    assert.ok(p.every((c) => c === 'rgb(255, 255, 255)'), JSON.stringify(p));
+    await page.click('[id="faction"] .tcc-pal');
+    await page.click('#tcc-pop [data-c="none"]');
+    assert.equal(await page.$eval('[id="faction"] a[class*="sender___"]', (a) => getComputedStyle(a).color), 'rgb(255, 255, 255)');
+  }));
