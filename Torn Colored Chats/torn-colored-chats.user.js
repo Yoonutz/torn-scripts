@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Colored Chats
 // @namespace    kamiren.torn-colored-chats
-// @version      1.0.3
+// @version      1.0.0
 // @description  Gives each Torn group chat (faction, company, global, trade and more) its own color. Private chats stay as they are unless you color them. A palette icon in the chat header changes the color.
 // @author       KamiRen [2805199]
 // @license      MIT
