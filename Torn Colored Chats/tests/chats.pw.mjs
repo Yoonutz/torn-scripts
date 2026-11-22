@@ -39,8 +39,10 @@ test('groupsColored', () =>
 
 test('messagesTinted', () =>
   withPage({}, async (page) => {
-    const c = await page.$eval('[id="faction"] [class*="content___"]', (e) => getComputedStyle(e).backgroundColor);
-    assert.notEqual(c, 'rgb(51, 51, 51)');
+    const c = await page.$eval('[id="faction"] [class*="content___"]', (e) => getComputedStyle(e).backgroundImage);
+    assert.match(c, /linear-gradient\(rgb\(\d+, \d+, \d+\), rgb\(\d+, \d+, \d+\)\)/);
+    const [top, bottom] = c.match(/rgb\([^)]+\)/g);
+    assert.notEqual(top, bottom);
     const p = await page.$eval('[id="2195339"] [class*="content___"]', (e) => getComputedStyle(e).backgroundColor);
     assert.equal(p, 'rgb(51, 51, 51)');
   }));
@@ -98,7 +100,7 @@ test('reRenderNoDup', () =>
 test('lightTheme', () =>
   withPage({}, async (page) => {
     await page.evaluate(() => document.body.classList.remove('dark-mode'));
-    const c = await page.$eval('[id="faction"] [class*="content___"]', (e) => getComputedStyle(e).backgroundColor);
+    const c = await page.$eval('[id="faction"] [class*="content___"]', (e) => getComputedStyle(e).backgroundImage);
     const [r, g, b] = c.match(/\d+/g).map(Number);
     assert.ok(r > 200 && g > 190 && b > 190, c);
   }));
