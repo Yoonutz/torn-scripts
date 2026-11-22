@@ -20,10 +20,18 @@ const head = (id) => `[id="${id}"] button[class*="header___"]`;
 const bg = (page, id) => page.$eval(head(id), (b) => getComputedStyle(b).backgroundImage);
 const GROUPS = { faction: 'rgb(179, 58, 58)', company: 'rgb(42, 111, 179)', global: 'rgb(31, 138, 138)', trade: 'rgb(176, 138, 26)' };
 
-test('privateUntouched', () =>
+test('privateOffByDefault', () =>
   withPage({}, async (page) => {
-    assert.equal(await page.locator('[id="2195339"] .tcc-pal').count(), 0);
-    assert.equal(await page.locator('[id="2195339"][data-tcc]').count(), 0);
+    assert.equal(await page.locator('[id="2195339"] .tcc-pal').count(), 1);
+    const next = await page.$eval('[id="2195339"] .tcc-pal', (p) => p.nextElementSibling.getAttribute('class'));
+    assert.match(next, /minimizeIcon___/);
+    assert.match(await bg(page, '2195339'), /rgb\(102, 102, 102\)/);
+    await page.click('[id="2195339"] .tcc-pal');
+    await page.click('#tcc-pop [data-c="#1f8a8a"]');
+    assert.ok((await bg(page, '2195339')).includes('rgb(31, 138, 138)'));
+    assert.equal(await page.evaluate(() => window.__toggles), 0);
+    await page.click('[id="2195339"] .tcc-pal');
+    await page.click('#tcc-pop [data-c="default"]');
     assert.match(await bg(page, '2195339'), /rgb\(102, 102, 102\)/);
   }));
 
@@ -82,7 +90,7 @@ test('keptAfterReload', () =>
     await page.click('#tcc-pop [data-c="#b33a7a"]');
     await page.reload();
     await page.addScriptTag({ content: SCRIPT() });
-    await page.waitForSelector('.tcc-pal');
+    await page.waitForSelector('.tcc-pal', { state: 'attached' });
     assert.ok((await bg(page, 'global')).includes('rgb(179, 58, 122)'));
   }));
 
@@ -93,7 +101,7 @@ test('reRenderNoDup', () =>
     });
     await page.waitForFunction(() => document.querySelectorAll('[id="faction"] .tcc-pal').length === 1);
     await page.waitForTimeout(600);
-    assert.equal(await page.locator('.tcc-pal').count(), 4);
+    assert.equal(await page.locator('.tcc-pal').count(), 5);
     assert.ok((await bg(page, 'faction')).includes(GROUPS.faction));
   }));
 

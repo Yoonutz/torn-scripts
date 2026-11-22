@@ -1,8 +1,12 @@
 # Torn Colored Chats
 
 **Know which chat is which at a glance.** Each group chat window (faction, company, global, trade and the others) gets its own color:
-a colored header and a light tint of the same color behind the messages. **Private chats stay as they are.**
+a colored header and a light tint of the same color behind the messages. **Private chats stay as they are**, until you give one a color.
 
+<p align="center">
+  <img src="preview.png" alt="Real Torn chat: Global in teal and Trade in amber, messages blurred for privacy" width="545">
+</p>
+<p align="center"><sub>Real Torn chat, messages blurred. Below: test renders with the palette open.</sub></p>
 <p align="center">
   <img src="screenshot.png" alt="Five Torn chat windows: the private chat stays grey, Trade shows Torn's green new-message header, Global, company and faction are colored, the palette is open on the company chat" width="820">
 </p>
@@ -11,10 +15,10 @@ a colored header and a light tint of the same color behind the messages. **Priva
 </p>
 
 ## Features
-- **One color for each group chat.** Defaults: faction red, company blue, global teal, trade amber, other group chats purple.
+- **One color for each group chat.** Defaults: private none, faction red, company blue, global teal, trade amber, other group chats purple.
 - **Palette icon in the header**, left of the minimize line. It is grey like Torn's own icons. Click it and select one of 8 colors,
   **↺** for the default color or **⊘** for no color. Your choice stays after a reload.
-- **Private chats are not changed.** They get no color and no icon.
+- **Private chats have no color by default.** They also get the palette icon, so you can color one chat (a friend, your spouse) when you want.
 - **Torn's green "new message" header still shows.** The color comes back when you read the message.
 - **Sender names** in group chats get a light shade of the chat color.
 - No green in the palette, so a new message is always easy to see.

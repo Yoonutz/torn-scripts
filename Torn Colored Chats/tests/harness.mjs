@@ -41,7 +41,7 @@ export async function openMock(srv, { width = 1280, height = 800, gm = {}, scrip
   await page.goto(srv.base + '/Torn%20Colored%20Chats/tests/mock/chat.html');
   if (script) {
     await page.addScriptTag({ content: SCRIPT() });
-    await page.waitForSelector('.tcc-pal', { timeout: 5000 });
+    await page.waitForSelector('.tcc-pal', { state: 'attached', timeout: 5000 });
   }
   return { browser, page };
 }

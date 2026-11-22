@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Colored Chats
 // @namespace    kamiren.torn-colored-chats
-// @version      1.0.2
-// @description  Gives each Torn group chat (faction, company, global, trade and more) its own color. Private chats stay as they are. A palette icon in the chat header changes the color.
+// @version      1.0.3
+// @description  Gives each Torn group chat (faction, company, global, trade and more) its own color. Private chats stay as they are unless you color them. A palette icon in the chat header changes the color.
 // @author       KamiRen [2805199]
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -19,7 +19,8 @@
   const NAMES = ['Red', 'Orange', 'Amber', 'Teal', 'Blue', 'Indigo', 'Purple', 'Pink'];
   const DEF = { faction: PAL[0], company: PAL[4], global: PAL[3], trade: PAL[2] };
   const OTHER = PAL[6];
-  const SKIP = /^\d+$|panel/i;
+  const SKIP = /panel/i;
+  const PRIVATE = /^\d+$/;
   const HEAD = 'button[class*="header___"]';
   const ICON =
     '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A4.6 4.6 0 0 0 22 9.8C22 5.9 17.5 3 12 3zM6.5 12a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>';
@@ -53,7 +54,8 @@
   const saved = () => store.get(KEY, {}) || {};
   const colorOf = (id) => {
     const v = saved()[id];
-    return v === 'none' ? null : v || DEF[id] || OTHER;
+    if (v) return v === 'none' ? null : v;
+    return PRIVATE.test(id) ? null : DEF[id] || OTHER;
   };
   const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.substr(i, 2), 16));
   const hex = (a) => '#' + a.map((n) => Math.round(n).toString(16).padStart(2, '0')).join('');
