@@ -161,6 +161,27 @@ test("Trains tab: parses Torn news and events, counts paid trains left per emplo
   ]);
 });
 
+test("Trains pill: a Train click and the confirm click after it both refresh the count", async () => {
+  const T = await import("../../Operational Command Center/plugins/trains.js");
+  const now = 1000000;
+  // Train button (desktop link or phone button) arms the confirm step.
+  assert.equal(T.trainClick({ text: "Train", inConfirm: false, inRow: true }, 0, now), "train");
+  assert.equal(T.trainClick({ text: "TRAIN", inConfirm: false, inRow: true }, 0, now), "train");
+  // The Yes in the confirm box is the real train: it must refresh too.
+  assert.equal(T.trainClick({ text: "Yes", inConfirm: true, inRow: true }, now + 60000, now + 9000), "confirm");
+  // A click in the employee row after Train (confirm drawn somewhere else in the row) also counts.
+  assert.equal(T.trainClick({ text: "Yes", inConfirm: false, inRow: true }, now + 60000, now + 9000), "confirm");
+  // Without a Train click first, or after the wait, other clicks do nothing.
+  assert.equal(T.trainClick({ text: "Yes", inConfirm: false, inRow: true }, 0, now), null);
+  assert.equal(T.trainClick({ text: "Yes", inConfirm: false, inRow: true }, now, now + 1), null);
+  // A confirm button that also says Train is still the confirm step.
+  assert.equal(T.trainClick({ text: "Train", inConfirm: true, inRow: true }, 0, now), "confirm");
+  assert.equal(T.trainClick({ text: "Fire", inConfirm: false, inRow: true }, 0, now), null);
+  // Refresh soon after the train, and once more after Torn's API cache runs out.
+  assert.ok(T.TRAINS_AFTER_CONFIRM[0] <= 5000);
+  assert.ok(T.TRAINS_AFTER_CONFIRM[T.TRAINS_AFTER_CONFIRM.length - 1] > 30000);
+});
+
 test("live manifest names the bundle next to it, and the loader carries the same build", () => {
   const dir = resolve(repo, "Operational Command Center");
   const bundle = readFileSync(resolve(dir, "live/occ.bundle.js"), "utf8");

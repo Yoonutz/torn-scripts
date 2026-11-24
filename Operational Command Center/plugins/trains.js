@@ -11,6 +11,9 @@ const TRAINS_GRANT = (18 * 60 + 7) * 60000; // 18:07 TCT, as ms after UTC midnig
 const TRAINS_SAFETY = 12 * 3600 * 1000;
 const TRAINS_RETRY = 10 * 60000;
 const TRAINS_AFTER_TRAIN = 4000;
+// After the confirm click (the real train): soon, then once more after Torn's API cache (~30 s).
+export const TRAINS_AFTER_CONFIRM = [3000, 35000];
+const TRAINS_CONFIRM_WAIT = 60000; // a confirm click counts this long after a Train click
 const TRAINS_COOLDOWN = 30000;
 const TRAINS_LOCK_MS = 30000;
 const TRAINS_STOP = [1, 2, 16, 18];
@@ -237,22 +240,41 @@ function start(k) {
     paint();
     schedule();
   });
-  // Training an employee spends trains: refresh a few seconds after the last Train click on the
-  // company page (the wait also covers the confirm step). Only listens, never clicks.
-  let trainedTimer = 0;
+  // Training an employee spends trains. Torn asks to confirm after the Train click, and only the
+  // confirm click trains, so refresh a few seconds after each of the two clicks, and once more after
+  // the confirm. Only listens, never clicks.
+  let armed = 0;
+  let timers = [];
+  const later = (list) => {
+    timers.forEach(clearTimeout);
+    timers = list.map((ms) => setTimeout(() => refresh(false, null, true).then(schedule), ms));
+  };
   document.addEventListener(
     'click',
     (e) => {
       if (!/companies\.php/.test(location.pathname)) return;
       const b = e.target && e.target.closest ? e.target.closest('button,a,input[type="button"],input[type="submit"]') : null;
-      if (!b || !/\btrain/i.test(b.textContent || b.value || '')) return;
-      clearTimeout(trainedTimer);
-      trainedTimer = setTimeout(() => {
-        refresh(false, null, true).then(schedule);
-      }, TRAINS_AFTER_TRAIN);
+      if (!b || b.closest('#occ-root')) return;
+      const kind = trainClick({ text: b.textContent || b.value || '', inConfirm: !!b.closest('.train-info'), inRow: !!b.closest('ul.employee-list li[data-user]') }, armed, Date.now());
+      if (kind === 'train') {
+        armed = Date.now() + TRAINS_CONFIRM_WAIT;
+        later([TRAINS_AFTER_TRAIN]);
+      } else if (kind === 'confirm') {
+        armed = 0;
+        later(TRAINS_AFTER_CONFIRM);
+      }
     },
     true
   );
+}
+
+// What a click on the company page means for the trains count: 'train' (a Train button),
+// 'confirm' (a click in the confirm box, or in the employee rows before armedUntil) or null.
+export function trainClick(c, armedUntil, now) {
+  if (c.inConfirm) return 'confirm';
+  if (/\btrain/i.test(c.text)) return 'train';
+  if (now < armedUntil && c.inRow) return 'confirm';
+  return null;
 }
 
 export default {
