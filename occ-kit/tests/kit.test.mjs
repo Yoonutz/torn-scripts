@@ -182,6 +182,22 @@ test("Trains pill: a Train click and the confirm click after it both refresh the
   assert.ok(T.TRAINS_AFTER_CONFIRM[T.TRAINS_AFTER_CONFIRM.length - 1] > 30000);
 });
 
+test("Trains pill: Torn's own Trains count on the company page wins over a stale API reply", async () => {
+  const T = await import("../../Operational Command Center/plugins/trains.js");
+  // "Trains: <span class=trains>0</span> / 20" on companies.php
+  assert.equal(T.pageCount("0"), 0);
+  assert.equal(T.pageCount(" 12 "), 12);
+  assert.equal(T.pageCount(""), null);
+  assert.equal(T.pageCount("n/a"), null);
+  // Page read at 1000 says 4; the API (cached) still says 5 at 5000: keep 4.
+  assert.equal(T.pickCount({ n: 4, page: 1000 }, 5, 5000), 4);
+  // Long after the page read, the API is trusted again (daily grant, other tab).
+  assert.equal(T.pickCount({ n: 4, page: 1000 }, 7, 1000 + 10 * 60000), 7);
+  // No page read: the API value.
+  assert.equal(T.pickCount({ n: 4 }, 5, 5000), 5);
+  assert.equal(T.pickCount(null, 5, 5000), 5);
+});
+
 test("live manifest names the bundle next to it, and the loader carries the same build", () => {
   const dir = resolve(repo, "Operational Command Center");
   const bundle = readFileSync(resolve(dir, "live/occ.bundle.js"), "utf8");

@@ -1009,7 +1009,8 @@ const TRAINS_SAFETY = 12 * 3600 * 1000;
 const TRAINS_RETRY = 10 * 60000;
 const TRAINS_AFTER_TRAIN = 4000;
 // After the confirm click (the real train): soon, then once more after Torn's API cache (~30 s).
-const TRAINS_AFTER_CONFIRM = [3000, 35000];
+const TRAINS_AFTER_CONFIRM = [3000, 35000, 65000];
+const TRAINS_PAGE_WINS = 2 * 60000; // the company page count beats an API reply this long after it is read
 const TRAINS_CONFIRM_WAIT = 60000; // a confirm click counts this long after a Train click
 const TRAINS_COOLDOWN = 30000;
 const TRAINS_LOCK_MS = 30000;
@@ -1161,12 +1162,12 @@ async function refresh(manual, pill, force) {
   trainsBusy = true;
   paint();
   say('Refreshing…');
-  const rec = { n: same ? cur.n : undefined, ts: same ? cur.ts : undefined, tried: now, kh: kh };
+  const rec = { n: same ? cur.n : undefined, ts: same ? cur.ts : undefined, page: same ? cur.page : undefined, tried: now, kh: kh };
   let net = false;
   try {
     const j = await kit.torn('company/profile');
     if (j.profile && typeof j.profile.trains === 'number') {
-      rec.n = j.profile.trains;
+      rec.n = pickCount(same ? cur : null, j.profile.trains, Date.now());
       rec.ts = Date.now();
     } else if (j.profile) {
       // Not a company director: hide the pill and only look again once a day.
@@ -1208,6 +1209,39 @@ async function refresh(manual, pill, force) {
   }
 }
 
+// Torn's own count on the company page: "Trains: <span class="trains">4</span> / 20".
+function pageCount(text) {
+  const t = String(text == null ? '' : text).trim();
+  return /^\d+$/.test(t) ? parseInt(t, 10) : null;
+}
+
+// The Torn API can answer with a cached count for a while after a train, so a count read from the
+// company page shortly before stays.
+function pickCount(cur, apiN, now) {
+  if (cur && typeof cur.n === 'number' && typeof cur.page === 'number' && now - cur.page < TRAINS_PAGE_WINS) return cur.n;
+  return apiN;
+}
+
+// On the company page, copy Torn's own trains count into the pill when it changes (no API call).
+function readPage() {
+  if (!/companies\.php/.test(location.pathname)) return;
+  const el = document.querySelector('.details-wrap span.trains');
+  const n = el ? pageCount(el.textContent) : null;
+  if (n === null) return;
+  const cur = kit.store.get(KEY_TRAINS, null);
+  if (cur && cur.n === n && !cur.err && !cur.none) return;
+  const key = kit.tornKey();
+  const rec = Object.assign({}, cur || {}, { n: n, ts: Date.now(), page: Date.now() });
+  if (key) rec.kh = keyTail(key);
+  delete rec.err;
+  delete rec.retry;
+  delete rec.none;
+  delete rec.nokey;
+  kit.store.set(KEY_TRAINS, rec);
+  trains = rec;
+  paint();
+}
+
 function makePill(k) {
   const p = k.el('span', 'occ-trains');
   p.setAttribute('role', 'button');
@@ -1237,6 +1271,19 @@ function start(k) {
     paint();
     schedule();
   });
+  // Torn redraws the company page after a train: follow its own Trains count.
+  if (/companies\.php/.test(location.pathname)) {
+    readPage();
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        readPage();
+      });
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
   // Training an employee spends trains. Torn asks to confirm after the Train click, and only the
   // confirm click trains, so refresh a few seconds after each of the two clicks, and once more after
   // the confirm. Only listens, never clicks.
