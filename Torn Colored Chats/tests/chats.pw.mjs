@@ -150,3 +150,31 @@ test('senderNamesColored', () =>
     await page.click('#tcc-pop [data-c="none"]');
     assert.equal(await page.$eval('[id="faction"] a[class*="sender___"]', (a) => getComputedStyle(a).color), 'rgb(255, 255, 255)');
   }));
+
+const glyph = (page, sel) =>
+  page.$eval(sel, (el) => {
+    const rs = [...el.querySelectorAll('path,rect,circle,polygon')].map((p) => p.getBoundingClientRect()).filter((r) => r.width || r.height);
+    return { h: Math.max(...rs.map((r) => r.bottom)) - Math.min(...rs.map((r) => r.top)), bottom: Math.max(...rs.map((r) => r.bottom)) };
+  });
+
+for (const shrink of [false, true])
+  test('iconLikeX' + (shrink ? ' with page svg rule' : ''), () =>
+    withPage({}, async (page) => {
+      if (shrink) {
+        await page.addStyleTag({ content: '#chatRoot svg{width:12px;height:12px}' });
+        await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+        await page.waitForTimeout(400);
+      }
+      const x = await glyph(page, '[id="2195339"] button[class*="header___"] > svg[class*="closeIcon___"]');
+      const pPriv = await glyph(page, '[id="2195339"] .tcc-pal');
+      assert.ok(Math.abs(pPriv.h - x.h) <= 1, JSON.stringify({ pPriv, x }));
+      assert.ok(Math.abs(pPriv.bottom - x.bottom) <= 1, JSON.stringify({ pPriv, x }));
+      for (const id of ['faction', 'trade']) {
+        const min = await glyph(page, `[id="${id}"] button[class*="header___"] > svg[class*="minimizeIcon___"]`);
+        const p = await glyph(page, `[id="${id}"] .tcc-pal`);
+        assert.ok(Math.abs(p.h - x.h) <= 1, id + JSON.stringify({ p, x }));
+        assert.ok(Math.abs(p.bottom - min.bottom) <= 1, id + JSON.stringify({ p, min }));
+        const hh = await page.$eval(`[id="${id}"] button[class*="header___"]`, (b) => b.getBoundingClientRect().height);
+        assert.equal(hh, 34);
+      }
+    }));
