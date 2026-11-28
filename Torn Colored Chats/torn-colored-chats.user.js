@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Colored Chats
 // @namespace    kamiren.torn-colored-chats
-// @version      1.0.0
+// @version      1.0.1
 // @description  Gives each Torn group chat (faction, company, global, trade and more) its own color. Private chats stay as they are unless you color them. A palette icon in the chat header changes the color.
 // @author       KamiRen [2805199]
 // @license      MIT
@@ -185,6 +185,43 @@
     head.insertBefore(b, min || null);
   }
 
+  function glyph(el) {
+    if (!el) return null;
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const p of el.querySelectorAll('path,rect,circle,polygon')) {
+      const r = p.getBoundingClientRect();
+      if (!r.width && !r.height) continue;
+      top = Math.min(top, r.top);
+      bottom = Math.max(bottom, r.bottom);
+    }
+    return bottom > -Infinity ? { h: bottom - top, bottom } : null;
+  }
+
+  function fit(root) {
+    const x = glyph(root.querySelector(HEAD + ' > svg[class*="closeIcon___"]'));
+    for (const b of root.querySelectorAll('.tcc-pal')) {
+      const head = b.parentElement;
+      const ref = glyph(head.querySelector(':scope > svg[class*="closeIcon___"]')) || glyph(head.querySelector(':scope > svg[class*="minimizeIcon___"]'));
+      const svg = b.firstElementChild;
+      let g = glyph(b);
+      if (!ref || !g) continue;
+      const want = x ? x.h : 15;
+      if (Math.abs(g.h - want) > 0.5) {
+        const size = Math.min(24, (parseFloat(svg.style.width) || 16) * (want / g.h));
+        svg.style.setProperty('width', size + 'px', 'important');
+        svg.style.setProperty('height', size + 'px', 'important');
+        b.style.setProperty('width', size + 'px', 'important');
+        g = glyph(b);
+      }
+      const dy = Math.max(-8, Math.min(8, (parseFloat(b.dataset.dy) || 0) + ref.bottom - g.bottom));
+      if (Math.abs(dy - (parseFloat(b.dataset.dy) || 0)) > 0.5) {
+        b.dataset.dy = dy.toFixed(1);
+        b.style.setProperty('transform', 'translateY(' + dy.toFixed(1) + 'px)', 'important');
+      }
+    }
+  }
+
   function scan() {
     timer = 0;
     if (document.hidden) return;
@@ -201,6 +238,7 @@
       if (!head.querySelector(':scope > .tcc-pal')) addIcon(head, win.id);
     }
     if (fresh) rules();
+    fit(root);
   }
 
   function later() {
@@ -209,8 +247,8 @@
 
   const base = document.createElement('style');
   base.textContent =
-    '.tcc-pal{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin:0 6px 4px auto;padding:0;cursor:pointer;border-radius:3px}' +
-    '.tcc-pal svg{width:16px;height:16px;fill:#b3b3b3;filter:drop-shadow(0 0 2px rgba(0,0,0,.55))}' +
+    '.tcc-pal{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:16px;height:24px;margin:0 8px 0 auto;padding:0;cursor:pointer;border-radius:3px}' +
+    '.tcc-pal svg{flex:0 0 auto;width:16px;height:16px;fill:#b3b3b3;filter:drop-shadow(0 0 2px rgba(0,0,0,.55))}' +
     '.tcc-pal:hover svg,.tcc-pal:focus-visible svg{fill:#fff}' +
     '.tcc-pal:focus-visible{outline:1px solid #ccc}' +
     '.tcc-pal+svg[class*="minimizeIcon___"]{margin-left:0!important}' +
@@ -224,4 +262,5 @@
   scan();
   new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
   document.addEventListener('visibilitychange', () => !document.hidden && later());
+  window.addEventListener('resize', later);
 })();
