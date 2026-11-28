@@ -31,6 +31,9 @@ window.GM_deleteValue = (k) => { delete __gm[k]; };
 window.__requests = [];
 `;
 
+// Torn's header icon sizes: 24px boxes, minimize lifted 4px, close 17px from minimize.
+const TORN_ICONS = '[class*="header___"] > svg{width:24px;height:24px}[class*="minimizeIcon___"]{margin-bottom:4px}[class*="header___"] > svg[class*="closeIcon___"]{margin-left:17px}';
+
 export const SCRIPT = () => readFileSync(resolve(repo, 'Torn Colored Chats/torn-colored-chats.user.js'), 'utf8');
 
 export async function openMock(srv, { width = 1280, height = 800, gm = {}, script = true, dsf = 1 } = {}) {
@@ -39,6 +42,7 @@ export async function openMock(srv, { width = 1280, height = 800, gm = {}, scrip
   page.setDefaultTimeout(8000);
   await page.addInitScript(STUBS + 'Object.assign(window.__gm,' + JSON.stringify(gm) + ');');
   await page.goto(srv.base + '/Torn%20Colored%20Chats/tests/mock/chat.html');
+  await page.addStyleTag({ content: TORN_ICONS });
   if (script) {
     await page.addScriptTag({ content: SCRIPT() });
     await page.waitForSelector('.tcc-pal', { state: 'attached', timeout: 5000 });
